@@ -37,6 +37,7 @@ import numpy as np
 import pandas as pd
 import preliz as pz
 import pymc as pm
+import pytensor
 import xarray as xr
 from arviz import ELPDData
 from dse_research_utils.statistics.models.hsgp_design import (
@@ -1091,6 +1092,41 @@ def sample(context: AnyModelFitContext, *, store_observation_deterministics: boo
     context.set_trace(trace)
 
 
+def _element_counts(variables) -> list[int]:
+    """How many elements each variable holds, without a compilation apiece.
+
+    ``Variable.eval()`` compiles a PyTensor function for its own graph, so
+    asking a model's unobserved RVs for their sizes one at a time compiles one
+    function per variable — about 60 ms each, and the registered models carry
+    30 to 98 of them. Measured on 2026-09-11 that was **75.8 s across the
+    twenty-one models against 6.4 s to build all of their graphs**, which made
+    it twelve times the cost of the thing it was describing and the whole of
+    ``tests/test_prior_table_coverage.py``'s six minutes (issue #331).
+
+    Two cheaper routes, in order. Most of these variables have a fully static
+    type shape — every scalar prior does — and their element count is the
+    product of it, known without touching PyTensor at all. What is left is the
+    variables whose shape is symbolic, and those are evaluated **together** in
+    one compiled function rather than one apiece.
+    """
+    counts: list[int | None] = []
+    symbolic: list[int] = []
+    for index, var in enumerate(variables):
+        shape = var.type.shape
+        if any(dim is None for dim in shape):
+            counts.append(None)
+            symbolic.append(index)
+        else:
+            counts.append(int(np.prod(shape, dtype=np.int64)) if shape else 1)
+    if symbolic:
+        evaluated = pytensor.function(
+            [], [variables[index].size for index in symbolic], on_unused_input="ignore"
+        )()
+        for index, value in zip(symbolic, evaluated, strict=True):
+            counts[index] = int(value)
+    return [int(count) for count in counts]
+
+
 def diagnostics_var_names(model) -> tuple[list[str], list[str]]:
     """Return ``(summary_var_names, gate_var_names)`` for :func:`diagnostics`.
 
@@ -1102,8 +1138,10 @@ def diagnostics_var_names(model) -> tuple[list[str], list[str]]:
     evaluated over the data grid) stay out of both sets: they are derived from
     the free RVs, not sampled.
     """
+    unobserved = list(model.unobserved_RVs)
+    counts = _element_counts(unobserved)
     summary_var_names = [
-        var.name for var in model.unobserved_RVs if var.size.eval() <= 2
+        var.name for var, count in zip(unobserved, counts, strict=True) if count <= 2
     ]
     gate_var_names = summary_var_names + [
         rv.name for rv in model.free_RVs if rv.name not in summary_var_names

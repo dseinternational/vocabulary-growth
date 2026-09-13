@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""VG16's within-child cross-lag: the prior-wave understood source and its audit.
+"""The within-child cross-lags: their prior-wave sources and their audits.
 
 Pure NumPy/pandas, PyMC-free, in the manner of :mod:`observation_arrays` -- the
 whole of what the cross-lag needs before a graph exists, plus the artefact that
@@ -18,6 +18,23 @@ The one thing here that is *not* a definition-level concern is
 :func:`validate_cross_lag`, which is checked against the resolved child-effect plan;
 its docstring says why that check cannot move into
 ``definitions.validate_model_definition`` with the others.
+
+Two lags live here, and they share everything except what they read. VG16's
+understood -> ``q`` lag reads a **count** against the fixed 810-item inventory
+(:func:`prev_wave_lag`); VG25's sign -> speech lag reads a **ratio**, the signed
+share of the same wave's comprehension (:func:`prev_wave_sign_share_lag`). The
+wave walk, the source-selection rule, the gap ceiling and the zero treatment are
+one implementation between them -- :func:`_assign_prev_wave_sources` and
+:func:`_apply_gap_ceiling` -- so a correction to either lands on both.
+
+One thing deliberately does *not* carry over. ``same_form_only`` exists for the
+count lag because ``understood / 810`` is deflated by a shorter source form, and
+a study intercept cannot absorb a within-study form transition. The ratio lag
+divides one count by another **scored on the same form in the same
+administration**, so the truncation is very largely common to numerator and
+denominator and cancels. That is a property of the predictor, not an assumption
+about the pool, so VG25 carries no same-form field rather than carrying one that
+would always be inert.
 """
 
 import os
@@ -112,6 +129,80 @@ def wave_index(subject, age):
     return index
 
 
+def _assign_prev_wave_sources(subject, age, usable, rank_keys):
+    """Point every row at its child's most recent strictly earlier usable wave.
+
+    The walk both lags share. ``usable`` marks the rows that can *serve* as a
+    source; ``rank_keys`` is a tuple of arrays, highest priority first, maximised
+    lexicographically to choose between several usable measurements inside one
+    source wave.
+
+    The **first** key is the least-truncated-measurement rule in both cases --
+    the largest understood count for VG16's count lag, and the largest
+    comprehension denominator for VG25's ratio lag, which is the same thing said
+    of a ratio. The keys **after** it are what make the choice independent of the
+    input row order, and the rule for them is: *every quantity the caller reads
+    off the selected row must appear in this tuple*. Two rows tied on all of them
+    are interchangeable in the result; two rows tied on only the first are not,
+    and a plain ``argmax`` would then hand the answer to whichever the frame
+    happened to list first. VG16 reads the source's understood count (its own
+    first key) and, under ``same_form_only``, its form ceiling; VG25 reads the
+    source's signed count as well as its denominator.
+
+    Nothing on the current frame exercises this: no wave that serves as a source
+    offers more than one usable measurement, for either lag. Ten waves *do* carry
+    two usable comprehension measurements, so one further administration for any
+    of those children would make one a source -- which is why the rule is stated
+    and keyed rather than left to the row order the loader happens to produce.
+
+    Returns ``(prev_idx, has_lag_f)``: the selected source row (0 where absent,
+    gated by ``has_lag_f``) and 1.0/0.0 for whether one exists at all. The state
+    advances only once a whole wave is assigned, so no row can take a same-age
+    source.
+    """
+    subject = np.asarray(subject, dtype=int)
+    age = np.asarray(age, dtype=float)
+    usable = np.asarray(usable, dtype=bool)
+    keys = tuple(np.asarray(k, dtype=float) for k in rank_keys)
+    if not keys:
+        raise ValueError(
+            "rank_keys needs at least the primary least-truncated ranking array."
+        )
+    n = len(subject)
+    prev_idx = np.zeros(n, dtype=int)
+    has_lag_f = np.zeros(n, dtype=float)
+    current_subject, source = -1, -1
+    for wave in iter_subject_age_waves(subject, age):
+        s = subject[wave[0]]
+        if s != current_subject:
+            current_subject, source = s, -1
+        if source >= 0:
+            prev_idx[wave] = source
+            has_lag_f[wave] = 1.0
+        candidates = wave[usable[wave]]
+        if candidates.size:
+            # np.lexsort takes its primary key last, so the tuple is reversed;
+            # the winner is the final entry of the returned order.
+            order = np.lexsort(tuple(k[candidates] for k in reversed(keys)))
+            source = int(candidates[order[-1]])
+    return prev_idx, has_lag_f
+
+
+def _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months):
+    """Drop -- not the row -- every lag reaching further back than the ceiling.
+
+    Applied after the source is chosen, so which wave is the source never
+    depends on the ceiling; only whether that source is used. The observation
+    still enters every likelihood it did before, it simply stops informing the
+    coefficient.
+    """
+    if max_gap_months is None:
+        return prev_idx, has_lag_f
+    age = np.asarray(age, dtype=float)
+    too_far = (has_lag_f > 0) & ((age - age[prev_idx]) > max_gap_months)
+    return np.where(too_far, 0, prev_idx), np.where(too_far, 0.0, has_lag_f)
+
+
 def prev_wave_lag(
     subject,
     age,
@@ -143,11 +234,16 @@ def prev_wave_lag(
       scored against the same ``n_trials`` inventory under the project's
       difficulty-ordering harmonisation, and a shorter form right-truncates
       it, so the largest observed count is the least-truncated measurement
-      available. On the current frame no source wave carries more than one
-      understood measurement, so the rule is registered ahead of need. Rows
-      of one wave share child, study and recorded age, so which *row* the
-      source index points at cannot move the likelihood — only the selected
-      count can.
+      available. On the current frame no wave that serves as a source carries
+      more than one understood measurement, so the rule is registered ahead of
+      need — though ten waves do carry two, and one further administration for
+      any of those children would make one a source. Under ``same_form_only``
+      the source's **form ceiling** is read as well as its count, so it is a
+      selection key too: without it, two same-age forms tied on the count but
+      differing in length would hand the lag to whichever the frame listed
+      first. Everything else about a row is shared across its wave (child,
+      study, recorded age), so only the quantities read off the selected row
+      can move the likelihood.
 
     ``same_form_only`` (with ``form_ceiling``) keeps only lags whose source and
     target waves were scored against the same checklist, which is the review's
@@ -167,33 +263,12 @@ def prev_wave_lag(
     age = np.asarray(age, dtype=float)
     understood = np.asarray(understood, dtype=float)
     n = len(subject)
-    prev_idx = np.zeros(n, dtype=int)
-    has_lag_f = np.zeros(n, dtype=float)
-    current_subject, source = -1, -1
-    for wave in iter_subject_age_waves(subject, age):
-        s = subject[wave[0]]
-        if s != current_subject:
-            current_subject, source = s, -1
-        if source >= 0:
-            prev_idx[wave] = source
-            has_lag_f[wave] = 1.0
-        with_u = wave[~np.isnan(understood[wave])]
-        if with_u.size:
-            source = int(with_u[np.argmax(understood[with_u])])
-    # A gap ceiling drops the lag rather than the row: the observation still
-    # enters both likelihoods, it simply stops informing `beta_lag`. Applied
-    # after the source is chosen, so which wave is the source never depends on
-    # the ceiling -- only whether that source is used.
-    if max_gap_months is not None:
-        too_far = (has_lag_f > 0) & ((age - age[prev_idx]) > max_gap_months)
-        has_lag_f = np.where(too_far, 0.0, has_lag_f)
-        prev_idx = np.where(too_far, 0, prev_idx)
-    # The same-form restriction drops the lag on the same terms and for the same
-    # reason: applied after the source is chosen, so a row whose source used a
-    # different form loses its lag rather than falling back to an earlier
-    # same-form wave, which would silently lengthen the gap and confound the
-    # measurement question with the interval one. Both ceilings must be known --
-    # an unknown one cannot certify that the two waves used the same checklist.
+    # Both ceilings must be known -- an unknown one cannot certify that the two
+    # waves used the same checklist -- and the ceiling is validated *before* the
+    # walk because under ``same_form_only`` it is read off the selected source
+    # row, which makes it a selection key (see ``_assign_prev_wave_sources``).
+    # An unrecorded ceiling ranks last: such a source would lose the lag anyway.
+    ceiling = None
     if same_form_only:
         if form_ceiling is None:
             raise ValueError(
@@ -205,6 +280,21 @@ def prev_wave_lag(
             raise ValueError(
                 f"form_ceiling has {len(ceiling)} entries for {n} observations."
             )
+    rank_keys = (
+        (understood,)
+        if ceiling is None
+        else (understood, np.where(np.isnan(ceiling), -np.inf, ceiling))
+    )
+    prev_idx, has_lag_f = _assign_prev_wave_sources(
+        subject, age, ~np.isnan(understood), rank_keys
+    )
+    prev_idx, has_lag_f = _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months)
+    # The same-form restriction drops the lag on the same terms and for the same
+    # reason: applied after the source is chosen, so a row whose source used a
+    # different form loses its lag rather than falling back to an earlier
+    # same-form wave, which would silently lengthen the gap and confound the
+    # measurement question with the interval one.
+    if ceiling is not None:
         source_ceiling = ceiling[prev_idx]
         same = (
             (ceiling == source_ceiling)
@@ -265,6 +355,199 @@ def prev_wave_lag_for_frame(analysis_df, n_trials: int, definition):
         zero_handling=getattr(definition, "lag_zero_handling", LAG_ZERO_CLIP),
         form_ceiling=form_ceiling,
         same_form_only=same_form_only,
+    )
+
+
+# ============================================================
+# VG25's sign -> speech lag: the prior-wave signed share of comprehension
+# ============================================================
+
+#: The two within-understood cross-tab cells that sum to a wave's signed total.
+SIGN_SHARE_CELL_COLUMNS = ("signed_only", "signed_spoken")
+
+
+def validate_sign_cross_lag(
+    sign_lag_baseline: str, subject_re_sign_active: bool
+) -> None:
+    """Validate the VG25 sign -> speech cross-lag configuration (issue #297).
+
+    The counterpart of :func:`validate_cross_lag`, and the same two checks
+    against the same :data:`LAG_BASELINES` tuple -- but defined relative to the
+    child's **signed-ratio** intercept rather than their understood one, because
+    that is the trajectory the predictor is a residual from. The within-child
+    baseline subtracts it and the population-relative baseline does not, so
+    without a sign child effect the two silently coincide.
+
+    Separate from :func:`validate_cross_lag` rather than parameterised: the two
+    lags can be configured independently, and a message naming the wrong flag is
+    worse than a second function.
+    """
+    if sign_lag_baseline not in LAG_BASELINES:
+        raise ValueError(
+            f"sign_lag_baseline must be one of {LAG_BASELINES}, got "
+            f"{sign_lag_baseline!r}."
+        )
+    if not subject_re_sign_active:
+        raise ValueError(
+            "Sign cross-lag (use_sign_cross_lag=True) requires "
+            "use_subject_re_sign=True: both the population-relative and "
+            "within-child baselines are defined relative to the child's "
+            "signed-ratio subject intercept."
+        )
+
+
+def sign_share_counts(analysis_df):
+    """``(signed, understood)`` per row, NaN where no signed share is measurable.
+
+    The signed share of comprehension has two sources in the joint frame, and
+    one near-miss that is deliberately not a third.
+
+    * **Marginal rows** carry ``signed`` against ``understood`` directly.
+    * **Within-understood cross-tab rows** (uk_02, uk_07, es_01) carry ``signed``
+      as NaN -- deliberately, so the cells are not double counted against the
+      marginal -- but their cells partition the same comprehension total, so
+      ``signed_only + signed_spoken`` over ``understood`` is the same quantity
+      measured the same way. Without this branch the frame's cross-tab rows
+      would be invisible to the lag, which is most of uk_02 and all of uk_07.
+    * **nz_01's three cells partition PRODUCED words**, so the only share they
+      support is the signed share of *production*. That is a different variable,
+      not a differently-denominated version of this one, and pooling the two
+      under one coefficient would make ``beta_sign_lag`` mean two things at once.
+      Those rows supply no source; the decision is recorded on
+      :class:`~vocab_growth.models.definitions.JointCrossLagModelDefinition`.
+
+    A row needs a strictly positive comprehension denominator as well as a
+    numerator: ``signed / 0`` is undefined, not zero, and a wave that understood
+    nothing measures no share of it.
+    """
+    understood = analysis_df["understood"].to_numpy(dtype=float)
+    signed = analysis_df["signed"].to_numpy(dtype=float)
+    if all(column in analysis_df.columns for column in SIGN_SHARE_CELL_COLUMNS):
+        from_cells = sum(
+            analysis_df[column].to_numpy(dtype=float)
+            for column in SIGN_SHARE_CELL_COLUMNS
+        )
+        signed = np.where(np.isnan(signed), from_cells, signed)
+    usable = ~np.isnan(signed) & ~np.isnan(understood) & (understood > 0)
+    return (
+        np.where(usable, signed, np.nan),
+        np.where(usable, understood, np.nan),
+    )
+
+
+def prev_wave_sign_share_lag(
+    subject,
+    age,
+    signed,
+    understood,
+    *,
+    max_gap_months: float | None = None,
+    zero_handling: str = LAG_ZERO_CLIP,
+):
+    """Per-observation prior-wave signed-share lag source for the VG25 cross-lag.
+
+    The same administration-wave unit, the same source walk and the same gap
+    ceiling as :func:`prev_wave_lag` -- see there for what a wave is and why the
+    source advances only once a whole wave is assigned. What differs is what the
+    source measures: the **logit of the signed share of comprehension** at the
+    prior wave, ``logit(signed / understood)``, rather than the logit of an
+    understood count against the fixed inventory.
+
+    ``signed`` and ``understood`` are the pair :func:`sign_share_counts` returns,
+    NaN-aligned: a row is usable as a source exactly where both are present and
+    the denominator is positive.
+
+    Where a source wave carries several usable measurements, the one with the
+    **largest comprehension denominator** is selected. That is the same
+    least-truncated-measurement rule :func:`prev_wave_lag` applies to the count,
+    said of a ratio: a shorter form right-truncates both counts, and the wave's
+    largest denominator is its least-truncated view of the child. The ratio is
+    also the reason no same-form restriction is offered -- see the module
+    docstring.
+
+    Returns ``(prev_idx, has_lag_f, r_prev_logit)`` as per-observation arrays,
+    with the same meanings :func:`prev_wave_lag` documents. ``r_prev_logit`` is
+    0.0 where there is no lag source.
+    """
+    subject = np.asarray(subject, dtype=int)
+    age = np.asarray(age, dtype=float)
+    signed = np.asarray(signed, dtype=float)
+    understood = np.asarray(understood, dtype=float)
+    usable = ~np.isnan(signed) & ~np.isnan(understood) & (understood > 0)
+    # The denominator ranks first, for the least-truncated reason VG16's count
+    # lag gives. The numerator is the tie-break, and is here because this lag
+    # reads *two* quantities off the selected row: two same-age forms agreeing
+    # on the comprehension total but disagreeing on how many of those words the
+    # child signs are a genuine conflict, and resolving it by the frame's row
+    # order would make the predictor depend on a sort. Preferring the larger
+    # signed count is the same least-truncated principle applied to the
+    # numerator -- a form that recorded more signs saw more of the child's
+    # signing.
+    prev_idx, has_lag_f = _assign_prev_wave_sources(
+        subject,
+        age,
+        usable,
+        (
+            np.where(usable, understood, -np.inf),
+            np.where(usable, signed, -np.inf),
+        ),
+    )
+    prev_idx, has_lag_f = _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months)
+
+    # A neutral 0.5 / 1.0 placeholder where there is no source: both treatments
+    # map it to logit(0.5) = 0, which `has_lag_f` then zeroes anyway. Written so
+    # neither branch can divide by a NaN.
+    signed_prev = np.where(has_lag_f > 0, signed[prev_idx], 0.5)
+    understood_prev = np.where(has_lag_f > 0, understood[prev_idx], 1.0)
+    # A numerator above its own denominator is a share above 1, which the clip
+    # absorbs and the continuity correction does NOT: (k + 0.5) / (n + 1) stays
+    # above 1, and `log(1 - r)` of it is a silent NaN that would propagate into
+    # the log density. It cannot happen on the frames registered today -- the
+    # loader masks a comprehension count that falls below the child's recorded
+    # production union, and a cross-tab's cells sum to its own total by
+    # construction, so `signed <= understood` on all 562 rows carrying a share.
+    # It becomes reachable the moment that mask is reinstated for a sensitivity,
+    # which is one field away. Clipped here rather than guarded at the call site
+    # so both treatments see a well-defined share, and a no-op on valid data.
+    signed_prev = np.clip(signed_prev, 0.0, understood_prev)
+    if zero_handling == LAG_ZERO_CONTINUITY:
+        r_prev = (signed_prev + 0.5) / (understood_prev + 1.0)
+    elif zero_handling == LAG_ZERO_CLIP:
+        r_prev = np.clip(signed_prev / understood_prev, 1e-4, 1 - 1e-4)
+    else:
+        raise ValueError(
+            f"Unknown sign_lag_zero_handling {zero_handling!r}; expected one of "
+            + ", ".join(map(repr, LAG_ZERO_TREATMENTS))
+        )
+    # The clip bites at BOTH ends here and only at the lower end for the count
+    # lag, because a signed share of exactly 1 is reachable -- a child who signs
+    # every word they understand -- while an understood count of n_trials is not
+    # in this pool. Both boundaries are data rather than defects, which is what
+    # the continuity treatment exists to say differently.
+    r_prev_logit = np.where(has_lag_f > 0, np.log(r_prev) - np.log(1 - r_prev), 0.0)
+    return prev_idx, has_lag_f, r_prev_logit
+
+
+def prev_wave_sign_share_lag_for_frame(analysis_df, definition):
+    """The supported entry point: :func:`prev_wave_sign_share_lag` over a frame.
+
+    Call this, not the primitive, wherever an analysis frame is in hand, for the
+    reason :func:`prev_wave_lag_for_frame` gives: the two settings that change
+    the result live on the definition, and a caller reaching past this function
+    has to pass them itself.
+
+    ``n_trials`` is absent by construction. The predictor is a ratio of two
+    counts from one administration, so the inventory size cancels out of it --
+    which is also why this lag has no same-form restriction to configure.
+    """
+    signed, understood = sign_share_counts(analysis_df)
+    return prev_wave_sign_share_lag(
+        np.asarray(analysis_df["subject_code"], dtype=int),
+        np.asarray(analysis_df["age"], dtype=float),
+        signed,
+        understood,
+        max_gap_months=getattr(definition, "sign_lag_max_gap_months", None),
+        zero_handling=getattr(definition, "sign_lag_zero_handling", LAG_ZERO_CLIP),
     )
 
 
@@ -376,3 +659,134 @@ def report_cross_lag_support(
         )
     rows.append(("Observations in the frame", n_obs))
     key_value_table("Cross-lag support (cross_lag_audit.csv)", rows)
+
+
+def sign_cross_lag_audit_frame(
+    analysis_df,
+    prev_idx,
+    has_lag_f,
+    *,
+    spoken_indices,
+    spoken_is_conditional,
+    cell_indices,
+    prod_indices,
+):
+    """One row per observation with a prior-wave signed-share source (#297).
+
+    The counterpart of :func:`cross_lag_audit_frame`, and it exists for the same
+    reason: the coefficient's support is persisted as a fit artefact so reports
+    read the counts from a file rather than restating them.
+
+    What differs is the ``branch`` column, because the joint engine has four
+    places a lagged row can land rather than two. ``conditional`` and
+    ``marginal`` are the spoken marginal likelihood's two branches, exactly as in
+    the bivariate audit; ``cells`` is a within-understood four-cell row and
+    ``produced-cells`` an nz_01 three-cell row. The four are disjoint by
+    construction -- a cross-tab row carries no spoken marginal -- and an empty
+    string means the row informs ``beta_sign_lag`` through nothing at all, which
+    is what makes the file an audit rather than a listing.
+
+    ``source_signed_share`` is the predictor's raw input before any baseline is
+    subtracted, so a reader can see the range the coefficient is identified over
+    without rebuilding the graph; the boundary flags say how many rows sit where
+    the zero treatment decides the value.
+    """
+    n = len(analysis_df)
+    branch = np.full(n, "", dtype=object)
+    branch[np.asarray(cell_indices, dtype=int)] = "cells"
+    branch[np.asarray(prod_indices, dtype=int)] = "produced-cells"
+    branch[np.asarray(spoken_indices, dtype=int)] = np.where(
+        np.asarray(spoken_is_conditional, dtype=bool), "conditional", "marginal"
+    )
+    signed, understood = sign_share_counts(analysis_df)
+    lagged = np.flatnonzero(np.asarray(has_lag_f, dtype=float) > 0)
+    src = np.asarray(prev_idx, dtype=int)[lagged]
+    subj = np.asarray(analysis_df["subject_code"], dtype=int)
+    age = np.asarray(analysis_df["age"], dtype=float)
+    share = signed[src] / understood[src]
+    # How often the largest-denominator selection actually had a choice to make,
+    # counted over the measurements that could have served -- not over every row
+    # of the wave, most of which carry no signed share at all.
+    usable = ~np.isnan(signed)
+    wave_sources = (
+        pd.DataFrame({"_subj": subj, "_age": age, "_usable": usable})
+        .groupby(["_subj", "_age"])["_usable"]
+        .sum()
+    )
+    frame = pd.DataFrame(
+        {
+            "row": lagged,
+            "subject_code": subj[lagged],
+            "age_months": age[lagged],
+            "source_row": src,
+            "source_age_months": age[src],
+            "gap_months": age[lagged] - age[src],
+            "source_signed": signed[src],
+            "source_understood": understood[src],
+            "source_signed_share": share,
+            "source_share_zero": share == 0.0,
+            "source_share_one": share == 1.0,
+            "source_wave_share_measurements": [
+                int(wave_sources.loc[key])
+                for key in zip(subj[src], age[src], strict=True)
+            ],
+            # "" = the row enters no likelihood the lag term reaches, so its lag
+            # cannot inform beta_sign_lag.
+            "branch": branch[lagged],
+        }
+    )
+    if "study" in analysis_df.columns:
+        frame.insert(2, "study", np.asarray(analysis_df["study"])[lagged])
+    return frame
+
+
+def report_sign_cross_lag_support(
+    output_dir: str, audit: pd.DataFrame, n_obs: int, *, in_cells: bool
+) -> None:
+    """Write ``sign_cross_lag_audit.csv`` and print the support summary (#297).
+
+    ``in_cells`` is the definition's own switch, not something inferred from the
+    audit: it decides which branches the lag term actually reaches, and a
+    summary that counted the cross-tab rows as support while the graph ignored
+    them would overstate the coefficient's evidence by half.
+    """
+    audit.to_csv(os.path.join(output_dir, "sign_cross_lag_audit.csv"), index=False)
+    reached = (
+        {"conditional", "marginal", "cells", "produced-cells"}
+        if in_cells
+        else {"conditional", "marginal"}
+    )
+    supporting = audit[audit["branch"].isin(reached)]
+    gaps = supporting["gap_months"]
+    rows: list[tuple[str, object]] = [
+        ("Observations with a prior-wave signed-share source", len(audit)),
+        ("... of them reached by the lag term", len(supporting)),
+        ("Children contributing a supporting observation", supporting["subject_code"].nunique()),
+        ("Supporting rows on the conditional S|U branch", int((supporting["branch"] == "conditional").sum())),
+        ("Supporting rows on the marginal fallback branch", int((supporting["branch"] == "marginal").sum())),
+        ("Supporting rows in the four-cell composition", int((supporting["branch"] == "cells").sum())),
+        ("Supporting rows in the produced-cell composition", int((supporting["branch"] == "produced-cells").sum())),
+        (
+            "Gap to source (months): median (IQR) [range]",
+            f"{gaps.median():.1f} ({gaps.quantile(0.25):.1f}-{gaps.quantile(0.75):.1f}) "
+            f"[{gaps.min():.0f}-{gaps.max():.0f}]"
+            if len(supporting)
+            else "n/a",
+        ),
+        (
+            "Source signed share: median [range]",
+            f"{supporting['source_signed_share'].median():.3f} "
+            f"[{supporting['source_signed_share'].min():.3f}-"
+            f"{supporting['source_signed_share'].max():.3f}]"
+            if len(supporting)
+            else "n/a",
+        ),
+        ("Sources at a share of exactly 0 (boundary)", int(supporting["source_share_zero"].sum())),
+        ("Sources at a share of exactly 1 (boundary)", int(supporting["source_share_one"].sum())),
+        (
+            "Source waves offering >1 signed-share measurement",
+            int((supporting["source_wave_share_measurements"] > 1).sum()),
+        ),
+        ("Observations in the frame", n_obs),
+    ]
+    key_value_table("Sign cross-lag support (sign_cross_lag_audit.csv)", rows)

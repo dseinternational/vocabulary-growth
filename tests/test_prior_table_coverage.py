@@ -12,14 +12,21 @@ into that model's template.
 
 The check is made against each model's **real graph**: the same variable set
 `common.diagnostics_var_names` writes into `diagnostics.csv`, which is what the
-priors table gates on. Building twenty graphs needs the prepared DuckDB and
-takes minutes, so the two tests that build one are `slow`; nothing here samples.
+priors table gates on. The graph is built on the small fixed synthetic frame in
+`support.synthetic_graphs` rather than on the prepared DuckDB, which is what
+`test_graph_equivalence` has always done and is licensed here by a measurement
+rather than by analogy -- see `_reported_parameters` below. The two tests that
+build a graph are still `slow`; nothing here samples.
 
-The mark is **per test, not on the module**. This file is the slow set's largest
+The mark is **per test, not on the module**. This file was the slow set's largest
 single cost -- 106 graph builds, 45% of that set's CPU -- and the exemption check
 below builds nothing, so it belongs in the fast job where it guards every pull
 request. The two graph tests carry no shared fixture and are deliberately left
-ungrouped, so `--dist loadgroup` can spread them across workers.
+ungrouped, so `--dist loadgroup` can spread them across workers. It is no longer
+that cost: 6 m 02 s serial to 1 m 30 s, and out of the slow set's slowest fifteen
+entirely, almost all of it from the batched size evaluation in
+`common._element_counts` rather than from the frame (#331,
+`notes/202609111158-slow-test-cost-was-not-data-preparation.md`).
 
 Writing it found three more omissions of the same class straight away: VG15's
 Dirichlet-Multinomial concentration, which has its own prior figure and is named
@@ -32,19 +39,16 @@ page.
 
 from __future__ import annotations
 
-import importlib
 import json
-import os
 
-import dse_research_utils.statistics.models.reporting as reporting
-import dse_research_utils.statistics.models.sampling as sampling
 import pandas as pd
 import pytest
+from support.synthetic_graphs import build_synthetic_model
 
 from vocab_growth import report_cells
 from vocab_growth.fit_artifacts import normalise_for_json
 from vocab_growth.models.catalogue import CATALOGUE
-from vocab_growth.models.common import ModelFitContext, diagnostics_var_names
+from vocab_growth.models.common import diagnostics_var_names
 
 
 def _variant_keys():
@@ -55,28 +59,38 @@ def _variant_keys():
 
 
 def _reported_parameters(engine, definition, tmp_path, monkeypatch):
-    """Build ``definition``'s graph and return what ``diagnostics.csv`` would hold."""
-    # The build stage renders a Graphviz diagram; the binary is optional and the
-    # picture is not what is under test.
-    engine_module = importlib.import_module(engine.module)
-    if hasattr(engine_module, "render_model_graph"):
-        monkeypatch.setattr(engine_module, "render_model_graph", lambda *a, **k: None)
+    """Build ``definition``'s graph and return what ``diagnostics.csv`` would hold.
 
-    context = ModelFitContext(
-        reporting=reporting.ReportingConfiguration(
-            model_name=definition.model_id,
-            config_name=definition.config_name,
-            output_root_dir=str(tmp_path / "out"),
-            ci_prob=0.89,
-            interval_kind="eti",
-        ),
-        sampling=sampling.get_sampling_configuration("dev"),
+    Built on the synthetic frame, which is what makes this file affordable. Until
+    2026-09-11 each of these 106 tests ran the engine's real ``prepare`` stage --
+    106 full DuckDB loads and 106 full-size graph builds, 591.7 s and 45% of the
+    slow set's CPU -- to read back a set of parameter *names*.
+
+    The licence for dropping the preparation is a measurement, not an argument,
+    because the risk is specific: a parameter whose existence follows from the
+    data rather than from the definition would then go unchecked. All 21
+    registered models and all 85 registered variants were built both ways and
+    their reported names compared (issue #331 item 1). **In no case did the
+    synthetic frame report fewer parameters than the real one**, and no free
+    variable crossed the size<=2 boundary that separates the summary set from
+    the gate set. One case differs, in the safe direction:
+    ``vg15/dse-native-only`` leaves exactly one psi-informed study in the real
+    pool, so its documented single-study branch drops ``tau_psi`` and ``z_psi``
+    -- which the synthetic frame's four cross-tab studies keep. A superset is a
+    stricter coverage demand, never a looser one, so the check can only get
+    harder to pass this way.
+
+    ``survey_vocab_max`` is on the synthetic frame for this file's sake:
+    ``vg16/lag-same-form`` is the one variant whose build reads it, and without
+    it that case raised instead of building. Adding it moved no entry in
+    ``support/graph_baseline.json``.
+    """
+    context = build_synthetic_model(
+        definition,
+        engine,
+        output_dir=str(tmp_path / "out"),
+        monkeypatch=monkeypatch,
     )
-    os.makedirs(context.reporting.output_dir, exist_ok=True)
-    engine.resolve("prepare")(context, definition)
-    engine.resolve("priors")(context, definition)
-    engine.resolve("build")(context, definition)
-
     reported, _ = diagnostics_var_names(context.model)
     assert reported, f"{definition.model_id} reports no parameters at all"
     return reported
@@ -97,7 +111,7 @@ def _fit_directory(tmp_path, definition, parameters):
 @pytest.mark.slow
 @pytest.mark.parametrize("model_key", sorted(CATALOGUE))
 def test_the_priors_table_covers_every_reported_parameter(
-    model_key, tmp_path, monkeypatch, require_prepared_data
+    model_key, tmp_path, monkeypatch
 ):
     model = CATALOGUE[model_key]
     definition = model.definition
@@ -142,7 +156,7 @@ _VARIANTS = sorted({(model_key, name) for model_key, name in _variant_keys()})
 @pytest.mark.slow
 @pytest.mark.parametrize("model_key,variant_name", _VARIANTS)
 def test_the_priors_table_covers_every_variant_parameter(
-    model_key, variant_name, tmp_path, monkeypatch, require_prepared_data
+    model_key, variant_name, tmp_path, monkeypatch
 ):
     """A variant renders the model of record's template, gaps and all.
 

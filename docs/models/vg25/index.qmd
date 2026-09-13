@@ -1,0 +1,709 @@
+---
+title: "Model VG25: Does signing earlier predict speaking more later? - children with Down syndrome"
+
+date: now
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      # Explicit href rather than `- repo`; see the note in vg20/index.qmd. The
+      # per-model reports render in the OUTPUT directory, which has no
+      # repository above it, so Quarto's `repo` shorthand is a hard error there.
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/dseinternational/vocabulary-growth/
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+:::
+
+::: {.callout-important}
+This narrative was written from the model's specification **before its first fit**, and deliberately from scratch rather than derived from VG24's report — copying a parent's report is how VG21 inherited three claims that had already been withdrawn from VG13 ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)). Every number below is rendered from the fit named in the banner. The sections on what the coefficient means state the questions the fit answers, not its answers.
+
+One number on this page is the whole point of the model, and that is exactly the shape of parameter that can be silently wrong: VG24's first build reported all three of its correlations as `+0.000` in every draw because of a primitive that returned the wrong object, and a model with its headline pinned at zero looks identical to a model that fitted and found nothing ([`notes/202609061530`](../../notes/202609061530-vg24-registration-and-the-lkj-primitive.md)). **Read the draws, not the code.** @sec-findings computes the posterior's dependence on the data rather than asserting it.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sampling_banner
+
+render_sampling_banner()
+```
+
+VG25 is VG24 with one added parameter. A child's **signed share of comprehension at their previous administration wave** — how much of what they understood, they signed — relative to their own persistent signing standing, shifts the logit of the production ratio $q$ they show now. One coefficient, $\beta_{sign\,lag}$, carries it, and VG24 is nested exactly at $\beta_{sign\,lag}=0$.
+
+The question it exists to answer was asked on 2026-09-04 and has never had a fitted model behind it: **does signing earlier predict speaking more later?**
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+# 'candidate', not 'record': VG25 is UNCLASSIFIED and unfitted, so families
+# and practitioners are routed to VG24 rather than offered numbers this page
+# should not supply.
+render_reading_routes('candidate', instead='VG24')
+```
+
+![The model's structure. VG25 differs from VG24 in one coefficient on the production-ratio logit.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Three questions that sound like one {#sec-three-quantities}
+
+"Does signing help speech?" is three different statistical questions, and the single most likely way to misread this page is to take $\beta_{sign\,lag}$ as the answer to all three. The project now carries an estimate of each, and naming which is which is part of the deliverable.
+
+| Question | Quantity | Where it lives |
+| --- | --- | --- |
+| Do the children who sign more of what they understand also **say** more of it, as a persistent standing? | $\rho_{sign\,q}$, a between-child correlation | VG24 |
+| At a given moment, within one child's understood vocabulary, do saying and signing a word go together? | $\psi$, a within-child, within-comprehension association | VG15 / VG24 / this model |
+| Does a child who signed **more than usual for them** at an earlier wave go on to say a larger share of what they understand **later**? | $\beta_{sign\,lag}$, a prospective within-child effect | **this model** |
+
+They can legitimately differ in sign. Children who sign more may say less at a given moment ($\psi$) while the children who sign more overall are also the children who say more overall ($\rho_{sign\,q}$), and neither settles what happens to one child over time ($\beta_{sign\,lag}$).
+
+There is a fourth, descriptive, result that is close to this model's estimand but not identical to it. [`notes/202608160930`](../../notes/202608160930-early-signing-and-later-speech.md) found, among 147 children and holding earlier speech **and** comprehension standing fixed, that the signed share of comprehension predicts later spoken vocabulary at $+0.19$ SD per SD, 89% ETI $[0.03, 0.36]$, stable under study fixed effects and single-study deletion. That is a two-wave residual regression, not a model, and it **conditions on the child's speech at the earlier wave**, which a $q$ child intercept — the child's average across all waves — does not do. So the note and this model are companions, not replacements, and their numbers should not be expected to coincide.
+
+## Why the lag extends VG24 and not VG15 {#sec-why-vg24}
+
+Because otherwise the coefficient would be measuring the wrong thing, and doing it badly.
+
+[`notes/202608151140`](../../notes/202608151140-cross-lag-not-for-models-of-record.md) §3 established, on VG16, that within-child deviations in this pool have **no memory beyond the occasion**. A lag predictor measured relative to the *population* therefore mostly carries the covariance between children's *persistent* standings — which is exactly $\rho_{sign\,q}$, reached through a proxy with attenuation to argue about. With VG24's correlated child block in the model, that persistent association has somewhere proper to live, and the lag is left measuring what it is named for.
+
+Two consequences follow, and both are registered rather than argued:
+
+- The baseline is **within-child** (@sec-baseline), not VG16's population-relative one.
+- VG25 derives from VG24's definition, so VG24 is its exact nested null and VG24's own fingerprint is untouched.
+
+## The five design decisions {#sec-design}
+
+[#297](https://github.com/dseinternational/vocabulary-growth/issues/297) named four choices that had to be made before this model could be registered, and measurement added a fifth. Each is stated with what decided it, because each moves either the estimand or the evidence.
+
+### Which likelihoods the lag enters {#sec-scope}
+
+**Registered: the spoken marginal *and* the cross-tab compositions.**
+
+VG15 keeps its **child shifts** out of the four-cell and produced-cell Dirichlet-Multinomials, deliberately: a free per-child offset is co-identified with the association $\psi$ on those thin rows, and letting it in moved $\psi$ from $1.78$ to about $2.8$. Treating the lag the same way would confine it to the spoken marginal.
+
+That is not the same decision, and the difference is why it was taken differently. $\beta_{sign\,lag}$ is **one scalar multiplying a covariate fixed by the data**: it adds a single dimension to the parameter space, not one per child, and it has no per-child freedom with which to chase a composition. Set against that, confining it costs most of the evidence — measured on the 2026-09-11 frame, **191 supporting observations from 129 children, against 111 from 80**, with `uk_07` contributing nothing at all under the narrow arm because its rows carry no spoken marginal.
+
+::: {.callout-warning}
+## The caveat that comes with it
+
+Under the within-child baseline the predictor itself contains the child's signing intercept **at the prior wave**. So an estimated per-child quantity does reach the composition — through one scalar coefficient, on lagged rows only, rather than as a free offset per row. The `sign-lag-population` sensitivity is the arm in which no estimated per-child quantity reaches the cells at all, because that baseline subtracts the shift back out. Reading it beside `sign-lag-marginal-only` is what says whether $\psi$ moved, and why.
+:::
+
+### The baseline {#sec-baseline}
+
+**Registered: within-child.** The predictor is the prior wave's signed-share logit minus the model's expectation for *that child* at that wave, so a child is compared with their own persistent signing standing rather than with the population's.
+
+VG16 registered the **population-relative** baseline for its own lag, and the difference between the two models is not an inconsistency. VG16 carries no $\rho_{uq}$, so its population baseline still had a between-child association to measure. VG25 inherits $\rho_{sign\,q}$, so that baseline would be a second, noisier reading of a quantity already in the model. It is registered as the `sign-lag-population` sensitivity, where it doubles as the check described above.
+
+### `nz_01`'s denominator {#sec-nz01}
+
+**Registered: `nz_01` supplies no lag source.** Its cross-tab partitions *produced* words, so the only share it measures is the signed share of **production** — a different variable, not a differently-denominated version of this one. Putting the two under one coefficient would make $\beta_{sign\,lag}$ mean two things at once. Its rows still enter every likelihood they always did.
+
+::: {.callout-warning}
+## This one costs real support
+
+28 of `nz_01`'s 33 children have more than one wave. Admitting a produced denominator would take the coefficient from **191 supporting observations over 129 children to 269 over 157** — the 28 children [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) anticipated, at a median gap of 6 months. That is 41% more observations, declined.
+
+It is declined on the argument and not on the count, which is the only way the rule survives the next `nz_01` follow-up: a coefficient whose meaning depends on how much data a denominator happens to bring is not a coefficient anyone can interpret.
+:::
+
+### The gap {#sec-gap}
+
+The model assumes **one coefficient across every gap it sees**. A prospective association measured over a year is not obviously the same quantity as one measured over three months, and nothing in the graph says so — the assumption [#242](https://github.com/dseinternational/vocabulary-growth/issues/242) asked to be checked rather than asserted. The `sign-lag-gap-12` arm is registered with the model rather than after a reviewer asks for it. @sec-support reports the gap distribution this fit actually rests on.
+
+### Boundary shares: the fifth decision, which measurement forced {#sec-boundary}
+
+**Registered: the continuity correction, not VG16's clip.**
+
+The predictor is $\mathrm{logit}(\text{signed}/\text{understood})$, and a signed share of exactly $0$ is common here in a way an understood count of exactly $0$ is not. On the 2026-09-11 frame **26 of the 191 supporting rows** have a source wave at which the child signed none of what they understood, and 2 more at which they signed all of it — **14.7% of the support on a logit boundary**, against 7 of VG16's 477 rows (1.5%).
+
+The clip puts all 26 at $\mathrm{logit}(10^{-4}) = -9.21$ whatever the wave measured, so a child who understood 2 words and signed none enters identically to a child who understood 406 and signed none. The continuity correction $(k+0.5)/(n+1)$ derives each from its own wave's denominator instead: $-1.61$ for the 2-word wave, $-6.70$ for the 406-word one.
+
+What that is worth, measured on the **source signed-share logit** — the predictor's observed input, before the model's own baseline is subtracted, which is the part that can be measured without a fit:
+
+| treatment | SD | range | boundary rows' share of its sum of squares |
+| --- | ---: | --- | ---: |
+| clip | 3.34 | $[-9.21, +9.21]$ | **76.1%** |
+| continuity | 1.79 | $[-6.70, +4.89]$ | 45.8% |
+
+Under the clip, 14.7% of the rows would carry three quarters of the variation the coefficient is estimated from — which is to say $\beta_{sign\,lag}$ would be fixed mostly by a floor constant. That is not an artefact of the raw scale: residualising the source logit on the source wave's age and study, as a stand-in for the baseline the model actually subtracts, leaves the same picture (SD $2.77$ against $1.56$; boundary leverage $66.1\%$ against $42.3\%$).
+
+`sign-lag-clip` is the arm that measures the difference on a fit rather than on this arithmetic.
+
+## What identifies the coefficient {#sec-support}
+
+::: {.callout-important}
+## Most of the frame does not inform this parameter
+
+A row informs $\beta_{sign\,lag}$ only if the child has an **earlier** administration wave carrying a signed share of comprehension, and the row itself enters a likelihood the lag term reaches. For every other row the predictor is identically zero. That is a minority of the frame, and the interval this model reports is the interval that minority supports.
+:::
+
+```{python}
+#| label: lag-support
+#| echo: false
+#| output: asis
+# Read from the audit artefact this fit wrote, not from a rebuilt frame: a
+# rebuilt frame can silently differ from the one the fit used. Guarded so a
+# report rendered without the artefact degrades to a note instead of failing.
+try:
+    import json as _json
+
+    import pandas as _pd
+
+    _audit = _pd.read_csv("sign_cross_lag_audit.csv")
+    _branch = _audit["branch"].fillna("")
+    # The audit records which likelihood each row lands in; whether the lag
+    # REACHES that likelihood is a definition setting, so it is read from the
+    # manifest rather than assumed. Under `sign_lag_in_cells=False` a cross-tab
+    # row still has a branch and still has a source, and the coefficient still
+    # learns nothing from it -- counting it here would report the registered
+    # model's support on a fit that does not have it.
+    with open("fit_manifest.json", encoding="utf-8") as _fh:
+        _in_cells = bool(
+            _json.load(_fh)["model"]["definition"].get("sign_lag_in_cells", True)
+        )
+    _reached = {"conditional", "marginal"}
+    if _in_cells:
+        _reached |= {"cells", "produced-cells"}
+    _supporting = _audit[_branch.isin(_reached)]
+
+    print("| | Observations | Children |")
+    print("| --- | ---: | ---: |")
+    print(f"| With a prior-wave signed-share source | {len(_audit):,} | "
+          f"{_audit['subject_code'].nunique():,} |")
+    print(f"| Of those, reached by the lag term | {len(_supporting):,} | "
+          f"{_supporting['subject_code'].nunique():,} |")
+    print()
+    print(": Rows with a source but no supporting likelihood carry a lag that "
+          "informs nothing.")
+    print()
+    if not _in_cells:
+        print("This fit sets `sign_lag_in_cells = False`, so the cross-tab "
+              "compositions are **not** counted above: their rows carry a "
+              "source, and the coefficient does not see it.")
+        print()
+
+    if len(_supporting):
+        _gaps = _supporting["gap_months"]
+        print(f"The supporting rows reach back a median of **{_gaps.median():.0f} "
+              f"months** (IQR {_gaps.quantile(.25):.0f}–{_gaps.quantile(.75):.0f}, "
+              f"range {_gaps.min():.0f}–{_gaps.max():.0f}), and the source signed "
+              f"share runs {_supporting['source_signed_share'].min():.2f} to "
+              f"{_supporting['source_signed_share'].max():.2f} "
+              f"(median {_supporting['source_signed_share'].median():.2f}).")
+        print()
+        _boundary = int(_supporting["source_share_zero"].sum()) + int(
+            _supporting["source_share_one"].sum()
+        )
+        print(f"**{_boundary} of {len(_supporting)}** sit at a share of exactly 0 "
+              f"or exactly 1, where @sec-boundary's treatment decides the value.")
+        print()
+        print("| Study | Supporting observations | Children |")
+        print("| --- | ---: | ---: |")
+        for _study, _rows in _supporting.groupby("study"):
+            print(f"| `{_study}` | {len(_rows):,} | {_rows['subject_code'].nunique():,} |")
+        print()
+        print("| Likelihood branch | Supporting observations |")
+        print("| --- | ---: |")
+        for _name, _count in _supporting["branch"].value_counts().items():
+            print(f"| {_name} | {_count:,} |")
+        print()
+        print(": `conditional` and `marginal` are the spoken marginal's two "
+              "branches; `cells` and `produced-cells` are the cross-tab "
+              "compositions, which the lag reaches only under "
+              "`sign_lag_in_cells` — and which this table therefore lists only "
+              "when this fit set it.")
+except Exception as _exc:  # noqa: BLE001 - a report must not fail on a missing artefact
+    print(f"_Support tables unavailable: {type(_exc).__name__}._")
+```
+
+::: {.callout-warning}
+## The reporter confound, and what it does to a lag
+
+Every count on this page comes from **one questionnaire completed by one parent**. For VG24's correlations that inflates the association, because a parent who over-reports over-reports every modality at once. A lag is partly protected: the predictor and the outcome come from **different administrations**, often months apart, so a single occasion's reporting tendency cannot produce both. What is *not* removed is a parent who persistently over-reports across visits — which the within-child baseline also partly absorbs, since it compares a child with their own average.
+
+This is a reason to prefer the lag as evidence of direction, not a claim that it is unconfounded.
+:::
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Credible interval",
+    "Estimand",
+    "Reference inventory",
+    "Production ratio ($q$)",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Random intercept",
+    "Between-child heterogeneity ($\\tau$)",
+    "Partial pooling",
+    "Population-level and subject-marginal",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "Posterior predictive check",
+    "BFMI (Bayesian fraction of missing information)",
+])
+```
+
+## Priors {#sec-priors}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
+
+render_priors_table()
+```
+
+Every prior is VG24's, unchanged, including the LKJ concentration $\eta = 2$ on the child-effect correlation and the three $\mathrm{HalfNormal}(1.5)$ child scales. The one addition is $\beta_{sign\,lag} \sim \mathrm{Normal}(0, 0.5)$ — VG16's prior for its own lag, deliberately, so that the two coefficients are prior-comparable and a difference between them is a difference in the data.
+
+::: {.callout-note}
+## A symmetric prior is not a calibrated one
+
+$\mathrm{Normal}(0, 0.5)$ imposes no direction, which is what the question requires: the model must be able to return a negative coefficient. Symmetry is not the same as being uninformative about magnitude, and an interval that excludes zero should be shown to do so under other scales before it is reported as a result. `beta-sign-tight` ($\sigma = 0.25$) and `beta-sign-wide` ($\sigma = 1.0$) are registered for that, and @sec-contraction reports how much this prior was actually narrowed by the data.
+:::
+
+### Understood trajectory
+
+![How far apart in age two points must be before the understood trend may move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
+
+![Prior on the proportion of words understood at the low age anchor.](p_slope_low_u_dist.png){#fig-slope-low-u .lightbox fig-align="left"}
+
+![Prior on the proportion of words understood at the high age anchor.](p_slope_hi_u_dist.png){#fig-slope-hi-u .lightbox fig-align="left"}
+
+### Production ratio
+
+![How far apart in age two points must be before the production ratio may move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
+
+![Prior on the fraction of understood words that are spoken at the low age anchor.](p_slope_low_q_dist.png){#fig-slope-low-q .lightbox fig-align="left"}
+
+![Prior on the fraction of understood words that are spoken at the high age anchor.](p_slope_hi_q_dist.png){#fig-slope-hi-q .lightbox fig-align="left"}
+
+### Signed ratio
+
+![How far apart in age two points must be before the signed trend may move independently.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
+
+![How far the flexible term may depart from the tent mean, on the logit scale.](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
+
+![Prior on the signed ratio at the young anchor age.](p_slope_low_sign_dist.png){#fig-sign-low .lightbox fig-align="left"}
+
+![Prior on the signed ratio at the peak anchor — the height of the hump.](p_slope_mid_sign_dist.png){#fig-sign-mid .lightbox fig-align="left"}
+
+![Prior on the signed ratio at the old anchor age.](p_slope_hi_sign_dist.png){#fig-sign-hi .lightbox fig-align="left"}
+
+### Dispersion
+
+![Prior on the floor of the understood dispersion parameter.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the younger reference age.](kappa_excess_young_u_dist.png){#fig-kappa-excess-young-u .lightbox fig-align="left"}
+
+![Prior on the excess understood dispersion at the older reference age.](kappa_excess_old_u_dist.png){#fig-kappa-excess-old-u .lightbox fig-align="left"}
+
+![Prior on the floor of the spoken dispersion parameter.](kappa_min_s_dist.png){#fig-kappa-min-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the younger reference age.](kappa_excess_young_s_dist.png){#fig-kappa-excess-young-s .lightbox fig-align="left"}
+
+![Prior on the excess spoken dispersion at the older reference age.](kappa_excess_old_s_dist.png){#fig-kappa-excess-old-s .lightbox fig-align="left"}
+
+![Prior on the floor of the signed dispersion parameter.](kappa_min_sign_dist.png){#fig-kappa-min-sign .lightbox fig-align="left"}
+
+![Prior on the intercept of the signed dispersion's age term.](a_kappa_sign_dist.png){#fig-a-kappa-sign .lightbox fig-align="left"}
+
+![Prior on the magnitude of the signed dispersion's age slope.](b_kappa_mag_sign_dist.png){#fig-b-kappa-mag-sign .lightbox fig-align="left"}
+
+### Association and concentration
+
+![Prior on the sign–speech association on the log-odds-ratio scale. Mass to the right of zero is prior belief in positive association.](log_psi_dist.png){#fig-log-psi .lightbox fig-align="left"}
+
+![Prior on the Dirichlet-Multinomial concentration.](log_conc_dist.png){#fig-log-conc .lightbox fig-align="left"}
+
+## Prior predictive checks {#sec-prior-predictive}
+
+![Understood trajectories drawn from the priors.](prior_samples_u.png){#fig-prior-u .lightbox fig-align="left"}
+
+![Spoken trajectories drawn from the priors.](prior_samples_s.png){#fig-prior-s .lightbox fig-align="left"}
+
+![Signed trajectories drawn from the priors.](prior_samples_sign.png){#fig-prior-sign .lightbox fig-align="left"}
+
+![Signed ratio $r(a)$ drawn from the priors — the fraction of understood words that are signed.](prior_samples_r.png){#fig-prior-r .lightbox fig-align="left"}
+
+![Production ratio $q(a)$ drawn from the priors — the fraction of understood words that are spoken.](prior_samples_q.png){#fig-prior-q .lightbox fig-align="left"}
+
+![Total expressive probability drawn from the priors, before any association has been estimated.](prior_samples_p_any.png){#fig-prior-p-any .lightbox fig-align="left"}
+
+::: {.callout-note}
+These figures plot **population-level** trajectories, which exclude study and child effects by construction, and the lag predictor is zero for a hypothetical child with no earlier wave. They therefore cannot exercise $\beta_{sign\,lag}$ at all, and no reading of them validates it — the same limitation [#233](https://github.com/dseinternational/vocabulary-growth/issues/233) recorded for VG19's and VG20's prior figures. The coefficient's prior is in the priors table above; what the data did to it is @sec-contraction.
+:::
+
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
+import pandas as pd
+
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+::: {.callout-note}
+
+The normality tests in this table are reported for completeness. They are not a check on the model: the outcomes are bounded counts, which are not expected to be normally distributed, and the model does not assume that they are.
+
+:::
+
+## Diagnostics {#sec-diagnostics}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_convergence_caveats
+
+render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
+```
+
+::: {.callout-note}
+The geometry to watch is $\beta_{sign\,lag}$ against the signing child block. Under the within-child baseline the predictor is built from the child's own signing intercept at the prior wave, so the coefficient and $\tau_{subj,sign}$ are not independent by construction; a ridge between them in the pair plot is the expected shape of a weakly identified lag, and a coefficient the data cannot determine shows as a posterior close to its prior — which @sec-contraction quantifies rather than leaving to the eye.
+:::
+
+![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox fig-align="left"}
+
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![Pairwise joint posteriors for the prioritised parameters. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+![Marginal posterior distributions for the sampled and derived parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above. For $\beta_{sign\,lag}$ this is the number that separates "estimated" from "returned unchanged".
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
+## Findings {#sec-findings}
+
+### The sign → speech cross-lag
+
+```{python}
+#| label: beta-sign-lag
+#| echo: false
+#| output: asis
+# Read from this fit's own diagnostics so the text cannot drift from the model
+# it describes. The contraction check below is deliberate: a headline parameter
+# that came back as its own prior is the failure mode VG24's LKJ defect taught,
+# and it is not visible in a posterior interval alone.
+import pandas as _pd
+
+try:
+    _diagnostics = _pd.read_csv("diagnostics.csv", index_col=0)
+    if "beta_sign_lag" not in _diagnostics.index:
+        raise KeyError("beta_sign_lag")
+    _row = _diagnostics.loc["beta_sign_lag"]
+
+    print("| Parameter | Posterior mean | SD | 89% ETI | ESS (bulk) | R-hat |")
+    print("| --- | ---: | ---: | --- | ---: | ---: |")
+    print(
+        f"| $\\beta_{{sign\\,lag}}$ (`beta_sign_lag`) | {_row['mean']:.3f} | "
+        f"{_row['sd']:.3f} | {_row['eti89_lb']:.3f} to {_row['eti89_ub']:.3f} | "
+        f"{_row['ess_bulk']:,.0f} | {_row['r_hat']:.3f} |"
+    )
+    print()
+    print(": Under VG24 this is exactly zero by construction.")
+    print()
+
+    # Did the data move it? A prior SD of 0.5 is the registered value; the
+    # manifest is the authority, so read it where available.
+    _prior_sd = 0.5
+    try:
+        import json as _json
+
+        with open("fit_manifest.json", encoding="utf-8") as _fh:
+            _prior_sd = float(
+                _json.load(_fh)["model"]["definition"]["beta_sign_lag_sigma"]
+            )
+    except Exception:  # noqa: BLE001 - fall back to the registered value
+        pass
+    _contraction = 1 - _row["sd"] / _prior_sd
+    print(
+        f"The posterior SD is {_row['sd']:.3f} against a prior SD of "
+        f"{_prior_sd:g}, a contraction of {_contraction:.2f}. "
+        + (
+            "The data moved this parameter."
+            if _contraction > 0.2
+            else "**The data barely moved this parameter**, so the interval "
+            "below is close to the prior and should not be read as a result."
+        )
+    )
+    print()
+
+    if _row["eti89_lb"] > 0:
+        _verdict = (
+            "lies entirely **above** zero: a child who signed a larger share of "
+            "what they understood than is usual for them goes on to say a larger "
+            "share of what they understand later"
+        )
+    elif _row["eti89_ub"] < 0:
+        _verdict = (
+            "lies entirely **below** zero: signing more than usual at an earlier "
+            "wave is followed by saying *less* later. That is the substitution "
+            "reading, and it would have to be reconciled with the prospective "
+            "descriptive result before being reported"
+        )
+    else:
+        _verdict = (
+            "**spans** zero, so this fit does not distinguish the prospective "
+            "effect from the independence VG24 assumes. Given the support in "
+            "@sec-support that is the outcome to expect rather than a surprise"
+        )
+    print(
+        f"**This is the number the model exists to produce.** Its 89% "
+        f"equal-tailed interval {_verdict}. Read it with @sec-support and "
+        f"@sec-three-quantities: it is a prospective within-child effect on a "
+        f"minority of the frame, not a population claim and not a restatement "
+        f"of $\\rho_{{sign\\,q}}$."
+    )
+except Exception as _exc:  # noqa: BLE001 - a report must not fail on a missing artefact
+    print(f"_Cross-lag table unavailable: {type(_exc).__name__}._")
+```
+
+### In interpretable units
+
+A coefficient on a logit scale answers no one's question. What it is worth is how far along the production-ratio trajectory a child is moved by signing one standard deviation more than usual for them — and that is the figure the deliverable should carry, alongside the gap and leave-one-study-out sensitivities.
+
+```{python}
+#| label: beta-sign-lag-units
+#| echo: false
+#| output: asis
+# Translate the coefficient into the predictor's own units: one SD of the
+# realised lag predictor across the supporting rows. The predictor's baseline is
+# estimated, so this uses the raw source logit, which is the part a reader can
+# see in the audit file; the resulting shift is therefore a scale, not a
+# posterior quantity, and is reported as such.
+#
+# The boundary treatment is read from THIS fit's manifest rather than assumed.
+# A sensitivity variant renders the model of record's template, so
+# `sign-lag-clip` would otherwise be described in the registered arm's units --
+# and on this predictor that is not a rounding difference: the two treatments
+# give SDs of 3.34 and 1.79 (@sec-boundary).
+try:
+    import json as _json
+
+    import numpy as _np
+    import pandas as _pd
+
+    _audit = _pd.read_csv("sign_cross_lag_audit.csv")
+    _diagnostics = _pd.read_csv("diagnostics.csv", index_col=0)
+    _beta = _diagnostics.loc["beta_sign_lag"]
+
+    with open("fit_manifest.json", encoding="utf-8") as _fh:
+        _definition = _json.load(_fh)["model"]["definition"]
+    _treatment = _definition["sign_lag_zero_handling"]
+    # Same filter as @sec-support, and for the same reason: the SD below is the
+    # spread of the predictor the coefficient was actually fitted against, so a
+    # fit that keeps the lag out of the compositions must not be described on
+    # the wider set of rows it does not use.
+    _reached = {"conditional", "marginal"}
+    if bool(_definition.get("sign_lag_in_cells", True)):
+        _reached |= {"cells", "produced-cells"}
+    _supporting = _audit[_audit["branch"].fillna("").isin(_reached)]
+
+    _share = _supporting["source_signed_share"].to_numpy(dtype=float)
+    _understood = _supporting["source_understood"].to_numpy(dtype=float)
+    if _treatment == "continuity":
+        _corrected = (_share * _understood + 0.5) / (_understood + 1.0)
+    else:
+        _corrected = _np.clip(_share, 1e-4, 1 - 1e-4)
+    _source_logit = _np.log(_corrected) - _np.log1p(-_corrected)
+    _sd = float(_np.std(_source_logit))
+
+    print(
+        f"Across the {len(_supporting):,} supporting rows the source signed-share "
+        f"logit has an SD of **{_sd:.2f}** under this fit's `{_treatment}` boundary "
+        f"treatment. One SD of it shifts the production-ratio logit by "
+        f"{_beta['mean'] * _sd:+.3f} "
+        f"(89% ETI {_beta['eti89_lb'] * _sd:+.3f} to {_beta['eti89_ub'] * _sd:+.3f})."
+    )
+    print()
+    print(
+        "The shift in **words spoken** depends on where on the trajectory the "
+        "child sits, because the logit is nonlinear: the same shift is worth "
+        "more words in the middle of the range than at either end. The "
+        "trajectory comparison against VG24 below is what turns it into words."
+    )
+except Exception as _exc:  # noqa: BLE001
+    print(f"_Unit conversion unavailable: {type(_exc).__name__}._")
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
+
+render_headline_quantities()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_variation_table
+
+render_variation_table()
+```
+
+Four comparisons are worth making once there are numbers, and none is automatic:
+
+- **Against VG24**, which is nested at $\beta_{sign\,lag}=0$. The population trajectories and $\psi$ should sit close — the criterion VG16 met against VG10, where the largest movement anywhere was 2.6 words understood and 2.0 words spoken. A material move in $\psi$ is something to explain, not to expect, and @sec-scope says which arm to read next if one appears.
+- **Against $\rho_{sign\,q}$ from the same fit.** VG25 carries both, which is what makes the between-child and prospective quantities separable in one model rather than argued about across two. A large $\beta_{sign\,lag}$ with $\rho_{sign\,q}$ unchanged from VG24 is the clean result; both moving together is the case where the two are competing for the same evidence.
+- **Against the descriptive $+0.19$** of [`notes/202608160930`](../../notes/202608160930-early-signing-and-later-speech.md), with the estimand difference stated (@sec-three-quantities): that regression conditions on earlier *speech*, which this model does not.
+- **Against the sensitivities**, in this order of importance: `sign-lag-clip` (@sec-boundary), `sign-lag-marginal-only` and `sign-lag-population` (@sec-scope), `sign-lag-uk07-marginal`, `sign-lag-gap-12` (@sec-gap), then the two prior scales.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
+
+render_family_notes()
+```
+
+## Posterior vocabulary summaries {#sec-predictions}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table()
+```
+
+::: {.callout-note}
+With the lag in the model, the reported population curve is the curve for **a child whose previous-wave signing was exactly at expectation**, rather than simply the population level. On the current frame the predictor is zero for the large majority of rows, so the two coincide for most of the pool — but the interpretive shift is real and is one of the reasons [`notes/202608151140`](../../notes/202608151140-cross-lag-not-for-models-of-record.md) argued against putting a lag in a model of record.
+:::
+
+## Association psi {#sec-psi}
+
+![Posterior distribution of the sign–speech association. Mass to the right of 1 is evidence of positive association.](psi_posterior.png){#fig-psi .lightbox fig-align="left"}
+
+$\psi$ is the second of @sec-three-quantities' three: a within-child, within-comprehension association between saying a word and signing it, at one moment. Unlike VG24, this model's lag term **does** reach the likelihoods that identify $\psi$ (@sec-scope), so a move against VG24 is possible here in a way it is not there, and is exactly what the `sign-lag-marginal-only` arm is registered to measure.
+
+![The four sign/speech states as fractions of comprehension, against age. The four curves sum to one at every age.](four_cell_composition.png){#fig-four-cell .lightbox fig-align="left"}
+
+## Total expressive vocabulary {#sec-total-expressive}
+
+![The data-identified total expressive vocabulary against the independence upper bound.](p_any_identified_vs_bound.png){#fig-p-any .lightbox fig-align="left"}
+
+## What signing is worth to the child {#sec-signing-value}
+
+![Expressive vocabulary split into sign-only, sign-and-speech and speech-only word counts.](signing_composition_words.png){#fig-signing-composition .lightbox fig-align="left"}
+
+![What counting sign adds to a child's own expressive vocabulary, as a multiple of the speech-only count.](signing_uplift.png){#fig-signing-uplift .lightbox fig-align="left"}
+
+![The signed ratio against the production ratio, with uncertainty intervals.](signed_vs_spoken_rate.png){#fig-rates .lightbox fig-align="left"}
+
+## Posterior predictive checks {#sec-ppc}
+
+![Observed against predicted totals for the four within-understood cells, one panel per source, with predictive intervals.](four_cell_ppc_by_source.png){#fig-four-cell-ppc .lightbox fig-align="left"}
+
+![Observed against predicted totals for `nz_01`'s three within-produced cells, with predictive intervals.](nz01_produced_cell_ppc.png){#fig-nz01-ppc .lightbox fig-align="left"}
+
+## Expected vocabulary by month {#sec-monthly}
+
+![Expected words understood by month.](expected_counts_by_month_u.png){#fig-monthly-u .lightbox fig-align="left"}
+
+![Expected words spoken by month.](expected_counts_by_month_s.png){#fig-monthly-s .lightbox fig-align="left"}
+
+![Expected words signed by month.](expected_counts_by_month_sign.png){#fig-monthly-sign .lightbox fig-align="left"}
+
+## Predictive calibration {#sec-calibration}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```
+
+## Out-of-sample prediction {#sec-loo}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+::: {.callout-warning}
+## LOO leaks across the lag
+
+Leaving one observation out of the likelihood does not remove it from the **later** observations whose lag predictor it feeds, so the out-of-sample figures on this page are optimistic for a lag model in a way they are not for VG24. This is the leakage [#242](https://github.com/dseinternational/vocabulary-growth/issues/242) raised against VG16 and it applies here unchanged; `scripts/wave_forward_score.py` is the forward-scoring answer to it, and it is the comparison to trust over the LOO table above.
+:::
+
+## Limits {#sec-limits}
+
+- **This is a prospective association, not a causal effect of signing.** Nothing here randomises who signs. A child who signed more than usual at one wave may differ in intervention, environment or phenotype in ways the model does not observe, and the within-child baseline removes only the part of that which is constant for the child.
+- **The coefficient rests on a minority of the frame** (@sec-support), and which children have an earlier wave carrying a signed share is an artefact of which studies followed children longitudinally and at what intervals. A coefficient reported as a property of children with Down syndrome is estimated from a subset defined by study design.
+- **There is no leave-one-study-out arm yet.** [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) check 5 asks for one, and it cannot be registered on this definition today: `exclude_studies` is a `BivariateModelDefinition` field, and adding it to `JointModelDefinition` would restale every VG15 and VG24 fit — a change to make deliberately, with the refit it costs, not as a side effect of registering a variant. `sign-lag-uk07-marginal` is the nearest thing available and is a different question: it keeps `uk_07`'s children and moves their rows from the cross-tab branch to the marginal one.
+- **One coefficient across every gap** (@sec-gap). A prospective association over a year and one over three months are assumed to be the same quantity, and `sign-lag-gap-12` is the check rather than the fix.
+- **The boundary treatment is a modelling choice, not a measurement** (@sec-boundary). Roughly one supporting row in seven has a source share of exactly 0 or 1, where the value the predictor takes is set by the correction rather than by the data. Under the registered correction those rows still carry 46% of the source logit's variation, so `sign-lag-clip` is a sensitivity on a choice that matters, not a formality.
+- **Out-of-sample figures leak across the lag** (@sec-loo).
+- **Parameter recovery is registered but not complete.** [#297](https://github.com/dseinternational/vocabulary-growth/issues/297)'s gate 4 asks for recovery in three designed cells — $(\beta = 0, \rho \neq 0)$, $(\beta \neq 0, \rho = 0)$ and both nonzero — whose purpose is to show the lag can be told apart from the correlation. VG25 is a registered recovery target and the simulator selects the wave-sequential order for it automatically, but two of those cells need a way to *set* a parameter in the truth draw, which the harness does not yet have. VG16's own recovery returned `beta_lag` 29% low on its one assessable replicate at `test` ([`notes/202609111500`](../../notes/202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md)), so this check needs a tier above `test` when it runs.
+- **No role has been assigned.** VG25 is `UNCLASSIFIED` in the catalogue, which fails closed: it keeps full publication strictness and stays in the default refit scope. Whether it becomes a model of record, a development step, or neither is a study-owner decision taken with [#190](https://github.com/dseinternational/vocabulary-growth/issues/190)'s other scope questions.

@@ -466,6 +466,51 @@ def test_an_unknown_form_ceiling_cannot_certify_a_same_form_lag():
     np.testing.assert_array_equal(unknown, [0, 0])
 
 
+def test_a_count_tie_is_broken_by_the_form_ceiling_not_the_row_order():
+    """Under ``same_form_only`` the ceiling is read off the source, so it keys too.
+
+    Review of #339 found that the walk ranked candidate sources on the understood
+    count alone. That is enough when the count is the only thing read off the
+    chosen row -- but ``same_form_only`` also reads its form ceiling, so two
+    same-age forms tied on the count and differing in length would have had the
+    lag decided by whichever the frame listed first. The larger ceiling wins, on
+    the same least-truncated ground as the count rule itself.
+    """
+    subject = [0, 0, 0]
+    age = [12.0, 12.0, 24.0]
+    understood = [100.0, 100.0, 150.0]
+    ceilings = [396.0, 800.0]  # tied counts, different checklists
+
+    for order in ([0, 1], [1, 0]):
+        form = [ceilings[order[0]], ceilings[order[1]], 800.0]
+        idx, lag, _ = prev_wave_lag(
+            subject,
+            age,
+            understood,
+            N_TRIALS,
+            form_ceiling=form,
+            same_form_only=True,
+        )
+        # The 800-ceiling source is selected either way, so the 24-month row
+        # keeps its lag rather than losing it to a form mismatch.
+        assert lag[2] == 1.0
+        assert form[int(idx[2])] == 800.0
+
+
+def test_an_unrecorded_ceiling_never_wins_a_tie():
+    """It would lose the lag outright, so it ranks last among tied candidates."""
+    idx, lag, _ = prev_wave_lag(
+        [0, 0, 0],
+        [12.0, 12.0, 24.0],
+        [100.0, 100.0, 150.0],
+        N_TRIALS,
+        form_ceiling=[np.nan, 396.0, 396.0],
+        same_form_only=True,
+    )
+    assert lag[2] == 1.0
+    assert idx[2] == 1
+
+
 def test_same_form_restriction_reads_the_field_off_the_definition():
     """The frame-level entry point is what a variant actually goes through."""
     df = _synthetic_df().assign(

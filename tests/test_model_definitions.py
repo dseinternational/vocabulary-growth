@@ -169,8 +169,10 @@ _ANCHORED_OUTCOMES = {
     # (12, 17) rather than VG21's.
     "vg23": {"kappa_u", "kappa_s"},
     # VG24 derives from VG15 and shares its nested prior blocks outright, so it
-    # carries the same two-anchor form on both outcomes (#296).
+    # carries the same two-anchor form on both outcomes (#296). VG25 derives from
+    # VG24 and inherits the same pair again (#297).
     "vg24": {"kappa_u", "kappa_s"},
+    "vg25": {"kappa_u", "kappa_s"},
 }
 
 

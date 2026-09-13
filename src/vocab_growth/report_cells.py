@@ -263,6 +263,18 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ),
     ("log_psi", "Sign–speech association $\\psi$ (log scale)", "log_psi", "log_psi"),
     ("beta_lag", "Cross-lag coefficient $\\beta$", "beta_lag", "lag"),
+    # VG25 (#297). Its own row rather than a shared one: the two lags read
+    # different predictors on different scales, and a table calling both
+    # "the cross-lag coefficient" would leave a reader of a VG25 page unable
+    # to tell which. Their priors are deliberately the same Normal(0, 0.5),
+    # which is itself a statement worth being able to read off the table.
+    (
+        "beta_sign_lag",
+        "Sign $\\rightarrow$ speech cross-lag coefficient "
+        "$\\beta_{sign\\,lag}$",
+        "beta_sign_lag",
+        "lag",
+    ),
     # VG15 samples this and its own page names it a prior-sensitivity target,
     # but the table had no row for it -- the same omission as VG22's factor
     # block, found by the coverage check written for that one (#273).

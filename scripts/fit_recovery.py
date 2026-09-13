@@ -14,6 +14,13 @@ a long run can be resumed or inspected between them:
     --fit-only          refit existing simulated data
     --compare-only      score existing recovery fits
 
+``--set-truth NAME=VALUE`` sets a named free variable in the truth draw instead
+of taking the value it held, which is how a *designed* cell is asked for rather
+than whichever regime the draw landed in: #297 check 4 and #242 item 6 both ask
+for a cross-lag coefficient recovered at ``(beta = 0, rho != 0)``,
+``(beta != 0, rho = 0)`` and both nonzero. Settings are part of the run's
+identity, so each cell has its own simulation directory, fit and matrix.
+
 The truth comes from the model of record's posterior by default, which asks
 whether the parameters are recoverable *in the regime the study reports*. That
 requires the model of record to have been fitted at the same output root. Use
@@ -46,6 +53,7 @@ from vocab_growth.recovery.simulate import (
     truth_source_tag,
 )
 from vocab_growth.recovery.spec import HEADLINE_MODELS, supported_models
+from vocab_growth.recovery.truth_overrides import override_tag, parse_truth_override
 from vocab_growth.reporting import (
     console,
     dataframe_table,
@@ -107,7 +115,13 @@ def _resolve_pair(model_key: str, variant: str | None, fit_variant: str | None):
 
 
 def _score(
-    model_key: str, definition, label: str, fit_definition=None, *, config: str
+    model_key: str,
+    definition,
+    label: str,
+    fit_definition=None,
+    *,
+    config: str,
+    truth_overrides=(),
 ) -> None:
     """Score every simulated replicate of one model and write its recovery matrix.
 
@@ -127,18 +141,21 @@ def _score(
     query_ages = pd.Series(fit_definition.ages_query).to_numpy()
     out_dir = _comparison_dir()
     summaries: list[dict] = []
-    replicates = available_replicates(definition)
+    replicates = available_replicates(definition, truth_overrides=truth_overrides)
     if not replicates:
         console.print(f"[yellow]{label}: no simulated replicates found.[/yellow]")
         return
 
     for replicate in replicates:
-        sim_dir = simulation_dir(definition, replicate)
+        sim_dir = simulation_dir(
+            definition, replicate, truth_overrides=truth_overrides
+        )
         fit_dir = recovery_fit_dir(
             model_key,
             replicate,
             definition=fit_definition,
             truth_definition=definition,
+            truth_overrides=truth_overrides,
         )
         if not os.path.isdir(sim_dir):
             console.print(f"[yellow]skip r{replicate:02d}: no simulation at {sim_dir}[/yellow]")
@@ -269,6 +286,19 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "--set-truth",
+        action="append",
+        default=None,
+        metavar="NAME=VALUE",
+        help=(
+            "Set a free variable in the truth draw instead of taking the value it "
+            "held (repeatable). VALUE is a number, or 'independent' for a packed "
+            "Cholesky covariance factor, which sets its correlations to zero and "
+            "keeps its scales. Requires a single model. The settings name the "
+            "run's own directories and matrix, so two cells never share either."
+        ),
+    )
+    parser.add_argument(
         "--n-prior-draws",
         type=int,
         default=64,
@@ -317,6 +347,26 @@ if __name__ == "__main__":
             "explicitly.[/bold red]"
         )
         sys.exit(1)
+    if args.set_truth and args.model in {"headline", "all"}:
+        console.print(
+            "[bold red]--set-truth names a variable of one model; name the model "
+            "explicitly.[/bold red]"
+        )
+        sys.exit(1)
+    try:
+        truth_overrides = tuple(
+            parse_truth_override(item) for item in (args.set_truth or [])
+        )
+    except ValueError as exc:
+        console.print(f"[bold red]{exc}[/bold red]")
+        sys.exit(1)
+    named = [item.name for item in truth_overrides]
+    if len(set(named)) != len(named):
+        console.print(
+            "[bold red]--set-truth names the same variable twice; one setting "
+            "each.[/bold red]"
+        )
+        sys.exit(1)
     try:
         definitions = {
             key: _resolve_pair(key, args.variant, args.fit_variant) for key in models
@@ -324,6 +374,15 @@ if __name__ == "__main__":
     except (KeyError, ValueError) as exc:
         console.print(f"[bold red]{exc}[/bold red]")
         sys.exit(1)
+
+    if truth_overrides:
+        # The label names the matrix file. A set truth is a different question
+        # from the same model's unset one, so it must not overwrite it.
+        tag = override_tag(truth_overrides)
+        definitions = {
+            key: (truth, fitted, f"{model_label}-{tag}")
+            for key, (truth, fitted, model_label) in definitions.items()
+        }
 
     replicates = (
         sorted(set(args.replicate)) if args.replicate else list(range(1, args.replicates + 1))
@@ -338,6 +397,11 @@ if __name__ == "__main__":
             ("Models", ", ".join(label for _, _, label in definitions.values())),
             ("Replicates", ", ".join(f"r{r:02d}" for r in replicates)),
             ("Truth source", args.truth),
+            *(
+                [("Truth settings", ", ".join(str(item) for item in truth_overrides))]
+                if truth_overrides
+                else []
+            ),
             (
                 "Simulated from",
                 ", ".join(
@@ -386,6 +450,7 @@ if __name__ == "__main__":
                         args.config,
                         replicate=replicate,
                         truth_source=args.truth,
+                        truth_overrides=truth_overrides,
                         n_prior_draws=args.n_prior_draws,
                         random_seed=args.random_seed,
                         definition=definition,
@@ -397,6 +462,7 @@ if __name__ == "__main__":
                         replicate=replicate,
                         definition=definition,
                         fit_definition=fit_definition,
+                        truth_overrides=truth_overrides,
                     )
             except Exception as exc:  # one replicate must not sink the run
                 failures[label] = f"{type(exc).__name__}: {exc}"
@@ -406,7 +472,12 @@ if __name__ == "__main__":
         if do_compare:
             try:
                 _score(
-                    model_key, definition, model_label, fit_definition, config=args.config
+                    model_key,
+                    definition,
+                    model_label,
+                    fit_definition,
+                    config=args.config,
+                    truth_overrides=truth_overrides,
                 )
             except Exception as exc:
                 failures[f"{model_label} compare"] = f"{type(exc).__name__}: {exc}"

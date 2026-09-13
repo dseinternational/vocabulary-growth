@@ -36,6 +36,7 @@ ENOSPC
 EOWPVT
 ESRC
 Edgin
+Elemwise
 Elison
 Eriksson
 Fenson
@@ -276,8 +277,11 @@ reparameterising
 rescoped
 rescore
 rescoring
+residualise
 residualised
+residualising
 respecification
+restale
 restaled
 restales
 resumable
@@ -334,5 +338,6 @@ workstream
 worktree
 worktrees
 xarray
+xdist
 zarr
 zygosity

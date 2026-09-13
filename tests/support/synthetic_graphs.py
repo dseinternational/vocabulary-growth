@@ -107,6 +107,14 @@ def synthetic_frame(definition, n_rows: int = N_ROWS) -> pd.DataFrame:
         + frame["spoken_only"]
         + frame["signed_spoken"]
     )
+    # The form ceiling every Down syndrome frame carries. Constant across the
+    # frame on purpose: `lag_same_form_only` drops a lag whose two waves sit on
+    # different forms, and this frame's children span two studies by
+    # construction (`study_code` cycles while `subject_code` repeats in pairs),
+    # so a per-study ceiling would drop *every* lag and take `beta_lag` out of
+    # the graph -- the one direction a synthetic stand-in must never move in.
+    frame["survey_vocab_max"] = float(definition.n_trials)
+
     frame["holdout"] = False
     return frame
 

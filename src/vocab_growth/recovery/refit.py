@@ -42,7 +42,9 @@ from vocab_growth.reporting import key_value_table
 RECOVERY_SOURCE_FILENAME = "recovery_source.json"
 
 
-def make_recovery_definition(definition, replicate: int, *, truth_definition=None):
+def make_recovery_definition(
+    definition, replicate: int, *, truth_definition=None, truth_overrides=()
+):
     """Return a copy of ``definition`` whose output lands in a recovery directory.
 
     Only the identity fields change. Every prior, every hyperparameter and every
@@ -51,7 +53,8 @@ def make_recovery_definition(definition, replicate: int, *, truth_definition=Non
 
     ``truth_definition`` is the definition the data came from, when that differs
     (issue #226). It changes nothing about the model built -- it only marks the
-    output, and the banner, as a cross-definition run.
+    output, and the banner, as a cross-definition run. ``truth_overrides`` marks
+    them the same way for a truth whose parameters were set rather than drawn.
     """
     if replicate < 1:
         raise ValueError("replicate is 1-based.")
@@ -65,10 +68,18 @@ def make_recovery_definition(definition, replicate: int, *, truth_definition=Non
             f"{provenance}, under {truth_definition.model_id} "
             f"[{truth_definition.config_name}]"
         )
+    if truth_overrides:
+        provenance = (
+            f"{provenance}, truth set: "
+            f"{', '.join(str(item) for item in truth_overrides)}"
+        )
     return dataclasses.replace(
         definition,
         config_name=recovery_config_name(
-            definition, replicate, truth_definition=truth_definition
+            definition,
+            replicate,
+            truth_definition=truth_definition,
+            truth_overrides=truth_overrides,
         ),
         banner=f"{definition.banner} [{provenance}]",
     )
@@ -136,6 +147,7 @@ def fit_recovery_replicate(
     output_root: str | None = None,
     definition=None,
     fit_definition=None,
+    truth_overrides=(),
 ) -> ModelFitContext:
     """Refit ``model_key`` to replicate ``replicate``'s simulated data.
 
@@ -162,8 +174,11 @@ def fit_recovery_replicate(
     target = recovery_target(model_key)
     definition = MODEL_REGISTRY[model_key] if definition is None else definition
     fit_definition = definition if fit_definition is None else fit_definition
+    truth_overrides = tuple(truth_overrides)
     root = output_root if output_root is not None else env.output_root()
-    directory = simulation_dir(definition, replicate, root)
+    directory = simulation_dir(
+        definition, replicate, root, truth_overrides=truth_overrides
+    )
     if not os.path.isdir(directory):
         raise FileNotFoundError(
             f"No simulated data at {directory}. Run the simulate step for "
@@ -172,7 +187,10 @@ def fit_recovery_replicate(
     frame, _truth, record = load_simulation(directory, expected_definition=definition)
 
     recovery_definition = make_recovery_definition(
-        fit_definition, replicate, truth_definition=definition
+        fit_definition,
+        replicate,
+        truth_definition=definition,
+        truth_overrides=truth_overrides,
     )
     stages = target.resolve_stages(recovery_definition)
     if stages[0][0] != PREPARE_STAGE_NAME:
@@ -193,6 +211,7 @@ def recovery_fit_dir(
     output_root: str | None = None,
     definition=None,
     truth_definition=None,
+    truth_overrides=(),
 ) -> str:
     """Directory a recovery replicate's fit is promoted to.
 
@@ -206,7 +225,10 @@ def recovery_fit_dir(
     return model_reporting.ReportingConfiguration(
         model_name=definition.model_id,
         config_name=recovery_config_name(
-            definition, replicate, truth_definition=truth_definition
+            definition,
+            replicate,
+            truth_definition=truth_definition,
+            truth_overrides=truth_overrides,
         ),
         output_root_dir=root,
         ci_prob=0.89,

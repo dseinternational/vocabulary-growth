@@ -240,7 +240,24 @@ def test_registry_counts_and_models():
     # eight contributing studies under the same-form restriction. The prior-scale
     # pair is the last of this item's list to be registered; nothing had varied
     # `beta_lag_sigma`, so the symmetric prior had never been checked.
-    assert len(VARIANTS) == 85
+    #
+    # +7 on 2026-09-11 (#297): VG25's whole arm set, registered in the same
+    # change as the model and its fields, for the reason the +3 above gives --
+    # a field with no variant using it is dead weight in a fingerprint. Two of
+    # them could change the reported answer rather than check it.
+    # `sign-lag-clip` is the treatment VG16 registers and VG25 does not: 14.7%
+    # of this lag's support sits at a signed share of exactly 0 or 1, against
+    # VG16's 1.5%, and under the clip those rows carry 76.1% of the *source
+    # signed-share logit's* sum of squares -- the predictor's observed input,
+    # not the fitted predictor, which also subtracts a latent baseline
+    # (residualised on the source wave's age and study it is 66.1%). `sign-lag-marginal-only` confines the term to the spoken
+    # marginal, where VG15's child shifts are confined, and is what says whether
+    # the headline scope decision moved `psi`. The rest are checks:
+    # `sign-lag-population` (VG16's baseline, which here doubles as the arm in
+    # which no estimated per-child quantity reaches the cells),
+    # `sign-lag-uk07-marginal`, `sign-lag-gap-12` and the prior-scale pair.
+    assert len(VARIANTS) == 92
+    assert len(variants_for("vg25")) == 7
     assert len(variants_for("vg14")) == 3
     assert len(variants_for("vg16")) == 8
     assert len(variants_for("vg21")) == 1

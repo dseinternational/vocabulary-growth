@@ -36,6 +36,7 @@ Regenerate the baseline with::
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -49,9 +50,12 @@ from vocab_growth.models.catalogue import CATALOGUE
 
 #: `xdist_group` keeps this module on one worker under `--dist loadgroup`, which
 #: the slow job uses so that the modules whose tests share nothing can spread
-#: across workers. This one must not: the `built` fixture below builds all
-#: twenty-one registered graphs once and every test here reads them, so a
-#: per-test distribution would rebuild all twenty-one on each worker.
+#: across workers. This one must not: the `built` fixture below caches each
+#: registered model's graph, and every test here reads one, so a per-test
+#: distribution would build each model once per worker that draws one of its
+#: five tests -- up to four copies of all twenty-one on CI's four workers. That
+#: is total CPU the slow job is now bounded by, traded for a wall clock this
+#: module is not the critical path of (#331).
 pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("graph-equivalence")]
 
 BASELINE_PATH = Path(__file__).parent / "support" / "graph_baseline.json"
@@ -77,19 +81,47 @@ def baseline() -> dict:
     return json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
 
 
+class _LazyBuilds(Mapping):
+    """Every registered model's graph, built on first use and then shared.
+
+    Eager construction cost every selection the whole registry: running one
+    model's five tests, or the two-build stability check below, built all
+    twenty-one. It also fixed the grouping trade-off recorded in #331 -- grouped
+    onto one worker this module took 40.5 s, ungrouped across four it took
+    21.2 s because the builds then ran in parallel, but ungrouped each worker
+    rebuilt all twenty-one. Building on demand removes the choice: a worker
+    builds only the models its own tests ask for, whichever way the tests are
+    distributed.
+    """
+
+    def __init__(self, output_dir, monkeypatch):
+        self._output_dir = output_dir
+        self._monkeypatch = monkeypatch
+        self._cache: dict = {}
+
+    def __getitem__(self, key):
+        if key not in self._cache:
+            self._cache[key] = build_registered_model(
+                key, output_dir=self._output_dir, monkeypatch=self._monkeypatch
+            )
+        return self._cache[key]
+
+    def __iter__(self):
+        return iter(_MODEL_KEYS)
+
+    def __len__(self):
+        return len(_MODEL_KEYS)
+
+
 @pytest.fixture(scope="module")
 def built(tmp_path_factory):
-    """Every registered model's graph, built once and shared by the tests below."""
+    """Every registered model's graph, built once each and shared by the tests."""
     from _pytest.monkeypatch import MonkeyPatch
 
     patcher = MonkeyPatch()
     root = str(tmp_path_factory.mktemp("graph-equivalence"))
     try:
-        models = {
-            key: build_registered_model(key, output_dir=root, monkeypatch=patcher)
-            for key in _MODEL_KEYS
-        }
-        yield models
+        yield _LazyBuilds(root, patcher)
     finally:
         patcher.undo()
 
