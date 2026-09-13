@@ -209,11 +209,30 @@ FIELD_ROLES: dict[str, FieldRole] = {
 #: ``tests/test_fit_identity.py`` reads that default off the call site rather
 #: than restating it, and ``tests/test_cross_lag.py`` pins that the unrestricted
 #: path reproduces the historical arrays exactly.
+#:
+#: The fifth, ``exclude_studies`` (#297 check 5, 2026-09-13), is the same kind
+#: again and checked the same way, on the joint definitions: the joint frame
+#: builder reads it through ``getattr(definition, "exclude_studies", ())`` and
+#: skips its filter entirely when that is empty, so a definition that predates
+#: the field builds exactly the frame every joint fit before it was built from.
+#: Checked on the fits themselves as well as the call site: the VG15 and VG24
+#: fits of record validate with and without the field, and the frame hash the
+#: three joint models share did not move when it was added.
+#:
+#: One thing it carries rather than inherits. The registry is keyed by bare field
+#: name, so this entry also covers ``BivariateModelDefinition``'s own
+#: ``exclude_studies``, added 2026-08-25 without one. The claim holds there too
+#: -- ``2697dc8`` added the bivariate filter in the same commit as the field, so
+#: no earlier bivariate fit could have dropped a study -- but the bivariate
+#: engine reads the field as a plain attribute, so that half rests on the
+#: commit history rather than on a call site. It excuses nothing live: every
+#: bivariate fit of record postdates the field and records it.
 BACKFILL_DEFAULTS: dict[str, Any] = {
     "spoken_fallback": SPOKEN_FALLBACK_PRODUCT,
     "spoken_fallback_kappa_sigma": 0.5,
     "include_same_day_disagreements": False,
     "lag_same_form_only": False,
+    "exclude_studies": (),
 }
 
 

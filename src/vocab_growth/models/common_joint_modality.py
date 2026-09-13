@@ -542,6 +542,26 @@ def build_joint_analysis_frame(
             vocab_data_utils.exclude_us01_spoken_ceiling_rows(analysis_df)
         )
 
+    # Leave-one-study-out (#297 check 5). On the assembled frame, not the merged
+    # view, so a cross-tab study loses its cell rows along with its marginals.
+    # Read through `getattr` with the empty default: that default is the claim
+    # `fit_identity.BACKFILL_DEFAULTS` makes about every joint fit made before
+    # the field existed, and `tests/test_fit_identity.py` reads it off this line.
+    # The whole block is skipped when nothing is excluded, so the default frame
+    # is byte-identical to the one this function built before the field.
+    exclude_studies = tuple(getattr(definition, "exclude_studies", ()))
+    excluded_study_rows = 0
+    if exclude_studies:
+        keep = ~analysis_df["study"].isin(exclude_studies)
+        excluded_study_rows = int((~keep).sum())
+        if excluded_study_rows == 0:
+            raise ValueError(
+                f"exclude_studies={exclude_studies!r} matched no rows. A "
+                "leave-one-study-out check that removes nothing cannot fail, which "
+                "is worse than not running it -- check the study codes."
+            )
+        analysis_df = analysis_df[keep].reset_index(drop=True)
+
     analysis_df, sign_source_dropped = (
         vocab_data_utils.mask_incomparable_signed_outcomes(
             analysis_df,
@@ -587,6 +607,8 @@ def build_joint_analysis_frame(
         "native_only": native_only,
         "non_native_rows_excluded": non_native_rows_excluded,
         "ceiling_rows_excluded": ceiling_rows_excluded,
+        "exclude_studies": exclude_studies,
+        "excluded_study_rows": excluded_study_rows,
         "sign_source_dropped": sign_source_dropped,
         "use_uk07_cells": use_uk07_cells,
         "use_es01_cells": use_es01_cells,
@@ -659,6 +681,13 @@ def prepare_joint_data(
     ]
     if definition.exclude_us01_spoken_ceiling:
         counts.append(("us_01 WS-ceiling rows excluded", ceiling_rows_excluded))
+    if info["exclude_studies"]:
+        # Printed with its row count because the count is the check: a
+        # leave-one-study-out arm is only as informative as what it removed.
+        counts.append((
+            f"Studies excluded ({', '.join(info['exclude_studies'])})",
+            f"{info['excluded_study_rows']} rows",
+        ))
     if native_only:
         # A zero here means the variant has stopped biting and is silently fitting
         # the model of record's data — a failure that looks exactly like a pass.

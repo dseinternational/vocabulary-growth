@@ -256,6 +256,38 @@ def test_the_same_form_backfill_entry_is_the_call_sites_own_default():
     assert difference.role is FieldRole.GRAPH
 
 
+def test_the_exclude_studies_backfill_entry_is_the_call_sites_own_default():
+    """The fifth entry's claim, checked rather than asserted (#297 check 5).
+
+    ``exclude_studies`` reaches the joint frame builder through one ``getattr``
+    with an empty default, and the filter is skipped when it is empty -- so a
+    joint definition that predates the field builds the frame every earlier joint
+    fit was built from. Read the default off the source, not restated here.
+
+    The entry is keyed by bare name and so also covers the bivariate class's own
+    field; a bivariate record without it must validate too, and on both classes
+    a definition that *sets* the field is a data difference.
+    """
+    import inspect
+
+    from vocab_growth.models import common_joint_modality
+    from vocab_growth.models.definitions import VG15, VG24, VG25
+
+    source = inspect.getsource(common_joint_modality.build_joint_analysis_frame)
+    assert 'getattr(definition, "exclude_studies", ())' in source
+    assert BACKFILL_DEFAULTS["exclude_studies"] == ()
+
+    for definition in (VG15, VG24, VG25, VG10):
+        recorded = normalise_for_json(definition)
+        recorded.pop("exclude_studies")
+        assert definition_differences(recorded, definition) == []
+
+        altered = dataclasses.replace(definition, exclude_studies=("uk_07",))
+        (difference,) = definition_differences(recorded, altered)
+        assert difference.field == "exclude_studies"
+        assert difference.role is FieldRole.DATA
+
+
 def test_backfill_entries_name_real_fields():
     live = set()
     for definition in MODEL_REGISTRY.values():
