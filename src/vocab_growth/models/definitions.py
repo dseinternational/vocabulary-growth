@@ -1940,6 +1940,31 @@ class JointModelDefinition:
     default is ``False``, so a manifest that lacks the field records a fit with
     it set to ``False``. That claim is pinned in ``tests/test_fit_identity.py``
     against the loader's own signature."""
+    exclude_studies: tuple[str, ...] = ()
+    """Study codes to drop before fitting, for leave-one-study-out sensitivity.
+
+    Empty (the default) admits every study the other rules keep, which is what
+    every joint fit before this field did. It is the same field
+    ``BivariateModelDefinition`` has carried since 2026-08-25, and it exists here
+    for the same reason: a pooled estimate can rest on one source without saying
+    so. #297 check 5 asks it of VG25, whose sign -> speech lag draws 52 of its 191
+    supporting observations from ``uk_07`` alone.
+
+    Every row of a named study goes, marginal and cross-tabulation alike. The
+    joint engine assembles its four cross-tab sources into the same frame as the
+    merged view's marginals, so the filter runs on the assembled frame and
+    reaches both; filtering the merged view would leave a cross-tab study's cells
+    in the composition likelihood while removing its marginals. Study and subject
+    codes are assigned afterwards, so no random-effect level is left empty. A
+    code that matches no row is refused rather than ignored: a leave-one-study-out
+    check that removes nothing cannot fail.
+
+    Added 2026-09-13 with a ``fit_identity.BACKFILL_DEFAULTS`` entry, so a
+    manifest that lacks the field records a fit with it empty. That claim is
+    pinned in ``tests/test_fit_identity.py`` against the frame builder's own
+    ``getattr`` default, and was verified on the VG15 and VG24 fits of record:
+    both still validate, and the frame hash all three joint models share is
+    unchanged by the field's addition."""
 
     # -- nz_01 (Foster-Cohen) produced cross-tab inclusion --
     include_nz01_cells: bool = True
