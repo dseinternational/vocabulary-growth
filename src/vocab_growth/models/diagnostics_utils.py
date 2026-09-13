@@ -5,7 +5,11 @@
 
 import dse_research_utils.plot.diagnostics_mcmc as shared_plot_diagnostics
 
-from vocab_growth.fit_artifacts import ACCEPTED_EXCEPTION_KEY, read_convergence_caveats
+from vocab_growth.fit_artifacts import (
+    ACCEPTED_EXCEPTION_KEY,
+    hard_tier_failed,
+    read_convergence_caveats,
+)
 
 
 def pair_plot_priority(definition) -> tuple[str, ...]:
@@ -154,26 +158,38 @@ def render_convergence_caveats(directory: str = ".") -> None:
 
     Silent when the fit is clean, so a clean report gains nothing from the call
     and a caveated one cannot lose it.
+
+    **Three framings, not two.** This used to assume the hard tier is
+    fail-closed, so that a fit reaching a report had either cleared it or held a
+    recorded exception, and printed "cleared the hard convergence tier ... The
+    fit remains reportable" for anything without an exception. That assumption
+    holds only at reporting quality. Below it the gate does not stop a fit, so a
+    ``dev`` render of VG25 with R-hat 1.21 and an effective sample size of 10
+    printed that sentence directly above
+    :func:`vocab_growth.report_cells.render_diagnostic_verdict` saying the same
+    fit "does not clear the hard tier" and "must not be published". A hard-tier
+    failure with no exception is now said to be one, whether or not it also
+    carries soft-tier caveats -- which is why that case is no longer silent.
     """
     import json
     import os
 
     caveats = read_convergence_caveats(directory)
-    if not caveats:
-        return
 
-    # The hard tier is fail-closed, so a fit that reaches a report either cleared
-    # it or holds a recorded exception. Which of the two decides the framing: the
-    # first is "reportable with noted sampling caveats", the second is "did not
-    # clear the gate and is published anyway, on the record".
-    accepted = None
+    summary = None
     summary_path = os.path.join(directory, "diagnostics_summary.json")
     if os.path.isfile(summary_path):
         try:
             with open(summary_path, encoding="utf-8") as handle:
-                accepted = json.load(handle).get(ACCEPTED_EXCEPTION_KEY)
+                loaded = json.load(handle)
+            summary = loaded if isinstance(loaded, dict) else None
         except (OSError, ValueError):
-            accepted = None
+            summary = None
+
+    accepted = (summary or {}).get(ACCEPTED_EXCEPTION_KEY)
+    failed = hard_tier_failed(summary) and not accepted
+    if not caveats and not failed:
+        return
 
     if accepted:
         title = "Published under a recorded convergence exception"
@@ -181,6 +197,19 @@ def render_convergence_caveats(directory: str = ".") -> None:
             "This fit **did not clear** the hard convergence tier (R-hat and "
             "effective sample size). It is published under an exception recorded "
             "against the model, reproduced below with any other sampling caveats:"
+        )
+    elif failed:
+        # Reachable only below reporting quality, where the gate records a
+        # failing fit instead of stopping it. The closing sentence matches
+        # `render_diagnostic_verdict`'s for the same case word for word, so the
+        # two cells on one page cannot be read as disagreeing.
+        title = "The hard convergence tier was not cleared"
+        opening = (
+            "This fit **did not clear** the hard convergence tier (R-hat and "
+            "effective sample size), and no exception is recorded for it. The "
+            "pipeline allows that only below reporting quality, where it records a "
+            "fit that has not mixed rather than stopping it."
+            + (" It also carries these sampling caveats:" if caveats else "")
         )
     else:
         title = "Soft-tier convergence caveats"
@@ -193,16 +222,20 @@ def render_convergence_caveats(directory: str = ".") -> None:
     print()
     print(opening)
     print()
-    for caveat in caveats:
-        print(f"- {caveat}")
-    print()
+    if caveats:
+        for caveat in caveats:
+            print(f"- {caveat}")
+        print()
     if accepted and accepted.get("reason"):
         print(f"**Why the exception was accepted:** {accepted['reason']}")
         print()
-    print(
-        "The fit remains reportable and is published carrying this mark; see "
-        "Appendix B of the technical report."
-    )
+    if failed:
+        print("These results are provisional and must not be published as a completed fit.")
+    else:
+        print(
+            "The fit remains reportable and is published carrying this mark; see "
+            "Appendix B of the technical report."
+        )
     print()
     print(":::")
 

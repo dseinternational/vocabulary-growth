@@ -398,3 +398,47 @@ def test_publication_policy_requires_clean_convergence_provisional_does_not():
     assert "require_clean_convergence" not in fit_validation_kwargs(
         "provisional-sync", **shared
     )
+
+
+# --------------------------------------------------------------------------
+# What a report may claim about the hard tier
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        {"checks": {"rhat": False}},
+        {"checks": {"ess": False}},
+        {"rhat_failing": ["peak_unit_sign"]},
+        {"ess_failing": ["z_subj_u[3]"]},
+        {"scan_completed": False},
+        {"checks": {"diagnostics_assessable": False}},
+        {"unassessable_parameters": ["g_unit_hsgp_coeffs[0]"]},
+    ],
+)
+def test_every_recorded_hard_failure_is_read_as_one(summary):
+    from vocab_growth.fit_artifacts import hard_tier_failed
+
+    assert hard_tier_failed(summary) is True
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        None,
+        {},
+        {"checks": {"rhat": True, "ess": True}},
+        # Soft-tier fields alone, as payloads written before the hard checks
+        # were recorded carry: nothing here says the hard tier failed.
+        {"checks": {"divergences": False, "bfmi": False}, "divergences": 4},
+        # And no finite extrema, which `diagnostics_assessable` would reject:
+        # a missing value is not a recorded failure.
+        {"checks": {"rhat": True, "ess": True}, "max_rhat": None, "min_ess": None},
+    ],
+)
+def test_a_payload_that_records_no_hard_failure_is_not_read_as_one(summary):
+    from vocab_growth.fit_artifacts import hard_tier_failed
+
+    assert hard_tier_failed(summary) is False
+
