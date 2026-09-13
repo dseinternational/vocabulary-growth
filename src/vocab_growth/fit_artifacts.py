@@ -525,6 +525,44 @@ def diagnostics_assessable(summary: dict) -> bool:
     )
 
 
+def hard_tier_failed(summary: dict | None) -> bool:
+    """Whether a gate payload records a hard-tier failure, on positive evidence.
+
+    The hard tier is the R-hat/ESS scan. It is fail-closed in
+    :func:`vocab_growth.models.common.enforce_convergence_gate` -- but only at
+    reporting quality: below it the gate returns at once, so a ``dev`` or
+    ``test`` fit that has not mixed completes, renders and reaches a report page.
+    A reader of that page has to be told, and a cell that assumes every rendered
+    fit cleared the hard tier tells them the opposite.
+
+    **Positive evidence only**, which is what separates this from
+    :func:`diagnostics_assessable`. That function also requires finite
+    ``max_rhat`` and ``min_ess`` values, which is right for a gate deciding
+    whether a fit may proceed and wrong for a report deciding what to *claim*:
+    a payload written before those fields existed would read as a failure it
+    never recorded. So this is ``True`` only where the payload says so -- a
+    failing R-hat or ESS check or list, a scan that did not complete, or
+    parameters the scan could not assess -- and ``False`` for an absent or
+    silent payload, which the lifecycle checks report separately.
+
+    An accepted R-hat exception still reads as a failure here, because it is
+    one: it is published anyway, on the record, and the caller frames it as
+    such.
+    """
+    if not summary:
+        return False
+    checks = summary.get("checks") or {}
+    return bool(
+        checks.get("rhat") is False
+        or checks.get("ess") is False
+        or summary.get("rhat_failing")
+        or summary.get("ess_failing")
+        or summary.get("scan_completed") is False
+        or checks.get("diagnostics_assessable") is False
+        or summary.get("unassessable_parameters")
+    )
+
+
 def accepted_rhat_exception(
     model_id: str | None, gate_summary: dict | None
 ) -> ConvergenceException | None:

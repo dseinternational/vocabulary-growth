@@ -480,6 +480,133 @@ def test_clean_fit_prints_nothing(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
+def test_a_hard_failure_below_reporting_quality_is_not_called_reportable(
+    tmp_path, capsys
+):
+    """The contradiction a `dev` render of VG25 printed, pinned.
+
+    The gate does not stop a fit below reporting quality, so this payload --
+    R-hat 1.21, an effective sample size of 10, two divergences, no exception --
+    reached a report page. The caveat box called it "cleared the hard
+    convergence tier" and "reportable" directly above a verdict saying it "does
+    not clear the hard tier" and "must not be published".
+    """
+    gate = {
+        "checks": {"rhat": False, "ess": False, "divergences": False, "bfmi": True},
+        "max_rhat": 1.2104,
+        "min_ess": 10.0,
+        "divergences": 2,
+        "scan_completed": True,
+    }
+    render_convergence_caveats(str(_fit(tmp_path, config="dev", gate=gate)))
+    out = capsys.readouterr().out
+    assert "did not clear" in out
+    assert "no exception is recorded" in out
+    assert "must not be published" in out
+    assert "2 divergent" in out
+    assert "cleared the hard convergence tier" not in out
+    assert "remains reportable" not in out
+
+
+def test_a_hard_failure_with_no_sampling_caveat_is_still_disclosed(tmp_path, capsys):
+    """Silence was reserved for a clean fit, and this is not one.
+
+    Before the fix a hard-tier failure with no divergences and a healthy BFMI
+    produced an empty caveat list, so the box printed nothing at all -- the one
+    case where saying nothing was merely incomplete rather than wrong.
+    """
+    gate = {
+        "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.08,
+        "min_ess": 900.0,
+        "divergences": 0,
+    }
+    render_convergence_caveats(str(_fit(tmp_path, config="test", gate=gate)))
+    out = capsys.readouterr().out
+    assert "did not clear" in out
+    assert "sampling caveats" not in out
+    assert "must not be published" in out
+
+
+def test_a_payload_that_records_no_hard_check_is_not_called_a_failure(
+    tmp_path, capsys
+):
+    """A report may claim a failure only where the payload records one.
+
+    Payloads written before the hard checks were recorded carry soft-tier
+    fields alone. Reading the missing checks as failures would put "must not be
+    published" on fits that were never assessed as failing -- the mirror image
+    of the defect this corrects.
+    """
+    gate = {"checks": {"divergences": False}, "divergences": 3}
+    render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
+    out = capsys.readouterr().out
+    assert "cleared the hard convergence tier" in out
+    assert "did not clear" not in out
+
+
+_VERDICT_PAYLOADS = {
+    "clean": {
+        "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.002, "min_ess": 1800.0, "divergences": 0,
+        "bfmi_per_chain": [0.9, 0.85], "scan_completed": True,
+    },
+    "soft only": {
+        "checks": {"rhat": True, "ess": True, "divergences": False, "bfmi": True},
+        "max_rhat": 1.004, "min_ess": 900.0, "divergences": 3,
+        "bfmi_per_chain": [0.7, 0.8], "scan_completed": True,
+    },
+    "hard failure": {
+        "checks": {"rhat": False, "ess": False, "divergences": True, "bfmi": True},
+        "max_rhat": 1.21, "min_ess": 10.0, "divergences": 0,
+        "bfmi_per_chain": [0.6, 0.58], "scan_completed": True,
+    },
+    "hard and soft failure": {
+        "checks": {"rhat": False, "ess": False, "divergences": False, "bfmi": True},
+        "max_rhat": 1.21, "min_ess": 10.0, "divergences": 2,
+        "bfmi_per_chain": [0.6, 0.58], "scan_completed": True,
+    },
+    "scan did not complete": {
+        "checks": {"divergences": True, "bfmi": True},
+        "max_rhat": None, "min_ess": None, "divergences": 0,
+        "bfmi_per_chain": [0.6, 0.6], "scan_completed": False,
+    },
+    "accepted exception": {
+        "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.0125, "min_ess": 700.0, "divergences": 0,
+        "bfmi_per_chain": [0.7, 0.7], "scan_completed": True,
+        "accepted_rhat_exception": {
+            "parameters": ["g_unit_hsgp_coeffs[4]"],
+            "observed_max_rhat": 1.0125,
+            "decided": "2026-08-15, study owner",
+        },
+    },
+}
+
+
+@pytest.mark.parametrize("case", sorted(_VERDICT_PAYLOADS))
+def test_the_caveat_box_never_contradicts_the_verdict(tmp_path, capsys, case):
+    """Two cells on one page read the same payload and must say the same thing.
+
+    `render_diagnostic_verdict` judged the hard tier correctly all along; the
+    caveat box assumed it. This holds them to one another on every framing
+    either can produce, so a fix to one of them cannot quietly reopen the gap.
+    """
+    fit = _fit(tmp_path, gate=_VERDICT_PAYLOADS[case])
+    render_convergence_caveats(str(fit))
+    box = capsys.readouterr().out
+    report_cells.render_diagnostic_verdict(str(fit))
+    verdict = capsys.readouterr().out
+
+    verdict_fails_hard = "does not clear the hard tier" in verdict
+    if "cleared the hard convergence tier" in box:
+        assert not verdict_fails_hard, case
+    if "did not clear" in box:
+        assert verdict_fails_hard, case
+    if verdict_fails_hard:
+        assert "did not clear" in box, case
+
+
 # --------------------------------------------------------------------------
 # Glossary
 # --------------------------------------------------------------------------
