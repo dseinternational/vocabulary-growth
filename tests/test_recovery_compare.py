@@ -386,3 +386,165 @@ def test_pooled_row_counts_only_confirmed_converged_replicates():
     assert row["quantities_outside_ci89"] == "q_query"
     assert "1 of 2 replicates assessed" in row["replicate"]
     assert "indicative" in row["verdict"]
+
+
+# ----------------------------------------------------------------------------
+# The total spread (#229 option 4, #289 task 4.12)
+# ----------------------------------------------------------------------------
+def _query_dataset(n_chain, n_draw, n_age, *, seed, spoken=True):
+    """Posterior-shaped query-grid inputs for a VG20-like model."""
+    rng = np.random.default_rng(seed)
+
+    def grid(lo, hi):
+        return (("chain", "draw", "query_id"), rng.uniform(lo, hi, size=(n_chain, n_draw, n_age)))
+
+    def scalar(lo, hi):
+        return (("chain", "draw"), rng.uniform(lo, hi, size=(n_chain, n_draw)))
+
+    data = {
+        "p_u_query": grid(0.05, 0.6),
+        "kappa_u_query": grid(10.0, 60.0),
+        "tau_subj_u": scalar(0.6, 1.0),
+    }
+    if spoken:
+        data.update({
+            "q_query": grid(0.02, 0.5),
+            "kappa_s_query": grid(5.0, 40.0),
+            "tau_subj_q": scalar(0.9, 1.4),
+            "rho_uq": scalar(0.2, 0.5),
+        })
+    return xr.Dataset(data)
+
+
+def test_total_spread_is_derived_on_the_query_grid_by_the_comparison_function():
+    """The recovery quantity is the comparison's own computation, arranged draw by
+    draw on the query grid. The maths is tested in test_comparison.py; this tests
+    that the reshaping and assignment keep chain, draw and age aligned."""
+    from vocab_growth import comparison
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.compare import with_total_spread
+
+    definition = MODEL_REGISTRY["vg20"]
+    ages = np.asarray(definition.ages_query, dtype=float)
+    dataset = _query_dataset(2, 3, ages.size, seed=1)
+    out = with_total_spread(dataset, definition)
+
+    for name in ("total_spread_words_u_query", "total_spread_words_s_query"):
+        assert out[name].dims == ("chain", "draw", "query_id")
+    flat = {name: dataset[name].values.reshape(6, -1).squeeze() for name in dataset.data_vars}
+    for name in ("tau_subj_u", "tau_subj_q", "rho_uq"):
+        flat[name] = dataset[name].values.reshape(6)
+    plan = comparison.total_spread_plan(definition, "spoken", "query")
+    want = comparison.total_spread_from_values(plan, flat, ages, 810).sd_words
+    np.testing.assert_allclose(out["total_spread_words_s_query"].values.reshape(6, -1), want, rtol=1e-12)
+    # Every draw and age is a spread in words, and a positive one.
+    assert np.all(out["total_spread_words_u_query"].values > 0)
+
+
+def test_total_spread_rows_are_scored_at_the_query_ages():
+    """The derived variable sits on query_id, so target selection picks it up."""
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.compare import with_total_spread
+
+    definition = MODEL_REGISTRY["vg12"]
+    ages = np.asarray(definition.ages_query, dtype=float)
+    rng = np.random.default_rng(2)
+    truth = xr.Dataset({
+        "p_query": (("chain", "draw", "query_id"), rng.uniform(0.1, 0.5, size=(1, 1, ages.size))),
+        "kappa_query": (("chain", "draw", "query_id"), np.full((1, 1, ages.size), 30.0)),
+        "tau_subject": (("chain", "draw"), np.array([[0.7]])),
+    })
+    posterior = xr.Dataset({
+        "p_query": (("chain", "draw", "query_id"), np.tile(truth["p_query"].values, (1, 200, 1))),
+        "kappa_query": (("chain", "draw", "query_id"), rng.uniform(25.0, 35.0, size=(1, 200, ages.size))),
+        "tau_subject": (("chain", "draw"), rng.uniform(0.6, 0.8, size=(1, 200))),
+    })
+    table = recovery_table(
+        with_total_spread(truth, definition),
+        with_total_spread(posterior, definition),
+        query_ages=ages,
+    )
+    rows = table[table["quantity"] == "total_spread_words_query"]
+    assert rows["index"].tolist() == [f"{a:g}" for a in ages]
+    assert rows["within_ci89"].all()
+
+
+def test_compare_replicate_scores_the_total_spread_from_a_stored_trace(tmp_path):
+    """End to end: the derived spread joins the graph's own targets, scored at every
+    query age, and a caller without a definition keeps the previous target set."""
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.compare import compare_replicate
+
+    definition = MODEL_REGISTRY["vg12"]
+    ages = np.asarray(definition.ages_query, dtype=float)
+    rng = np.random.default_rng(8)
+    p_true = rng.uniform(0.1, 0.5, size=ages.size)
+    dims = ("chain", "draw", "query_id")
+    truth = xr.DataTree.from_dict({"posterior": xr.Dataset({
+        "p_query": (dims, p_true.reshape(1, 1, -1)),
+        "kappa_query": (dims, np.full((1, 1, ages.size), 30.0)),
+        "tau_subject": (("chain", "draw"), np.array([[0.7]])),
+    })})
+    posterior = xr.Dataset({
+        "p_query": (dims, np.tile(p_true, (2, 100, 1)) * rng.uniform(0.98, 1.02, size=(2, 100, 1))),
+        "kappa_query": (dims, rng.uniform(27.0, 33.0, size=(2, 100, ages.size))),
+        "tau_subject": (("chain", "draw"), rng.uniform(0.65, 0.75, size=(2, 100))),
+    })
+    fit_dir = tmp_path / "fit"
+    fit_dir.mkdir()
+    trace = fit_dir / "trace.nc"
+    xr.DataTree.from_dict({"posterior": posterior}).to_netcdf(str(trace))
+    _write_gate_payload(fit_dir)
+
+    table, _aggregates, summary = compare_replicate(
+        truth, str(trace), str(fit_dir), label="r01", truth_source="posterior",
+        query_ages=ages, definition=definition,
+    )
+    assert set(table["quantity"]) == {
+        "p_query", "kappa_query", "tau_subject", "total_spread_words_query"
+    }
+    assert (table["quantity"] == "total_spread_words_query").sum() == ages.size
+    assert summary["n_targets"] == len(table)
+
+    without, _, _ = compare_replicate(
+        truth, str(trace), str(fit_dir), label="r01", truth_source="posterior",
+        query_ages=ages,
+    )
+    assert "total_spread_words_query" not in set(without["quantity"])
+
+    # A truth on a different query grid -- same length, one age moved -- has no
+    # age at which both spreads describe the same child, so it is left out
+    # rather than derived at the fitted model's ages.
+    from dataclasses import replace
+
+    moved = replace(definition, ages_query=(*definition.ages_query[:-1], definition.ages_query[-1] - 1))
+    other_grid, _, _ = compare_replicate(
+        truth, str(trace), str(fit_dir), label="r01", truth_source="posterior",
+        query_ages=ages, definition=definition, truth_definition=moved,
+    )
+    assert "total_spread_words_query" not in set(other_grid["quantity"])
+
+
+def test_total_spread_is_not_derived_where_the_quadrature_does_not_apply():
+    """The joint engine and VG22's factor keep the target set they had."""
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.compare import total_spread_targets, with_total_spread
+
+    for key in ("vg15", "vg22", "vg14"):
+        assert total_spread_targets(MODEL_REGISTRY[key]) == ()
+    dataset = _query_dataset(1, 2, 3, seed=3)
+    assert with_total_spread(dataset, MODEL_REGISTRY["vg22"]) is dataset
+    assert [name for _, name in total_spread_targets(MODEL_REGISTRY["vg11"])] == [
+        "total_spread_words_query"
+    ]
+
+
+def test_total_spread_refuses_a_dataset_missing_an_input():
+    """A missing input is an error, not a quietly smaller target set."""
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+    from vocab_growth.recovery.compare import with_total_spread
+
+    definition = MODEL_REGISTRY["vg20"]
+    dataset = _query_dataset(1, 2, len(definition.ages_query), seed=4, spoken=False)
+    with pytest.raises(KeyError, match="q_query"):
+        with_total_spread(dataset, definition)
