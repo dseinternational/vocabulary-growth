@@ -20,6 +20,8 @@ field on ``BivariateModelDefinition`` would change the serialised definition of
 six models of record and invalidate every one of their fitted outputs.
 """
 
+import dataclasses
+
 import numpy as np
 import pytest
 
@@ -40,8 +42,14 @@ from vocab_growth.models.definitions import (
 from vocab_growth.models.subject_effects import resolve as resolve_subject_effects
 
 
-def test_vg20_differs_from_vg10_only_in_naming_and_the_correlation():
-    """The two models must differ in one substantive field and nothing else."""
+def test_vg20_differs_from_vg10_only_in_naming_the_correlation_and_sex():
+    """The two models must differ in the correlation and the sex covariate only.
+
+    One substantive field until 2026-09-13, when VG20 took the sex covariate
+    every reporting model carries (#324) and VG10, a development step, did not.
+    The correlation is still the only *structural* difference once sex is held
+    level, which is what the built-graph test below pins.
+    """
     from dataclasses import fields
 
     v10 = {f.name: getattr(VG10, f.name) for f in fields(VG10)}
@@ -54,6 +62,7 @@ def test_vg20_differs_from_vg10_only_in_naming_and_the_correlation():
         "config_name",
         "banner",
         "subject_re_correlation_eta",
+        "sex_effect_sigma",
     }
 
 
@@ -247,8 +256,10 @@ def test_built_graph_adds_exactly_one_parameter_and_nothing_else():
         cbr.build_model_re(ctx, definition)
         return ctx.model
 
+    # VG10 with VG20's sex covariate, so the correlation is the one difference.
+    vg10_with_sex = dataclasses.replace(VG10, sex_effect_sigma=VG20.sex_effect_sigma)
     with tempfile.TemporaryDirectory() as root:
-        m10 = build(VG10, root)
+        m10 = build(vg10_with_sex, root)
         m20 = build(VG20, root)
 
     def names(model):
@@ -524,13 +535,15 @@ def test_vg20_takes_the_correlated_branch_and_vg10_does_not():
 # --- VG23: the same block on the typically-developing side (issue #229) --------
 
 
-def test_vg23_differs_from_vg13_only_in_naming_and_the_correlation():
-    """VG23 must be VG13 plus ``rho_uq``, so the pair is a one-factor contrast.
+def test_vg23_differs_from_vg13_only_in_naming_the_correlation_and_sex():
+    """VG23 is VG13 plus ``rho_uq`` and the sex covariate.
 
-    The same guarantee ``test_vg20_differs_from_vg10_only_in_naming_and_the
-    _correlation`` gives on the Down syndrome side. #229 reads any movement in a
-    reported quantity as evidence about the correlation, which is only sound if
-    nothing else moved with it.
+    The same guarantee the VG20/VG10 test gives on the Down syndrome side. #229
+    read movement in a reported quantity as evidence about the correlation, which
+    was sound while nothing else moved with it. Since 2026-09-13 VG23 also carries
+    the sex covariate (#324) and VG13, superseded, does not, so a comparison of
+    the two fits of record is no longer one-factor; the built-graph test below
+    holds sex level to keep the structural claim.
     """
     from dataclasses import fields
 
@@ -541,7 +554,7 @@ def test_vg23_differs_from_vg13_only_in_naming_and_the_correlation():
         for field in fields(VG13)
         if getattr(VG13, field.name) != getattr(VG23, field.name)
     }
-    assert differing == {"model_id", "config_name", "banner"}
+    assert differing == {"model_id", "config_name", "banner", "sex_effect_sigma"}
     assert VG23.subject_re_correlation_eta == 2.0
     # Matched to VG20's, so the DS and TD correlations are estimated under the
     # same prior and their comparison is not a prior artefact.
@@ -592,8 +605,10 @@ def test_vg23_built_graph_adds_exactly_one_parameter_over_vg13():
         cbr.build_model_re(ctx, definition)
         return ctx.model
 
+    # VG13 with VG23's sex covariate, so the correlation is the one difference.
+    vg13_with_sex = dataclasses.replace(VG13, sex_effect_sigma=VG23.sex_effect_sigma)
     with tempfile.TemporaryDirectory() as root:
-        m13 = build(VG13, root)
+        m13 = build(vg13_with_sex, root)
         m23 = build(VG23, root)
 
     def names(model):

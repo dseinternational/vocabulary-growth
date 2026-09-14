@@ -255,7 +255,10 @@ def model_convergence_flags(fit_records: list[FoldFitRecord]) -> dict[str, bool]
 
 def load_analysis_frame() -> pd.DataFrame:
     df = data_utils.load_combined_data()
-    analysis_df = df[["age", "understood", "spoken", "study", "subject_id"]].copy()
+    # `sex` travels with the frame because VG20 carries the sex covariate from
+    # 2026-09-13 (#324) and its build stage refuses a frame without the column;
+    # a model without the covariate never reads it.
+    analysis_df = df[["age", "understood", "spoken", "study", "subject_id", "sex"]].copy()
     analysis_df = analysis_df.dropna(subset=["age"])
     has_u = analysis_df["understood"].notna()
     has_s = analysis_df["spoken"].notna()
@@ -273,6 +276,28 @@ def load_analysis_frame() -> pd.DataFrame:
     subject_map = {s: i for i, s in enumerate(unique_subjects)}
     analysis_df["subject_code"] = subj_keys.map(subject_map).astype(int)
     return analysis_df
+
+
+def sex_covariate_mismatch(specs) -> str | None:
+    """Say so when the compared models disagree about the sex covariate.
+
+    VG20 carries it from 2026-09-13 and the development steps it is compared
+    with -- VG22 for the VG20/VG22 decision's criterion 3 among them -- do not, so
+    a paired difference between them measures the child structure and the
+    covariate together. Returns ``None`` when every model agrees.
+    """
+    from vocab_growth.models.sex_covariate import sex_effect_sigma
+
+    settings = {name: sex_effect_sigma(definition) for name, definition in specs}
+    if len(set(settings.values())) <= 1:
+        return None
+    carrying = sorted(name for name, sigma in settings.items() if sigma is not None)
+    lacking = sorted(name for name, sigma in settings.items() if sigma is None)
+    return (
+        f"the compared models differ in the sex covariate ({', '.join(carrying)} carry it; "
+        f"{', '.join(lacking)} do not), so a paired difference between them is not a "
+        "one-factor contrast of their child structures"
+    )
 
 
 def stratified_subject_folds(
@@ -514,6 +539,9 @@ def main(
     written = ComparisonOutputs(OUT_DIR)
     print(f"models: {', '.join(models)}   K={K}   config={sampling_config_name}")
     print(f"holdout unit: {holdout_unit}   visit-1 conditioning: {visit1_conditioning}")
+    mismatch = sex_covariate_mismatch(SPECS)
+    if mismatch:
+        print(f"!!! {mismatch}")
 
     print("Reloading DS analysis frame …", flush=True)
     analysis_df = load_analysis_frame()

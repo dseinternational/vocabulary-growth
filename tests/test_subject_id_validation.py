@@ -18,6 +18,8 @@ def test_univariate_re_fails_before_subject_key_coercion(monkeypatch):
             "spoken": [5, 8],
             "study": ["study_a", "study_a"],
             "subject_id": [np.nan, np.nan],
+            # VG11 carries the sex covariate (#324), so its frame loads `sex`.
+            "sex": [None, None],
         }
     )
     monkeypatch.setattr(

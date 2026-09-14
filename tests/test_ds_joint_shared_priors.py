@@ -42,7 +42,7 @@ _DS_JOINT_MODELS = frozenset(
 
 #: The typically-developing bivariate models, which deliberately carry *different*
 #: anchors — they are the reason the groups cannot simply be class defaults.
-_TD_BIVARIATE_MODELS = frozenset({"vg13", "vg21", "vg23"})
+_TD_BIVARIATE_MODELS = frozenset({"vg13", "vg21", "vg23", "vg26"})
 
 _GROUPS = {
     "understood": D._DS_JOINT_UNDERSTOOD_ANCHORS,
@@ -113,7 +113,7 @@ def test_the_ds_joint_model_set_is_exactly_the_models_sharing_the_kappa_block():
 
 
 def test_the_bivariate_class_tree_size():
-    """`definitions.py` said "six models of record" for this tree; it holds twelve.
+    """`definitions.py` said "six models of record" for this tree; it holds thirteen.
 
     The number matters because it is the refit bill for adding a field to
     `BivariateModelDefinition`, and a maintainer reading the old comment would have
@@ -123,13 +123,13 @@ def test_the_bivariate_class_tree_size():
         k for k, d in MODEL_REGISTRY.items()
         if isinstance(d, D.BivariateModelDefinition)
     )
-    assert len(tree) == 12, tree
+    assert len(tree) == 13, tree
     assert tree == [
         "vg05", "vg07", "vg08", "vg09", "vg10", "vg13",
-        "vg16", "vg19", "vg20", "vg21", "vg22", "vg23",
+        "vg16", "vg19", "vg20", "vg21", "vg22", "vg23", "vg26",
     ]
 
-    # The other half of the same claim: the class docstring says "twelve models,
+    # The other half of the same claim: the class docstring says "thirteen models,
     # only eight of them direct instances", and it was the direct-instance count
     # that was mistaken for the refit bill.
     direct = sorted(
@@ -141,7 +141,7 @@ def test_the_bivariate_class_tree_size():
     ], direct
 
 
-def test_the_mean_clamp_field_is_declared_by_sixteen_of_the_twenty_two():
+def test_the_mean_clamp_field_is_declared_by_seventeen_of_the_twenty_three():
     """`clamp_targets`' docstring gives this as the refit bill for widening it.
 
     It was written as "fifteen", then briefly as "all twenty" -- which is the reach
@@ -157,9 +157,9 @@ def test_the_mean_clamp_field_is_declared_by_sixteen_of_the_twenty_two():
     assert declaring == [
         "vg05", "vg07", "vg08", "vg09", "vg10", "vg13", "vg14",
         "vg15", "vg16", "vg19", "vg20", "vg21", "vg22", "vg23", "vg24",
-        "vg25",
+        "vg25", "vg26",
     ], declaring
-    assert len(declaring) == 16, len(declaring)
+    assert len(declaring) == 17, len(declaring)
     # Stated in the docstring as a rule over classes, so check that shape too.
     assert {type(MODEL_REGISTRY[k]).__name__ for k in declaring} == {
         "BivariateModelDefinition",
@@ -185,7 +185,7 @@ def test_every_registered_class_declares_the_comprehension_cap_field():
         if "report_max_age_understood" not in {f.name for f in dataclasses.fields(d)}
     )
     assert without == [], without
-    assert len(MODEL_REGISTRY) == 22, len(MODEL_REGISTRY)
+    assert len(MODEL_REGISTRY) == 23, len(MODEL_REGISTRY)
 
 
 def test_the_shared_kappa_block_covers_eight_definitions():

@@ -202,43 +202,53 @@ def prepare_bivariate_observations(
     )
 
 
-#: Contrast coding for the exploratory sex-shift variant of VG20 (issue #295):
-#: girls ``+1/2``, boys ``-1/2``. Zero is the midpoint on the logit scale,
-#: not generally the average probability. Each coefficient is a logit difference.
+#: Contrast coding for the sex covariate (issues #295, #324): girls ``+1/2``,
+#: boys ``-1/2``, and a child of unrecorded sex ``0``. Zero is the midpoint on
+#: the logit scale, not generally the average probability. Each coefficient is a
+#: girl-minus-boy logit difference.
 SEX_CONTRAST: dict[str, float] = {"F": 0.5, "M": -0.5}
 
 
-def sex_contrast_codes(analysis_df: pd.DataFrame) -> np.ndarray:
-    """The per-row sex contrast the sex-shift variant multiplies its coefficients by.
+def sex_contrast_codes(
+    analysis_df: pd.DataFrame, *, allow_unknown: bool = False
+) -> np.ndarray:
+    """The per-row sex contrast the sex coefficients multiply.
 
-    Refuses a frame with any row lacking a recorded sex, or carrying a value other
-    than the loader's ``'F'``/``'M'``, and a frame in which a retained child
-    carries two values: the frame builder's ``sex_known_only`` restriction is what
-    guarantees the first two, and the loader's provenance rule (which drops the one
-    batch of us_01 rows whose sex disagreed within a child) the third. Each would
-    otherwise fit silently with a covariate that is zero, or wrong, for some rows.
+    Sex is a child-level covariate recorded per administration, so it is resolved
+    per child first: a child whose rows carry one recorded value takes it on every
+    row, including a row where it was left blank, and a child carrying **two**
+    values is refused rather than coded either way. Any value other than the
+    loaders' ``'F'``/``'M'`` is refused too.
+
+    With ``allow_unknown`` (the covariate design, #324) a child with no recorded
+    value on any row is coded ``0``. Without it (the ``sex_known_only`` control
+    arm) such a row is refused, because that restriction is what guarantees there
+    are none, and a covariate silently zero for rows the arm meant to exclude would
+    fit without complaint.
     """
     if "sex" not in analysis_df.columns:
         raise KeyError(
-            "The frame carries no `sex` column; the sex-shift variant needs "
-            "`sex_known_only` on its definition so the frame builder loads it."
+            "The frame carries no `sex` column; a sex term needs `sex_effect_sigma` "
+            "or `sex_known_only` on its definition so the frame builder loads it."
         )
     sex = analysis_df["sex"]
-    missing = int(sex.isna().sum())
-    if missing:
-        raise ValueError(f"{missing} rows have no recorded sex; the contrast is undefined for them.")
-    unexpected = sorted(set(sex.unique()) - set(SEX_CONTRAST))
+    unexpected = sorted(set(sex.dropna().unique()) - set(SEX_CONTRAST))
     if unexpected:
         raise ValueError(f"Unexpected sex codes {unexpected}; expected {sorted(SEX_CONTRAST)}.")
     if {"study", "subject_id"}.issubset(analysis_df.columns):
-        per_child = analysis_df.groupby(["study", "subject_id"], sort=False)["sex"].nunique()
+        keys = [analysis_df["study"].astype(str), analysis_df["subject_id"].astype(str)]
+        per_child = sex.groupby(keys, sort=False).nunique()
         inconsistent = int((per_child > 1).sum())
         if inconsistent:
             raise ValueError(
                 f"{inconsistent} children carry more than one sex value across their "
                 "administrations; sex is a child-level covariate."
             )
-    return sex.map(SEX_CONTRAST).to_numpy(dtype=float)
+        sex = sex.groupby(keys, sort=False).transform("first")
+    missing = int(sex.isna().sum())
+    if missing and not allow_unknown:
+        raise ValueError(f"{missing} rows have no recorded sex; the contrast is undefined for them.")
+    return sex.map(SEX_CONTRAST).fillna(0.0).to_numpy(dtype=float)
 
 
 # Counts and probabilities use these orders throughout fitting and scoring.

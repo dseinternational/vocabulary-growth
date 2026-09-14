@@ -112,15 +112,15 @@ def _prepare_context(tmp_path, monkeypatch, definition):
     merged = pd.DataFrame(
         [
             {"study": "uk_04", "age": 25.0, "understood": 30, "spoken": 20,
-             "signed": 12, "subject_id": "child_a"},
+             "signed": 12, "subject_id": "child_a", "sex": None},
             {"study": "uk_04", "age": 27.0, "understood": 35, "spoken": 23,
-             "signed": 14, "subject_id": "child_b"},
+             "signed": 14, "subject_id": "child_b", "sex": None},
             {"study": "uk_05", "age": 29.0, "understood": 41, "spoken": 27,
-             "signed": 16, "subject_id": "child_c"},
+             "signed": 16, "subject_id": "child_c", "sex": "M"},
             # a production-only nz_01 MARGINAL row -> must be excluded from `other`
             # so it is not double-counted against the produced-cell DM
             {"study": cjm.NZ01_STUDY_ID, "age": 33.0, "understood": np.nan,
-             "spoken": 12, "signed": 4, "subject_id": "nz_marginal_only"},
+             "spoken": 12, "signed": 4, "subject_id": "nz_marginal_only", "sex": None},
         ]
     )
     monkeypatch.setattr(
@@ -198,9 +198,11 @@ def test_a_requested_but_missing_nz01_source_fails_closed(tmp_path, monkeypatch)
     with pytest.raises(FileNotFoundError, match="include_nz01_cells"):
         cjm.build_joint_analysis_frame(VG15)
 
-    # And the documented way to fit without it still works.
+    # And the documented way to fit without it still works. Without the sex
+    # covariate: the fixture children above are not in the prepared merged view,
+    # and a sex-carrying joint frame refuses a cross-tab child it cannot look up.
     frame, info = cjm.build_joint_analysis_frame(
-        dataclasses.replace(VG15, include_nz01_cells=False)
+        dataclasses.replace(VG15, include_nz01_cells=False, sex_effect_sigma=None)
     )
     assert info["use_nz01_cells"] is False
     assert "prod_signed_spoken" not in frame.columns

@@ -1704,6 +1704,7 @@
   "dims": {
    "a_kappa": [],
    "b_kappa": [],
+   "beta_sex": [],
    "delta": [
     "study_id"
    ],
@@ -1790,10 +1791,11 @@
    "v_total",
    "subject_variance_share",
    "delta_subject_raw",
+   "beta_sex",
    "kappa_min",
    "kappa_excess_old"
   ],
-  "logp_at_fixed_point": -1900.8200783760753,
+  "logp_at_fixed_point": -2001.6644448954503,
   "observed_RVs": [
    "y_obs"
   ]
@@ -1838,6 +1840,7 @@
   "dims": {
    "a_kappa": [],
    "b_kappa": [],
+   "beta_sex": [],
    "delta": [
     "study_id"
    ],
@@ -1924,10 +1927,11 @@
    "v_total",
    "subject_variance_share",
    "delta_subject_raw",
+   "beta_sex",
    "kappa_min",
    "kappa_excess_old"
   ],
-  "logp_at_fixed_point": -5140.179783617352,
+  "logp_at_fixed_point": -5365.624764492508,
   "observed_RVs": [
    "y_obs"
   ]
@@ -2590,6 +2594,9 @@
    "b_kappa_s": [],
    "b_kappa_sign": [],
    "b_kappa_u": [],
+   "beta_sex_q": [],
+   "beta_sex_sign": [],
+   "beta_sex_u": [],
    "cells_obs": [
     "obs_cells_id",
     "cell_id"
@@ -2812,6 +2819,9 @@
    "z_subj_q",
    "tau_subj_sign",
    "z_subj_sign",
+   "beta_sex_u",
+   "beta_sex_q",
+   "beta_sex_sign",
    "log_psi",
    "tau_psi",
    "z_psi",
@@ -2826,7 +2836,7 @@
    "a_kappa_sign",
    "b_kappa_mag_sign"
   ],
-  "logp_at_fixed_point": -7201.386020532212,
+  "logp_at_fixed_point": -7849.419633084675,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs",
@@ -3478,6 +3488,8 @@
    "a_kappa_u": [],
    "b_kappa_s": [],
    "b_kappa_u": [],
+   "beta_sex_q": [],
+   "beta_sex_u": [],
    "delta_q": [
     "study_id"
    ],
@@ -3660,6 +3672,8 @@
    "tau_subj_q",
    "delta_subj_q_raw",
    "rho_uq_raw",
+   "beta_sex_u",
+   "beta_sex_q",
    "kappa_min_u",
    "kappa_excess_young_u",
    "kappa_excess_old_u",
@@ -3667,7 +3681,7 @@
    "kappa_excess_young_s",
    "kappa_excess_old_s"
   ],
-  "logp_at_fixed_point": -2507.445251438774,
+  "logp_at_fixed_point": -2924.700949365347,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs"
@@ -3747,6 +3761,8 @@
    "a_kappa_u": [],
    "b_kappa_s": [],
    "b_kappa_u": [],
+   "beta_sex_q": [],
+   "beta_sex_u": [],
    "delta_q": [
     "study_id"
    ],
@@ -3926,6 +3942,8 @@
    "delta_subj_u_raw",
    "tau_subj_q",
    "delta_subj_q_raw",
+   "beta_sex_u",
+   "beta_sex_q",
    "kappa_min_u",
    "kappa_excess_young_u",
    "kappa_excess_old_u",
@@ -3933,7 +3951,7 @@
    "kappa_excess_young_s",
    "kappa_excess_old_s"
   ],
-  "logp_at_fixed_point": -5296.926033042998,
+  "logp_at_fixed_point": -5994.84999808377,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs"
@@ -4327,6 +4345,8 @@
    "a_kappa_u": [],
    "b_kappa_s": [],
    "b_kappa_u": [],
+   "beta_sex_q": [],
+   "beta_sex_u": [],
    "delta_q": [
     "study_id"
    ],
@@ -4509,6 +4529,8 @@
    "tau_subj_q",
    "delta_subj_q_raw",
    "rho_uq_raw",
+   "beta_sex_u",
+   "beta_sex_q",
    "kappa_min_u",
    "kappa_excess_young_u",
    "kappa_excess_old_u",
@@ -4516,7 +4538,7 @@
    "kappa_excess_young_s",
    "kappa_excess_old_s"
   ],
-  "logp_at_fixed_point": -4553.557543923955,
+  "logp_at_fixed_point": -5229.59107558118,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs"
@@ -4613,6 +4635,9 @@
    "b_kappa_s": [],
    "b_kappa_sign": [],
    "b_kappa_u": [],
+   "beta_sex_q": [],
+   "beta_sex_sign": [],
+   "beta_sex_u": [],
    "cells_obs": [
     "obs_cells_id",
     "cell_id"
@@ -4837,6 +4862,9 @@
    "z_subj_u",
    "z_subj_q",
    "z_subj_sign",
+   "beta_sex_u",
+   "beta_sex_q",
+   "beta_sex_sign",
    "log_psi",
    "tau_psi",
    "z_psi",
@@ -4851,7 +4879,7 @@
    "a_kappa_sign",
    "b_kappa_mag_sign"
   ],
-  "logp_at_fixed_point": -5847.739974644355,
+  "logp_at_fixed_point": -6553.321404929393,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs",
@@ -4951,6 +4979,9 @@
    "b_kappa_s": [],
    "b_kappa_sign": [],
    "b_kappa_u": [],
+   "beta_sex_q": [],
+   "beta_sex_sign": [],
+   "beta_sex_u": [],
    "beta_sign_lag": [],
    "cells_obs": [
     "obs_cells_id",
@@ -5176,6 +5207,9 @@
    "z_subj_u",
    "z_subj_q",
    "z_subj_sign",
+   "beta_sex_u",
+   "beta_sex_q",
+   "beta_sex_sign",
    "beta_sign_lag",
    "log_psi",
    "tau_psi",
@@ -5191,13 +5225,287 @@
    "a_kappa_sign",
    "b_kappa_mag_sign"
   ],
-  "logp_at_fixed_point": -6184.489137823955,
+  "logp_at_fixed_point": -6961.641070576586,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs",
    "y_sign_obs",
    "cells_obs",
    "nz_prod_cells_obs"
+  ]
+ },
+ "vg26": {
+  "coords": {
+   "all_id": 557,
+   "child_effect": 2,
+   "child_effect4": 4,
+   "child_effect4_b": 4,
+   "factor": 1,
+   "obs_id": 48,
+   "obs_s_id": 48,
+   "obs_u_id": 48,
+   "plot_id": 500,
+   "query_id": 8,
+   "study_id": 4,
+   "subject_id": 24,
+   "x_dim": 1
+  },
+  "deterministics": [
+   "slope_u",
+   "intercept_u",
+   "ell_u",
+   "g_unit_u",
+   "g_u",
+   "f_u_all",
+   "slope_q",
+   "intercept_q",
+   "ell_q",
+   "g_unit_q",
+   "g_q",
+   "h_all",
+   "delta_u",
+   "delta_q",
+   "delta_subj_u",
+   "rho_uq",
+   "delta_subj_q",
+   "p_u_obs",
+   "f_u_obs",
+   "q_obs",
+   "h_obs",
+   "p_s_obs",
+   "f_s_obs",
+   "f_u_plot",
+   "f_u_query",
+   "p_u_plot",
+   "p_u_query",
+   "h_plot",
+   "h_query",
+   "q_plot",
+   "q_query",
+   "p_s_plot",
+   "p_s_query",
+   "f_s_plot",
+   "f_s_query",
+   "z_obs",
+   "z_plot",
+   "z_query",
+   "b_kappa_u",
+   "a_kappa_u",
+   "kappa_young_u",
+   "kappa_old_u",
+   "kappa_u_obs",
+   "kappa_u_plot",
+   "kappa_u_query",
+   "b_kappa_s",
+   "a_kappa_s",
+   "kappa_young_s",
+   "kappa_old_s",
+   "kappa_s_obs",
+   "kappa_s_plot",
+   "kappa_s_query"
+  ],
+  "dims": {
+   "a_kappa_s": [],
+   "a_kappa_u": [],
+   "b_kappa_s": [],
+   "b_kappa_u": [],
+   "beta_sex_q": [],
+   "beta_sex_u": [],
+   "delta_q": [
+    "study_id"
+   ],
+   "delta_q_raw": [
+    "study_id"
+   ],
+   "delta_subj_q": [
+    "subject_id"
+   ],
+   "delta_subj_q_raw": [
+    "subject_id"
+   ],
+   "delta_subj_u": [
+    "subject_id"
+   ],
+   "delta_subj_u_raw": [
+    "subject_id"
+   ],
+   "delta_u": [
+    "study_id"
+   ],
+   "delta_u_raw": [
+    "study_id"
+   ],
+   "ell_q": [],
+   "ell_u": [],
+   "ell_unit_q": [],
+   "ell_unit_u": [],
+   "eta_q": [],
+   "eta_u": [],
+   "f_s_obs": [
+    "obs_id"
+   ],
+   "f_s_plot": [
+    "plot_id"
+   ],
+   "f_s_query": [
+    "query_id"
+   ],
+   "f_u_all": [
+    "all_id"
+   ],
+   "f_u_obs": [
+    "obs_id"
+   ],
+   "f_u_plot": [
+    "plot_id"
+   ],
+   "f_u_query": [
+    "query_id"
+   ],
+   "g_q": [
+    "all_id"
+   ],
+   "g_u": [
+    "all_id"
+   ],
+   "g_unit_q": [
+    "all_id"
+   ],
+   "g_unit_q_hsgp_coeffs": [],
+   "g_unit_u": [
+    "all_id"
+   ],
+   "g_unit_u_hsgp_coeffs": [],
+   "h_all": [
+    "all_id"
+   ],
+   "h_obs": [
+    "obs_id"
+   ],
+   "h_plot": [
+    "plot_id"
+   ],
+   "h_query": [
+    "query_id"
+   ],
+   "intercept_q": [],
+   "intercept_u": [],
+   "kappa_excess_old_s": [],
+   "kappa_excess_old_u": [],
+   "kappa_excess_young_s": [],
+   "kappa_excess_young_u": [],
+   "kappa_min_s": [],
+   "kappa_min_u": [],
+   "kappa_old_s": [],
+   "kappa_old_u": [],
+   "kappa_s_obs": [
+    "obs_id"
+   ],
+   "kappa_s_plot": [
+    "plot_id"
+   ],
+   "kappa_s_query": [
+    "query_id"
+   ],
+   "kappa_u_obs": [
+    "obs_id"
+   ],
+   "kappa_u_plot": [
+    "plot_id"
+   ],
+   "kappa_u_query": [
+    "query_id"
+   ],
+   "kappa_young_s": [],
+   "kappa_young_u": [],
+   "p_s_obs": [
+    "obs_id"
+   ],
+   "p_s_plot": [
+    "plot_id"
+   ],
+   "p_s_query": [
+    "query_id"
+   ],
+   "p_slope_hi_q": [],
+   "p_slope_hi_u": [],
+   "p_slope_low_q": [],
+   "p_slope_low_u": [],
+   "p_u_obs": [
+    "obs_id"
+   ],
+   "p_u_plot": [
+    "plot_id"
+   ],
+   "p_u_query": [
+    "query_id"
+   ],
+   "q_obs": [
+    "obs_id"
+   ],
+   "q_plot": [
+    "plot_id"
+   ],
+   "q_query": [
+    "query_id"
+   ],
+   "rho_uq": [],
+   "rho_uq_raw": [],
+   "slope_q": [],
+   "slope_u": [],
+   "tau_q": [],
+   "tau_subj_q": [],
+   "tau_subj_u": [],
+   "tau_u": [],
+   "y_s_obs": [
+    "obs_s_id"
+   ],
+   "y_u_obs": [
+    "obs_u_id"
+   ],
+   "z_obs": [
+    "obs_id"
+   ],
+   "z_plot": [
+    "plot_id"
+   ],
+   "z_query": [
+    "query_id"
+   ]
+  },
+  "free_RVs": [
+   "p_slope_low_u",
+   "p_slope_hi_u",
+   "ell_unit_u",
+   "eta_u",
+   "g_unit_u_hsgp_coeffs",
+   "p_slope_low_q",
+   "p_slope_hi_q",
+   "ell_unit_q",
+   "eta_q",
+   "g_unit_q_hsgp_coeffs",
+   "tau_u",
+   "delta_u_raw",
+   "tau_q",
+   "delta_q_raw",
+   "tau_subj_u",
+   "delta_subj_u_raw",
+   "tau_subj_q",
+   "delta_subj_q_raw",
+   "rho_uq_raw",
+   "beta_sex_u",
+   "beta_sex_q",
+   "kappa_min_u",
+   "kappa_excess_young_u",
+   "kappa_excess_old_u",
+   "kappa_min_s",
+   "kappa_excess_young_s",
+   "kappa_excess_old_s"
+  ],
+  "logp_at_fixed_point": -6237.26034495288,
+  "observed_RVs": [
+   "y_u_obs",
+   "y_s_obs"
   ]
  }
 }

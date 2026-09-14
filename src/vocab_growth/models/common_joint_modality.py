@@ -88,6 +88,7 @@ from vocab_growth.cross_tab_sources import (
     load_uk07_four_cell,
 )
 from vocab_growth.fit_artifacts import save_trace
+from vocab_growth.models import sex_covariate
 from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -155,6 +156,7 @@ from vocab_growth.models.observation_arrays import (
 )
 from vocab_growth.models.observation_arrays import (
     prepare_joint_observations,
+    sex_contrast_codes,
 )
 from vocab_growth.models.study_effects import informed_studies, zero_sum_study_offsets
 from vocab_growth.models.subject_graphs import (
@@ -355,6 +357,38 @@ JointContext = ModelFitContext[JointModelConfiguration, JointModelSamples]
 # ============================================================
 
 
+def _mask_crosstab_comprehension_below_production(
+    marginal: pd.DataFrame, produced: pd.Series | None
+) -> pd.DataFrame:
+    """Apply the pool's comprehension-below-production rule to a cross-tab source.
+
+    The cross-tab sources' rows are read from their own CSVs, not from the
+    merged view, so :func:`vocab_growth.data_utils.load_combined_data` never
+    sees them and none of its rules reach them. For this rule that mattered:
+    the one ``uk_02`` record #236 found in the rule's gap -- 347 understood
+    against 387 spoken, with no production union -- is a marginal-only row of
+    ``uk_02``'s own CSV, so the paired models stopped fitting it when the rule
+    was widened and the joint models went on doing so. The four-cell rows need
+    no such check: their understood total is the cell sum, which contains the
+    spoken cells by construction.
+
+    ``produced`` is the source's own union column, whatever it is called there,
+    and is used only for the comparison. ``None`` -- a source file without one
+    -- is an unrecorded union, which the rule already handles by comparing
+    against the spoken count alone. Nothing is masked when nothing violates, so
+    a source with no such row keeps its frame exactly.
+    """
+    union = (
+        np.full(len(marginal), np.nan)
+        if produced is None
+        else np.asarray(produced, dtype=float)
+    )
+    masked, _ = vocab_data_utils.mask_comprehension_below_production(
+        marginal.assign(produced=union)
+    )
+    return masked.drop(columns="produced")
+
+
 def build_joint_analysis_frame(
     definition: JointModelDefinition,
 ) -> tuple[pd.DataFrame, dict]:
@@ -376,12 +410,38 @@ def build_joint_analysis_frame(
         merged_columns = merged_columns + ["subject_id"]
     if definition.exclude_us01_spoken_ceiling or definition.dse_native_only:
         merged_columns = merged_columns + ["survey_vocab_max"]
+    # Sex (#324). Loaded only when the definition carries the covariate, so
+    # every other joint frame is untouched.
+    uses_sex = sex_covariate.sex_effect_sigma(definition) is not None
+    if uses_sex:
+        if not use_subject_codes:
+            raise ValueError(
+                f"{definition.model_id} sets sex_effect_sigma without subject codes; "
+                "the cross-tab rows take their sex from the merged view by child."
+            )
+        merged_columns = merged_columns + ["sex"]
 
     merged = vocab_data_utils.load_data(
         population=definition.population,
         columns=merged_columns,
         include_implausible_production=definition.include_implausible_production,
         include_same_day_disagreements=definition.include_same_day_disagreements,
+    )
+    # Every child's recorded sex, taken before any restriction so a cross-tab
+    # row can find its child whichever merged-view rows a sensitivity keeps.
+    child_sex = (
+        merged.dropna(subset=["sex"])
+        .drop_duplicates(["study", "subject_id"])
+        .set_index(["study", "subject_id"])["sex"]
+        if uses_sex
+        else None
+    )
+    # Every child the merged view carries, sex recorded or not, so the lookup
+    # below can tell a child of unrecorded sex from a child it never saw.
+    merged_children = (
+        pd.MultiIndex.from_frame(merged[["study", "subject_id"]].drop_duplicates())
+        if uses_sex
+        else None
     )
     # The DSE-native sensitivity drops every source on a shorter form, which
     # includes three of the four cross-tab sources. Their cell blocks are gated
@@ -446,7 +506,9 @@ def build_joint_analysis_frame(
         marg_cols["subject_id"] = marg["subject_id"].to_numpy()
 
     four_df = pd.DataFrame(four_cols)
-    marg_df = pd.DataFrame(marg_cols)
+    marg_df = _mask_crosstab_comprehension_below_production(
+        pd.DataFrame(marg_cols), marg.get("production")
+    )
 
     frames = [other, marg_df, four_df]
 
@@ -487,7 +549,11 @@ def build_joint_analysis_frame(
             four07_cols["subject_id"] = four07["subject_id"].to_numpy()
             marg07_cols["subject_id"] = marg07["subject_id"].to_numpy()
         frames.append(pd.DataFrame(four07_cols))
-        frames.append(pd.DataFrame(marg07_cols))
+        frames.append(
+            _mask_crosstab_comprehension_below_production(
+                pd.DataFrame(marg07_cols), marg07.get("produced")
+            )
+        )
 
     # es_01 (Galeote): the same within-understood partition, derived from the
     # source's recorded totals and their recorded union. Its non-vocal modality is
@@ -523,7 +589,11 @@ def build_joint_analysis_frame(
             four_es_cols["subject_id"] = four_es["subject_id"].to_numpy()
             marg_es_cols["subject_id"] = marg_es["subject_id"].to_numpy()
         frames.append(pd.DataFrame(four_es_cols))
-        frames.append(pd.DataFrame(marg_es_cols))
+        frames.append(
+            _mask_crosstab_comprehension_below_production(
+                pd.DataFrame(marg_es_cols), marg_es.get("spoken_or_gestured")
+            )
+        )
 
     # Fail closed on a missing nz_01 source: this block used to tolerate an
     # absent CSV so the model "still builds", which silently fitted VG15
@@ -542,6 +612,38 @@ def build_joint_analysis_frame(
         frames.append(load_nz01_produced_cells())
     analysis_df = pd.concat(frames, ignore_index=True)
     analysis_df = analysis_df.dropna(subset=["age"]).reset_index(drop=True)
+    if child_sex is not None:
+        # The cross-tab rows come from their own CSVs, which carry sex in a
+        # source coding of their own; the merged view has already decoded it to
+        # 'M'/'F' once per child, so each such row takes its child's value from
+        # there. A child the merged view records no sex for -- all of nz_01 --
+        # stays unrecorded and takes contrast zero.
+        keys = pd.MultiIndex.from_arrays(
+            [analysis_df["study"], analysis_df["subject_id"]]
+        )
+        # A cross-tab child the merged view never saw would otherwise take
+        # contrast zero silently, and in a study that records sex that codes a
+        # known girl or boy as unrecorded. Refused rather than guessed. Measured
+        # 2026-09-13, every uk_02, uk_07 and es_01 child is found.
+        recording_studies = set(child_sex.index.get_level_values("study"))
+        unseen = (
+            ~keys.isin(merged_children)
+            & analysis_df["study"].isin(recording_studies).to_numpy()
+            & analysis_df["sex"].isna().to_numpy()
+        )
+        if unseen.any():
+            by_study = analysis_df.loc[unseen, "study"].value_counts().sort_index()
+            raise ValueError(
+                "Cross-tab rows whose child is absent from the merged view, in "
+                "studies that record sex: "
+                + ", ".join(f"{study} ({count} rows)" for study, count in by_study.items())
+                + ". Their sex cannot be looked up, and coding them as unrecorded "
+                "would misstate a recorded covariate."
+            )
+        looked_up = pd.Series(child_sex.reindex(keys).to_numpy(), index=analysis_df.index)
+        analysis_df["sex"] = analysis_df["sex"].where(
+            analysis_df["sex"].notna(), looked_up
+        )
     ceiling_rows_excluded = 0
     if definition.exclude_us01_spoken_ceiling:
         analysis_df, ceiling_rows_excluded = (
@@ -737,6 +839,15 @@ def prepare_joint_data(
         counts.append(("Subjects with single observation", n_singletons))
         counts.append(("Subjects with repeated observations", n_subjects - n_singletons))
         counts.append(("Subjects with repeated SIGNED observations", n_sign_rep))
+    if "sex" in analysis_df.columns and "subject_id" in analysis_df.columns:
+        children = analysis_df.drop_duplicates(["study", "subject_id"])["sex"]
+        counts.append(
+            (
+                "Children by sex (girls / boys / unrecorded)",
+                f"{int((children == 'F').sum())} / {int((children == 'M').sum())} / "
+                f"{int(children.isna().sum())}",
+            )
+        )
     key_value_table("Observation counts", counts)
 
     desc = descriptive_stats.describe_all(
@@ -858,6 +969,14 @@ def configure_joint_priors(context: JointContext, definition: JointModelDefiniti
     )
     plot_and_print_dist(context, log_conc_dist, "log_conc_dist")
 
+    # Sex covariate (#324): one prior for the three coefficients, each drawn
+    # from it independently.
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
+    if sex_sigma is not None:
+        if context.report_build:
+            heading("Sex covariate prior", style="bold cyan")
+        plot_and_print_dist(context, pz.Normal(mu=0.0, sigma=sex_sigma), "beta_sex_dist")
+
     config = JointModelConfiguration(
         slope_anchors=definition.slope_anchors,
         ell_months_range=definition.ell_months_range,
@@ -963,6 +1082,19 @@ def build_model_graph(
     X_obs = observations.X_obs
     n = observations.n
     X_mean, X_std, X_obs_z = standardize_ages(X_obs)
+
+    # Sex (#324): girls +1/2, boys -1/2, unrecorded 0, resolved per child.
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
+    x_sex = (
+        sex_contrast_codes(df, allow_unknown=True) if sex_sigma is not None else None
+    )
+    if x_sex is not None:
+        build_report.messages.append(
+            f"Sex covariate: {int((x_sex > 0).sum())} girl rows (+1/2), "
+            f"{int((x_sex < 0).sum())} boy rows (-1/2), {int((x_sex == 0).sum())} "
+            "rows of unrecorded sex (0); beta_sex_u, beta_sex_q, beta_sex_sign ~ "
+            f"Normal(0, {sex_sigma:g}), entering the marginals and the compositions."
+        )
 
     # Plot / query grids (standardised), with the optional Option-D reference-age
     # anchor row — see models.build_utils.construct_age_grids. Option D centres
@@ -1272,6 +1404,18 @@ def build_model_graph(
             g_all[i_obs0:i_obs1] + delta_sign[study_obs] + child_effects.signed_ratio
         )
 
+        # Sex covariate (#324), emitted only when the definition sets it, so every
+        # other joint graph is unchanged. Added before the sign lag reads `g_obs`,
+        # so a lag baseline carries the child's sex as it carries their study.
+        if x_sex is not None:
+            x_sex_data = pm.Data("x_sex", x_sex, dims=("obs_id",))
+            beta_sex_u = pm.Normal("beta_sex_u", mu=0.0, sigma=sex_sigma)
+            beta_sex_q = pm.Normal("beta_sex_q", mu=0.0, sigma=sex_sigma)
+            beta_sex_sign = pm.Normal("beta_sex_sign", mu=0.0, sigma=sex_sigma)
+            f_u_obs = f_u_obs + beta_sex_u * x_sex_data
+            h_obs = h_obs + beta_sex_q * x_sex_data
+            g_obs = g_obs + beta_sex_sign * x_sex_data
+
         # Sign -> speech cross-lag (VG25, issue #297). The child's prior-wave
         # signed share of comprehension, as a residual from the signed-ratio
         # trajectory at that wave, shifts their current production ratio q.
@@ -1355,11 +1499,21 @@ def build_model_graph(
         # without the lag emits the ops it always did rather than gaining an
         # addition of zero -- which `tests/test_graph_equivalence.py` would see
         # for every other joint model.
+        #
+        # The sex coefficients cross it too, for the reason the lag does: each is
+        # one scalar multiplying a covariate the data fix, not a free per-child
+        # offset, and leaving them out would model a girl's composition with the
+        # sex-midpoint marginals. See `JointModelDefinition.sex_effect_sigma`.
         h_obs_pop = h_all[i_obs0:i_obs1] + delta_q[study_obs]
+        if x_sex is not None:
+            h_obs_pop = h_obs_pop + beta_sex_q * x_sex_data
         if use_sign_cross_lag and sign_lag_in_cells:
             h_obs_pop = h_obs_pop + q_sign_lag_term
         q_obs_pop = pm.math.sigmoid(h_obs_pop)
-        r_obs_pop = pm.math.sigmoid(g_all[i_obs0:i_obs1] + delta_sign[study_obs])
+        g_obs_pop = g_all[i_obs0:i_obs1] + delta_sign[study_obs]
+        if x_sex is not None:
+            g_obs_pop = g_obs_pop + beta_sex_sign * x_sex_data
+        r_obs_pop = pm.math.sigmoid(g_obs_pop)
 
         # --- population-level latents (no study shift), plot + query ---
         p_u_plot = pm.Deterministic(
@@ -1897,6 +2051,85 @@ def summarise_psi_by_study(
     return pd.DataFrame(rows)
 
 
+def _write_sex_summaries(
+    context: JointContext,
+    *,
+    understood_cap,
+    signed_cap,
+    ratio_cap,
+    sign_ratio_cap,
+) -> None:
+    """The by-sex tables, where the fit carries the sex covariate (#324).
+
+    This engine draws no predictive counts and no new child at query ages, so the
+    by-sex tables carry what its pooled tables carry -- the zero-effect latent
+    proportions and expected counts -- at each sex level. They are recomputed
+    from the stored population probabilities and the coefficients, draw for draw.
+    """
+    trace = context.trace
+    betas = {
+        name: sex_covariate.coefficient_draws(trace, name)
+        for name in ("beta_sex_u", "beta_sex_q", "beta_sex_sign")
+    }
+    if any(draws is None for draws in betas.values()):
+        return
+    s = context.model_samples
+    n_trials = context.model_data.n_trials
+    ci_prob = context.reporting.ci_prob
+    od = context.reporting.output_dir
+    levels = sex_covariate.SEX_LEVELS
+
+    def at_levels(probabilities, beta):
+        logits = sex_covariate.logit(probabilities)
+        return {
+            level: sex_covariate.shifted(logits, beta, contrast)
+            for level, contrast in levels
+        }
+
+    p_u = at_levels(s.p_u_query, betas["beta_sex_u"])
+    q = at_levels(s.q_query, betas["beta_sex_q"])
+    r = at_levels(s.r_query, betas["beta_sex_sign"])
+    p_s = {level: p_u[level] * q[level] for level, _ in levels}
+    p_sign = {level: p_u[level] * r[level] for level, _ in levels}
+
+    for suffix, population, cap in (
+        ("u", p_u, understood_cap),
+        ("s", p_s, None),
+        ("sign", p_sign, signed_cap),
+    ):
+        sex_covariate.write_probability_by_sex(
+            od,
+            suffix,
+            s.X_query,
+            population,
+            n_trials=n_trials,
+            ci_prob=ci_prob,
+            interval_kind=context.reporting.interval_kind,
+            max_age_months=cap,
+        )
+    sex_covariate.write_rate_by_sex(
+        od, "q", s.X_query, q, ci_prob=ci_prob, max_age_months=ratio_cap
+    )
+    sex_covariate.write_rate_by_sex(
+        od, "r", s.X_query, r, ci_prob=ci_prob, max_age_months=sign_ratio_cap
+    )
+    sex_covariate.write_differences(
+        od,
+        [
+            sex_covariate.difference_rows(
+                s.X_query, outcome, population["girls"], population["boys"],
+                n_trials=n_trials, ci_prob=ci_prob, max_age_months=cap,
+            )
+            for outcome, population, cap in (
+                ("understood", p_u, understood_cap),
+                ("spoken", p_s, None),
+                ("signed", p_sign, signed_cap),
+            )
+        ],
+    )
+    sex_covariate.write_coefficients(od, betas, ci_prob=ci_prob)
+
+
 def posterior_summary(context: JointContext):
     s = context.model_samples
     n_trials = context.model_data.n_trials
@@ -1968,6 +2201,14 @@ def posterior_summary(context: JointContext):
     )
     ratio_summary(s.X_query, s.r_query, "r", sign_ratio_cap)
     ratio_summary(s.X_query, s.q_query, "q", ratio_cap)
+
+    _write_sex_summaries(
+        context,
+        understood_cap=understood_cap,
+        signed_cap=signed_cap,
+        ratio_cap=ratio_cap,
+        sign_ratio_cap=sign_ratio_cap,
+    )
 
     # Whole-month companions to the tables above. This engine draws no predictive
     # counts on the plot grid, so these carry the expected count only — matching

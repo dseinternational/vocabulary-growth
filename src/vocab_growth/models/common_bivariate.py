@@ -51,7 +51,7 @@ import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.administration_loo import LikelihoodFactor
 from vocab_growth.fit_artifacts import save_trace
-from vocab_growth.models import prior_child_checks
+from vocab_growth.models import prior_child_checks, sex_covariate
 from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -414,13 +414,13 @@ def configure_bivariate_priors(
         )
         plot_and_print_dist(context, beta_lag_dist, "beta_lag_dist")
 
-    # --- Sex shift prior (exploratory VG20 variant, issue #295) ---
+    # --- Sex covariate prior (issue #324) ---
     # One prior serves both coefficients; the engine draws `beta_sex_u` and
     # `beta_sex_q` from it independently.
-    sex_sigma = getattr(definition, "sex_effect_sigma", None)
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
     if sex_sigma is not None:
         if context.report_build:
-            heading("Sex shift prior", style="bold cyan")
+            heading("Sex covariate prior", style="bold cyan")
         beta_sex_dist = pz.Normal(mu=0.0, sigma=sex_sigma)
         plot_and_print_dist(context, beta_sex_dist, "beta_sex_dist")
 
@@ -476,6 +476,27 @@ def build_model_graph(
     definition: BivariateModelDefinition,
 ) -> BuildReport:
     """Build the bivariate PyMC model."""
+    unsupported = [
+        name
+        for name, is_set in (
+            ("sex_effect_sigma / sex_known_only", sex_covariate.needs_sex_column(definition)),
+            (
+                "study_age_slope_sigma",
+                getattr(definition, "study_age_slope_sigma", None) is not None,
+            ),
+        )
+        if is_set
+    ]
+    if unsupported:
+        # These fields are on the class this engine shares with the random-effect
+        # one, and the random-effect engine is the only one that implements them.
+        # Refused here rather than ignored: a definition that asks for a term and
+        # fits without it would report a model it is not.
+        raise ValueError(
+            f"{definition.model_id} sets {', '.join(unsupported)}, which the bivariate "
+            "engine without random effects does not implement; use the bivariate_re "
+            "engine."
+        )
     build_report = BuildReport()
     config = context.model_config
 
@@ -1315,8 +1336,11 @@ def sample_posterior_predictive(
     kappa_s_query = context.model_variables["kappa_s_query"]
 
     plan = resolve_subject_effects(definition)
+    beta_sex_u = context.model_variables.get("beta_sex_u")
+    beta_sex_q = context.model_variables.get("beta_sex_q")
     with context.model:
         child_u = None
+        child_q = None
         if plan["u"].is_active:
             child_u = unseen_child_offsets(context, definition, plan, "u")
             p_u_plot = pm.math.sigmoid(
@@ -1411,6 +1435,63 @@ def sample_posterior_predictive(
             dims=("query_id",),
         )
 
+        # By sex (#324), on the query grid: the same new child as above -- the
+        # same child-effect draws, correlated or not -- as a girl and as a boy.
+        # The nodes above are that child at contrast zero, a child of unrecorded
+        # sex, which is how the model treats every such row it was fitted to.
+        # Sharing the child draw makes the two levels paired draw for draw.
+        by_sex_names: list[str] = []
+        if beta_sex_u is not None:
+            u_offset = child_u.query if child_u is not None else 0.0
+            q_offset = child_q.query if child_q is not None else 0.0
+            for level, contrast in sex_covariate.SEX_LEVELS:
+                p_u_level = pm.Deterministic(
+                    f"p_u_query_subject_marginal_{level}",
+                    pm.math.sigmoid(
+                        context.model_variables["f_u_query"]
+                        + u_offset
+                        + contrast * beta_sex_u
+                    ),
+                    dims=("query_id",),
+                )
+                q_level = pm.Deterministic(
+                    f"q_query_subject_marginal_{level}",
+                    pm.math.sigmoid(
+                        context.model_variables["h_query"]
+                        + q_offset
+                        + contrast * beta_sex_q
+                    ),
+                    dims=("query_id",),
+                )
+                pm.Deterministic(
+                    f"p_s_query_subject_marginal_{level}",
+                    p_u_level * q_level,
+                    dims=("query_id",),
+                )
+                p_u_level_clip = pm.math.clip(p_u_level, EPSILON, 1 - EPSILON)
+                y_u_level = pm.BetaBinomial(
+                    f"y_u_query_{level}",
+                    n=n_trials,
+                    alpha=p_u_level_clip * kappa_u_query,
+                    beta=(1 - p_u_level_clip) * kappa_u_query,
+                    dims=("query_id",),
+                )
+                q_level_clip = pm.math.clip(q_level, EPSILON, 1 - EPSILON)
+                pm.BetaBinomial(
+                    f"y_s_query_{level}",
+                    n=y_u_level,
+                    alpha=q_level_clip * kappa_s_query,
+                    beta=(1 - q_level_clip) * kappa_s_query,
+                    dims=("query_id",),
+                )
+                by_sex_names += [
+                    f"p_u_query_subject_marginal_{level}",
+                    f"q_query_subject_marginal_{level}",
+                    f"p_s_query_subject_marginal_{level}",
+                    f"y_u_query_{level}",
+                    f"y_s_query_{level}",
+                ]
+
         trace = pm.sample_posterior_predictive(
             context.trace,
             var_names=[
@@ -1426,6 +1507,7 @@ def sample_posterior_predictive(
                 "q_query_subject_marginal",
                 "q_plot_subject_marginal",
                 "y_s_obs",
+                *by_sex_names,
             ],
             extend_inferencedata=True,
             progressbar=sys.stdout.isatty(),
@@ -1557,6 +1639,118 @@ def posterior_summary(context: BivariateContext):
     summary_q.to_csv(
         os.path.join(context.reporting.output_dir, "posterior_summary_q.csv"),
         index=False,
+    )
+
+    write_sex_summaries(context)
+
+
+def write_sex_summaries(context: BivariateContext) -> None:
+    """The by-sex tables, where the fit carries the sex covariate (#324).
+
+    Population levels are recomputed from the stored zero-effect logits and the
+    coefficients, draw for draw; a new child's counts and probabilities at each
+    level are the ones the predictive stage drew. Nothing is written for a model
+    without the covariate.
+    """
+    trace = context.trace
+    beta_u = sex_covariate.coefficient_draws(trace, "beta_sex_u")
+    beta_q = sex_covariate.coefficient_draws(trace, "beta_sex_q")
+    if beta_u is None or beta_q is None:
+        return
+    samples = context.model_samples
+    n_trials = context.model_data.n_trials
+    ci_prob = context.reporting.ci_prob
+    kind = context.reporting.interval_kind
+    report_max_u = context.model_config.report_max_age_understood
+    output_dir = context.reporting.output_dir
+    levels = [level for level, _ in sex_covariate.SEX_LEVELS]
+
+    f_u_query = extract_posterior(trace, "f_u_query", "query_id")
+    h_query = extract_posterior(trace, "h_query", "query_id")
+    p_u = {
+        level: sex_covariate.shifted(f_u_query, beta_u, contrast)
+        for level, contrast in sex_covariate.SEX_LEVELS
+    }
+    q = {
+        level: sex_covariate.shifted(h_query, beta_q, contrast)
+        for level, contrast in sex_covariate.SEX_LEVELS
+    }
+    p_s = {level: p_u[level] * q[level] for level in levels}
+
+    def predictive(name):
+        return {
+            level: extract_posterior_predictive(trace, f"{name}_{level}", "query_id")
+            for level in levels
+        }
+
+    # The same test the pooled summary makes: without child effects (the
+    # `single-admin` arms) the "new child" columns would repeat the population
+    # ones, and the pooled tables leave them out for that reason.
+    has_subject_re = any(
+        name in context.model_variables for name in ("tau_subj_u", "tau_subj_q")
+    )
+
+    def marginal(name):
+        if not has_subject_re:
+            return None
+        return {
+            level: posterior_analysis.extract_posterior_predictive_float(
+                trace, f"{name}_{level}", "query_id"
+            )
+            for level in levels
+        }
+
+    for suffix, population, counts, new_child, cap in (
+        ("u", p_u, "y_u_query", "p_u_query_subject_marginal", report_max_u),
+        ("s", p_s, "y_s_query", "p_s_query_subject_marginal", None),
+    ):
+        context.dataframes[f"posterior_summary_{suffix}_by_sex"] = (
+            sex_covariate.write_probability_by_sex(
+                output_dir,
+                suffix,
+                samples.X_query,
+                population,
+                n_trials=n_trials,
+                ci_prob=ci_prob,
+                interval_kind=kind,
+                predictive=predictive(counts),
+                subject_marginal=marginal(new_child),
+                max_age_months=cap,
+            )
+        )
+    context.dataframes["posterior_summary_q_by_sex"] = sex_covariate.write_rate_by_sex(
+        output_dir,
+        "q",
+        samples.X_query,
+        q,
+        ci_prob=ci_prob,
+        subject_marginal=marginal("q_query_subject_marginal"),
+        max_age_months=report_max_u,
+    )
+    sex_covariate.write_differences(
+        output_dir,
+        [
+            sex_covariate.difference_rows(
+                samples.X_query,
+                "understood",
+                p_u["girls"],
+                p_u["boys"],
+                n_trials=n_trials,
+                ci_prob=ci_prob,
+                max_age_months=report_max_u,
+            ),
+            sex_covariate.difference_rows(
+                samples.X_query,
+                "spoken",
+                p_s["girls"],
+                p_s["boys"],
+                n_trials=n_trials,
+                ci_prob=ci_prob,
+            ),
+        ],
+    )
+    sex_covariate.write_coefficients(
+        output_dir, {"beta_sex_u": beta_u, "beta_sex_q": beta_q}, ci_prob=ci_prob
     )
 
 

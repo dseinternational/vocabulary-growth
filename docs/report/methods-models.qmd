@@ -405,13 +405,36 @@ The remedy is to pin the departure. In the anchored models two rules hold in eve
 
 VG10 is VG09 with this device and no other change, introduced when child offsets on the production ratio exposed the problem. VG15, VG16 and the typically developing multilevel models carry it for the same reason, and every model derived from VG10 or VG13 inherits it. The earlier development steps -- VG05, VG07 to VG09 and VG14 -- predate it and are kept as they were, because the one-change-at-a-time ladder is what shows what the device contributes.
 
+## Sex {#sec-sex-covariate}
+
+<!--
+Section drafted by an LLM-based AI tool (Claude Code/Opus 5), 2026-09-13, for
+the sex covariate the reporting models carry from that date (issue #324). The
+evidence figures are from notes/202609041206-sex-differences-in-vocabulary.md.
+-->
+
+Girls and boys of the same age differ a little in the vocabulary their parents report. Before any model carried sex, regressions fitted outside the models found girls ahead by about 0.2 logits on words understood and about 0.35 on words spoken, of similar size in the Down syndrome and typically developing pools, with no detectable change in the difference with age on the logit scale; against the models' own child spreads that is about 1% of the variation between children. It is small beside how much children differ, but large enough to change the typical count quoted for a child, and the typically developing norms for these checklists are published separately for girls and boys for that reason.
+
+The models whose numbers are reported (@sec-models-of-record) therefore carry sex as a covariate; the development steps do not. Each child $j$ has $x_j = +\tfrac{1}{2}$ for a girl, $x_j = -\tfrac{1}{2}$ for a boy and $x_j = 0$ where sex is not recorded, and it enters each trajectory's predictor on the logit scale beside the offsets above,
+
+$$
+f_\bullet(z_i) \;\to\; f_\bullet(z_i) + \delta^{\text{study}}_{\bullet,\,s(i)} + \delta^{\text{subj}}_{\bullet,\,j(i)} + \beta^{\text{sex}}_\bullet\, x_{j(i)},
+\qquad \beta^{\text{sex}}_\bullet \sim \mathrm{Normal}(0,\, 0.5),
+$$
+
+so $\beta^{\text{sex}}_\bullet$ is the difference between girls and boys in logits, the same at every age. A difference that is constant on the logit scale still widens in words as vocabulary grows, which is the widening gap reported in the literature.
+
+**No administration is dropped for want of a recorded sex.** In the Down syndrome pool sex is recorded by whole studies: eight of the fifteen record it for every child and seven for none. A child of unrecorded sex sits at the midpoint between girls and boys, and the study offsets absorb whatever mix of girls and boys the other seven studies hold, so the coefficients are estimated from the studies that record sex, on the assumption that the difference is the same in the others. In the typically developing data sex is missing only for VG11, for about 5% of its children, nearly all of them in the one dataset that records none; there the study offsets do the same work, and the handful of children missing within otherwise recorded datasets are assumed to be missing for reasons unrelated to sex. In VG15 and the models built on it, the coefficients also enter the word-level compositions of @sec-speech-sign-association, unlike the child offsets, so $\psi$ describes the association for a child of given sex.
+
+**The reported population curves are drawn at the midpoint**, so they describe a sex-balanced child rather than the pool's own mix of girls and boys, and each model's technical report gives girls' and boys' expected counts either side of them, with single-child ranges where the model draws a new child.
+
 ## Child-level structure {#sec-child-structure}
 
 A child's offset in the multilevel models is a single constant per trajectory, and that carries two restrictions. Every child's curve is parallel to the population's on the logit scale, so a child who is behind cannot also be catching up. And a child's offsets on different trajectories are drawn independently, so knowing that a child understands more than most says nothing about whether they say more of what they understand. Neither restriction is innocent, and the models in this section relax them one at a time. VG20, and its typically developing counterpart VG23, relax the second; VG19 relaxes the first; VG22 relaxes both together. Each is a refinement of VG10 or VG13 that contains its parent as a special case, so the data are free to answer 'no change'. VG16 is different in kind: it extends VG09 with a predictor rather than a random effect, and asks a different question.
 
 ### Correlated child effects
 
-VG10 draws each child's two offsets -- on the proportion understood and on the production ratio -- independently. That is an assumption, and a testable one: are children who understand more for their age also more, or less, likely to say what they understand? **VG20** frees exactly one parameter, the correlation $\rho_{uq}$ between the two offsets. Its prior is centred on zero and gently favours small values, so a correlation has to be evidenced by the data rather than assumed.[^lkj] VG10 is the special case $\rho_{uq} = 0$, and the two models differ in nothing else. Because the correlation acts at the child level, the population curves are essentially unmoved by it; what changes is prediction for individual children, whose two offsets now move together.
+VG10 draws each child's two offsets -- on the proportion understood and on the production ratio -- independently. That is an assumption, and a testable one: are children who understand more for their age also more, or less, likely to say what they understand? **VG20** frees exactly one parameter, the correlation $\rho_{uq}$ between the two offsets. Its prior is centred on zero and gently favours small values, so a correlation has to be evidenced by the data rather than assumed.[^lkj] VG10 is the special case $\rho_{uq} = 0$, and apart from the sex covariate VG20 carries as a reporting model (@sec-sex-covariate) the two models differ in nothing else. Because the correlation acts at the child level, the population curves are essentially unmoved by it; what changes is prediction for individual children, whose two offsets now move together.
 
 [^lkj]: An LKJ prior with $\eta = 2$, which for two effects places a $\mathrm{Beta}(2, 2)$ distribution on $(\rho_{uq} + 1)/2$.
 

@@ -43,7 +43,7 @@ import pandas as pd
 import pymc as pm
 
 import vocab_growth.data_utils as vocab_data_utils
-from vocab_growth.models import subject_effects
+from vocab_growth.models import sex_covariate, subject_effects
 from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -147,20 +147,22 @@ def build_bivariate_re_analysis_frame(
     ):
         columns = columns + ["survey_vocab_max"]
 
-    # Sex-shift variant (exploratory, issue #295): carry the recorded sex and,
-    # below, keep only the administrations that have one. Read through
-    # `getattr` because the field lives on `BivariateSexShiftModelDefinition`,
-    # a sibling subclass no registered model instantiates, so every model of
-    # record takes the `False` branch and its frame is untouched. Down syndrome
-    # only: the Wordbank query never produces this column, and the variant is a
-    # question about the Down syndrome pool.
-    sex_known_only = bool(getattr(definition, "sex_known_only", False))
-    if sex_known_only:
-        if definition.population is not vocab_data_utils.Population.DOWN_SYNDROME:
-            raise ValueError(
-                "sex_known_only applies to the Down syndrome pool only; the "
-                f"typically developing frame carries no sex column ({definition.model_id})."
-            )
+    # Sex (#324). The covariate carries the recorded sex and keeps every row;
+    # `sex_known_only`, the control arm, additionally keeps only the
+    # administrations that have one. A definition with neither never loads the
+    # column, so its frame is untouched. The restriction is a Down syndrome
+    # question: in that pool missingness is exactly study-level, which is what
+    # lets it be compared with a leave-studies-out arm, and in the Wordbank pool
+    # it is not.
+    restrict_to_known_sex = sex_covariate.sex_known_only(definition)
+    if restrict_to_known_sex and (
+        definition.population is not vocab_data_utils.Population.DOWN_SYNDROME
+    ):
+        raise ValueError(
+            "sex_known_only applies to the Down syndrome pool only; in the typically "
+            f"developing pool sex is missing within studies ({definition.model_id})."
+        )
+    if sex_covariate.needs_sex_column(definition):
         columns = columns + ["sex"]
 
     df = vocab_data_utils.load_data(
@@ -198,7 +200,7 @@ def build_bivariate_re_analysis_frame(
             )
         df = df[keep]
     sex_unknown_rows_excluded = 0
-    if sex_known_only:
+    if restrict_to_known_sex:
         # Row-wise rather than child-wise: sex is recorded per administration in
         # the source files. On the prepared database the restriction is exactly
         # study-level (a study records sex for every row or for none), which is
@@ -218,10 +220,10 @@ def build_bivariate_re_analysis_frame(
         sex_unknown_rows_excluded = int((~keep).sum())
         if sex_unknown_rows_excluded == 0:
             raise ValueError(
-                "sex_known_only removed no rows. Two fifths of the Down syndrome "
-                "pool has no recorded sex (seven of its fifteen studies, 711 of "
-                "VG20's 1,708 rows), so a restriction that removes nothing is "
-                "reading the wrong column or the wrong database."
+                "sex_known_only removed no rows. Seven of the Down syndrome pool's "
+                "fifteen studies record no sex (711 of VG20's 1,708 rows, 41% of its "
+                "children), so a restriction that removes nothing is reading the "
+                "wrong column or the wrong database."
             )
         df = df[keep]
         # Sex is a child-level covariate. Refuse a frame in which a retained
@@ -382,7 +384,7 @@ def prepare_bivariate_re_data(
                 definition.max_age_months
             ),
         ))
-    if getattr(definition, "sex_known_only", False):
+    if sex_covariate.sex_known_only(definition):
         counts.append(
             (
                 "Rows without recorded sex excluded (of loaded rows, before the "
@@ -390,11 +392,15 @@ def prepare_bivariate_re_data(
                 info["sex_unknown_rows_excluded"],
             )
         )
-        by_sex = analysis_df.drop_duplicates(["study", "subject_id"])["sex"].value_counts()
+    if sex_covariate.needs_sex_column(definition) and "subject_id" in analysis_df.columns:
+        # Printed because the unrecorded count is the size of the assumption the
+        # covariate design makes: those children sit at the sex midpoint.
+        children = analysis_df.drop_duplicates(["study", "subject_id"])["sex"]
         counts.append(
             (
-                "Children by sex (girls / boys)",
-                f"{int(by_sex.get('F', 0))} / {int(by_sex.get('M', 0))}",
+                "Children by sex (girls / boys / unrecorded)",
+                f"{int((children == 'F').sum())} / {int((children == 'M').sum())} / "
+                f"{int(children.isna().sum())}",
             )
         )
     key_value_table("Observation counts", counts)
@@ -487,24 +493,32 @@ def build_model_graph(
             observations.spoken_spec.is_conditional,
         )
 
-    # Centring sex at +/-1/2 makes zero the midpoint on the logit scale.
-    # Its inverse logit is not generally the average of the two probabilities.
-    sex_sigma = getattr(definition, "sex_effect_sigma", None)
+    # Sex (#324): girls +1/2, boys -1/2, unrecorded 0. Zero is the midpoint on
+    # the logit scale; its inverse logit is not generally the average of the two
+    # probabilities. A row of unrecorded sex is refused only under the
+    # `sex_known_only` restriction, which exists to guarantee there are none.
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
     use_sex_effect = sex_sigma is not None
     if use_sex_effect:
-        if not getattr(definition, "sex_known_only", False):
-            raise ValueError(
-                "sex_effect_sigma needs sex_known_only: a coefficient on a covariate "
-                "a quarter of the rows lack has nothing to multiply."
-            )
-        x_sex = sex_contrast_codes(analysis_df)
-        n_girl_rows = int((x_sex > 0).sum())
+        x_sex = sex_contrast_codes(
+            analysis_df, allow_unknown=not sex_covariate.sex_known_only(definition)
+        )
         build_report.messages.append(
-            f"Sex shift: {n_girl_rows} girl rows (+1/2) and {n - n_girl_rows} boy "
-            f"rows (-1/2); beta_sex_u, beta_sex_q ~ Normal(0, {sex_sigma:g})."
+            f"Sex covariate: {int((x_sex > 0).sum())} girl rows (+1/2), "
+            f"{int((x_sex < 0).sum())} boy rows (-1/2), {int((x_sex == 0).sum())} "
+            f"rows of unrecorded sex (0); beta_sex_u, beta_sex_q ~ Normal(0, {sex_sigma:g})."
         )
 
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
+
+    # Per-study age slopes (#240 item 5), measured in years from the GP anchor
+    # age, or from the slope anchors' midpoint where the GP is not anchored.
+    study_slope_sigma = getattr(definition, "study_age_slope_sigma", None)
+    study_slope_reference = (
+        float(definition.gp_anchor_age_months)
+        if definition.gp_anchor_age_months is not None
+        else float(np.mean(config.slope_anchors))
+    )
 
     build_cfg: list[tuple[str, object]] = [
         ("Total observations", n),
@@ -523,6 +537,13 @@ def build_model_graph(
     ]
     if use_subject_codes:
         build_cfg.append(("n_subjects", observations.n_subjects))
+    if study_slope_sigma is not None:
+        build_cfg.append(
+            (
+                "Study age slopes (per year, from months)",
+                f"HalfNormal({study_slope_sigma:g}), from {study_slope_reference:g}",
+            )
+        )
     build_cfg.extend(
         [
             ("Age mean (months)", X_obs_mean),
@@ -727,6 +748,20 @@ def build_model_graph(
             "delta_q", scale=tau_q, n_studies=observations.n_studies
         )
 
+        # Per-study age slopes (#240 item 5), emitted only when the definition
+        # sets the field so every other graph is unchanged. One zero-sum slope per
+        # study on each trajectory, each block with its own scale.
+        if study_slope_sigma is not None:
+            years_from_reference = (X_obs.flatten() - study_slope_reference) / 12.0
+            tau_u_slope = pm.HalfNormal("tau_u_slope", sigma=study_slope_sigma)
+            delta_u_slope = zero_sum_study_offsets(
+                "delta_u_slope", scale=tau_u_slope, n_studies=observations.n_studies
+            )
+            tau_q_slope = pm.HalfNormal("tau_q_slope", sigma=study_slope_sigma)
+            delta_q_slope = zero_sum_study_offsets(
+                "delta_q_slope", scale=tau_q_slope, n_studies=observations.n_studies
+            )
+
         child_effects = build_bivariate_child_effects(
             definition,
             plan,
@@ -739,13 +774,13 @@ def build_model_graph(
         )
 
         # ============================================================
-        # Sex shift (exploratory VG20 variant, issue #295)
+        # Sex covariate (issue #324)
         # ============================================================
 
-        # Emitted only when the definition carries the field, so the graphs of
-        # the models of record are unchanged. `beta_sex_*` read as the
-        # girl-minus-boy difference in logits; the contrast is stored as data so
-        # a reader of the trace can recover which rows were which.
+        # Emitted only when the definition sets the field, so the graph of every
+        # model without it is unchanged. `beta_sex_*` read as the girl-minus-boy
+        # difference in logits; the contrast is stored as data so a reader of the
+        # trace can recover which rows were which, including the zeros.
         if use_sex_effect:
             x_sex_data = pm.Data("x_sex", x_sex, dims=("obs_id",))
             beta_sex_u = pm.Normal("beta_sex_u", mu=0.0, sigma=sex_sigma)
@@ -759,6 +794,8 @@ def build_model_graph(
         f_u_obs_re = (
             f_u_all[i_obs0:i_obs1] + delta_u[study_obs] + child_effects.understood
         )
+        if study_slope_sigma is not None:
+            f_u_obs_re = f_u_obs_re + delta_u_slope[study_obs] * years_from_reference
         if use_sex_effect:
             # Before the cross-lag block reads `f_u_obs_re`, so a child's
             # expected prior-wave logit would include their sex shift.
@@ -798,6 +835,8 @@ def build_model_graph(
         )
         if use_sex_effect:
             h_obs_re = h_obs_re + beta_sex_q * x_sex_data
+        if study_slope_sigma is not None:
+            h_obs_re = h_obs_re + delta_q_slope[study_obs] * years_from_reference
         q_obs = pm.Deterministic("q_obs", pm.math.sigmoid(h_obs_re), dims=("obs_id",))
         _ = pm.Deterministic("h_obs", h_all[i_obs0:i_obs1], dims=("obs_id",))
 

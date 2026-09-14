@@ -173,6 +173,9 @@ _ANCHORED_OUTCOMES = {
     # VG24 and inherits the same pair again (#297).
     "vg24": {"kappa_u", "kappa_s"},
     "vg25": {"kappa_u", "kappa_s"},
+    # VG26 derives from VG21 and shares its nested prior blocks outright, so its
+    # anchor ages are VG21's (12, 20) rather than VG13's.
+    "vg26": {"kappa_u", "kappa_s"},
 }
 
 

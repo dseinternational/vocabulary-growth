@@ -235,6 +235,20 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ("tau_subj_q", "Between-child SD, production ratio $q$", "tau_subj_q_sigma", "odds"),
     ("tau_subj_sign", "Between-child SD, signing", "tau_subj_sign_sigma", "odds"),
     ("tau_psi", "Between-study SD of the sign–speech association", "tau_psi_sigma", "odds"),
+    # The per-study age-slope sensitivity (#240 item 5); present only in its arms.
+    ("tau_slope", "Between-study SD of age slopes", "study_age_slope_sigma", "study_slope"),
+    (
+        "tau_u_slope",
+        "Between-study SD of age slopes, understood",
+        "study_age_slope_sigma",
+        "study_slope",
+    ),
+    (
+        "tau_q_slope",
+        "Between-study SD of age slopes, production ratio $q$",
+        "study_age_slope_sigma",
+        "study_slope",
+    ),
     # VG20's correlation had no entry here at all, so its priors table omitted
     # the one prior the model exists to place (#233). It is a top-level scalar
     # field rather than part of a subject-scale block, so it needs its own kind
@@ -264,6 +278,12 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
         "subject_re_correlation_eta",
         "lkj",
     ),
+    # The sex covariate (#324). One row per coefficient, each reading its prior
+    # from the one shared field; a model shows only the ones it samples.
+    ("beta_sex", "Girl–boy difference", "sex_effect_sigma", "sex"),
+    ("beta_sex_u", "Girl–boy difference, understood", "sex_effect_sigma", "sex"),
+    ("beta_sex_q", "Girl–boy difference, production ratio $q$", "sex_effect_sigma", "sex"),
+    ("beta_sex_sign", "Girl–boy difference, signed ratio", "sex_effect_sigma", "sex"),
     ("log_psi", "Sign–speech association $\\psi$ (log scale)", "log_psi", "log_psi"),
     ("beta_lag", "Cross-lag coefficient $\\beta$", "beta_lag", "lag"),
     # VG25 (#297). Its own row rather than a shared one: the two lags read
@@ -505,6 +525,30 @@ def _prior_row(
             f"LKJ({eta:g}), i.e. $(\\rho_{{{symbol}}}+1)/2 \\sim$ "
             f"Beta({shape:g}, {shape:g})",
             f"centred on zero and {emphasis}; 5–95% {lo:+.2f} to {hi:+.2f}",
+        )
+
+    if kind == "study_slope":
+        sigma = definition.get(stem)
+        if sigma is None:
+            return None
+        median = float(stats.halfnorm.ppf(0.5, scale=sigma))
+        return (
+            description,
+            f"HalfNormal({sigma:g})",
+            f"median {median:.2f} logits per year of age, zero-sum over studies; "
+            "zero is the intercept-only model",
+        )
+
+    if kind == "sex":
+        sigma = definition.get(stem)
+        if sigma is None:
+            return None
+        hi = 1.598 * float(sigma)  # 89% equal-tailed, centred on zero
+        return (
+            description,
+            f"Normal(0, {sigma:g})",
+            f"logit scale, girls minus boys; centred on no difference, 89% "
+            f"{-hi:+.2f} to {hi:+.2f} (odds ×{math.exp(-hi):.2f} to ×{math.exp(hi):.2f})",
         )
 
     if kind == "log_multiplier":
@@ -908,6 +952,33 @@ def _prior_rows(
         name.startswith("rho_") for name in covered
     ):
         covered.append("subject_re_corr")
+
+    # Proposal A1 under the variance partition (VG11 and VG12's
+    # `a1-tau-age-varying`, #240 item 1). The partition makes the young-anchor
+    # child scale a function of the budget, so the `tau_subject` row is inert and
+    # the subject-scale block row never renders; the one prior the variant adds
+    # is the ratio, and it is stated here rather than left as a gap.
+    scale_spec = definition.get("tau_subject_sigma")
+    if (
+        definition.get("subject_variance_partition")
+        and isinstance(scale_spec, Mapping)
+        and "log_ratio_sigma" in scale_spec
+        and (not present or "log_tau_subject_ratio" in present)
+    ):
+        ratio_sigma = float(scale_spec["log_ratio_sigma"])
+        ages = scale_spec.get("anchor_ages") or ()
+        span = f" between {ages[0]:g} and {ages[1]:g} months" if len(ages) == 2 else ""
+        rows.append(
+            (
+                "Between-child SD — age-varying ratio",
+                f"$\\log(\\tau_{{old}}/\\tau_{{young}}) \\sim$ Normal(0, {ratio_sigma:g})",
+                f"the young-anchor scale is the variance partition's{span}; zero "
+                "widening is the prior centre, and dispersion is held flat in age",
+            )
+        )
+        covered.extend(
+            name for name in ("log_tau_subject_ratio", "tau_subject_old") if name in present
+        )
 
     rows.extend(factor_rows)
     covered.extend(factor_covered)
@@ -3228,3 +3299,245 @@ def render_reference_child_calibration(directory: str = ".") -> None:
         "what remains is not study coverage. Read every milestone age on this page as the "
         "reference child's, and the study fans figure for where each study sits."
     )
+
+
+# ---------------------------------------------------------------------------
+# Sex (issue #324)
+# ---------------------------------------------------------------------------
+
+_SEX_COEFFICIENT_LABELS = {
+    "beta_sex": "Girl–boy difference",
+    "beta_sex_u": "Girl–boy difference, understood",
+    "beta_sex_q": "Girl–boy difference, production ratio $q$",
+    "beta_sex_sign": "Girl–boy difference, signed ratio",
+}
+
+
+def render_sex_section(
+    directory: str = ".", *, ages: tuple[int, ...] | None = None
+) -> None:
+    """Print the sex covariate's coefficients, the girl–boy gap and by-sex ranges.
+
+    Reads ``posterior_summary_sex_effect.csv``, ``posterior_summary_sex_difference.csv``
+    and the ``posterior_summary*_by_sex.csv`` tables the engines write at fit time,
+    so it describes this fit only. ``ages`` restricts the gap and range tables to
+    those query ages; ``None`` shows every reported one. A fit without the covariate
+    says so rather than printing an empty section.
+    """
+    effects = _read(directory, "posterior_summary_sex_effect")
+    if effects is None:
+        print(
+            "_This fit carries no sex covariate (`posterior_summary_sex_effect.csv` is "
+            "absent), so there are no by-sex predictions to show._"
+        )
+        return
+
+    print("| Coefficient | Median (logit) | 89% interval | Odds ratio, girls to boys | P(girls ahead) |")
+    print("| --- | ---: | ---: | ---: | ---: |")
+    for _, row in effects.iterrows():
+        label = _SEX_COEFFICIENT_LABELS.get(row["parameter"], row["parameter"])
+        print(
+            f"| {label} (`{row['parameter']}`) | {row['median']:+.2f} | "
+            f"{row['ci_lo']:+.2f} to {row['ci_hi']:+.2f} | ×{row['odds_ratio_median']:.2f} | "
+            f"{row['P_positive']:.2f} |"
+        )
+    print()
+    differences = _read(directory, "posterior_summary_sex_difference")
+    # A single-outcome engine names its one outcome in the difference table; that
+    # is the only record of whether its coefficient is on words understood or said.
+    single_outcome = (
+        str(differences["outcome"].iloc[0])
+        if differences is not None and differences["outcome"].nunique() == 1
+        else None
+    )
+    parameters = set(effects["parameter"])
+    meanings = []
+    if "beta_sex" in parameters:
+        verb = {"understood": "understood", "spoken": "said", "signed": "signed"}.get(
+            single_outcome or "", "known"
+        )
+        meanings.append(f"the odds that a given word is {verb}")
+    if "beta_sex_u" in parameters:
+        meanings.append("for comprehension, the odds that a given word is understood")
+    if parameters & {"beta_sex_q", "beta_sex_sign"}:
+        meanings.append("for a ratio, the odds that a word understood is also said or signed")
+    print(
+        ": Each coefficient is the difference between girls and boys on the logit scale, "
+        "constant in age, estimated from the children whose sex is recorded. The odds "
+        "ratio is its exponential"
+        + (": " + "; ".join(meanings) if meanings else "")
+        + "."
+    )
+    print()
+
+    if differences is not None:
+        wanted = differences
+        if ages is not None:
+            wanted = differences[differences["age_months"].round().isin(ages)]
+        print("| Outcome | Age (months) | Girls | Boys | Difference | 89% interval | P(girls ahead) |")
+        print("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+        for _, row in wanted.iterrows():
+            # One precision per row, so a gap of a fraction of a word at the youngest
+            # ages does not print as "+0 to +0" beside a probability near one.
+            digits = _word_digits(
+                row["Ey_girls_median"], row["Ey_boys_median"],
+                row["Ey_difference_ci_lo"], row["Ey_difference_ci_hi"],
+            )
+            print(
+                f"| {row['outcome']} | {row['age_months']:.0f} | "
+                f"{row['Ey_girls_median']:.{digits}f} | {row['Ey_boys_median']:.{digits}f} | "
+                f"{_signed_words(row['Ey_difference_median'], digits)} | "
+                f"{_signed_words(row['Ey_difference_ci_lo'], digits)} to "
+                f"{_signed_words(row['Ey_difference_ci_hi'], digits)} | "
+                f"{row['P_girls_gt_boys']:.2f} |"
+            )
+        print()
+        print(
+            ": Expected words for the reference child — zero study and child effects — as a "
+            "girl and as a boy, and the difference between them, computed draw by draw. A "
+            "constant logit difference opens up in words as vocabulary grows, which is why "
+            "the gap widens with age without any age-by-sex term in the model."
+        )
+        print()
+
+    # One row per outcome and age, girls and boys side by side: the comparison the
+    # table exists for, which a block per sex made a reader scroll to make.
+    paired: dict[tuple[str, int], dict[str, object]] = {}
+    for suffix, label in (("", None), ("_u", "understood"), ("_s", "spoken"), ("_sign", "signed")):
+        table = _read(directory, f"posterior_summary{suffix}_by_sex")
+        if table is None or not {"Y_median", "Y_ci_lo", "Y_ci_hi"} <= set(table.columns):
+            continue
+        for _, row in table.iterrows():
+            age = int(round(float(row["age_months"])))
+            if ages is not None and age not in ages:
+                continue
+            paired.setdefault((label or single_outcome or "words", age), {})[str(row["sex"])] = row
+    if paired:
+        levels = [level for level, _ in _sex_levels()]
+
+        def child(row) -> list[str]:
+            if row is None:
+                return ["—", "—"]
+            return [f"{row['Y_median']:.0f}", f"{row['Y_ci_lo']:.0f}–{row['Y_ci_hi']:.0f}"]
+
+        header = ["Outcome", "Age (months)"]
+        for level in levels:
+            singular = level.removesuffix("s")
+            header += [f"A new {singular}", f"Nine in ten {level}"]
+        print("| " + " | ".join(header) + " |")
+        print("| --- | ---: |" + " ---: | ---: |" * len(levels))
+        for (label, age), by_level in paired.items():
+            cells = [label, f"{age}"]
+            for level in levels:
+                cells += child(by_level.get(level))
+            print("| " + " | ".join(cells) + " |")
+        print()
+        print(
+            ": Where one more child of that age would fall, as a girl and as a boy: the median "
+            "and the range nine in ten such children are expected to fall in. Each draw "
+            "samples one new child's own effect and gives that child both sexes, then draws "
+            "an administration's count for each, so the two columns differ by the sex "
+            "coefficient and by the count's own administration-to-administration noise — "
+            "not by being different children."
+        )
+        print()
+
+    print(
+        "::: {.callout-note title=\"How sex enters this model\"}\n\n"
+        "Sex is a covariate, not a restriction: no administration is dropped. A child "
+        "whose sex is not recorded sits at the midpoint between girls and boys on the "
+        "logit scale, which is also where every population figure on this page is "
+        "drawn, so those figures describe a sex-balanced child rather than this pool's "
+        "own mix of girls and boys. "
+        + _sex_coverage_sentences(directory)
+        + " The difference is also assumed constant on the logit scale across age.\n:::"
+    )
+
+
+def _sex_levels() -> tuple[tuple[str, float], ...]:
+    from vocab_growth.models.sex_covariate import SEX_LEVELS
+
+    return SEX_LEVELS
+
+
+def _word_digits(*values) -> int:
+    """Decimals for a row of word counts: one while every value is under ten words."""
+    return 1 if all(abs(round(float(value), 1)) < 10 for value in values) else 0
+
+
+def _signed_words(value, digits: int) -> str:
+    """A signed word difference at ``digits`` decimals, a rounded zero printing as ``0``.
+
+    Without the zero case a lower bound of -0.3 words printed as ``-0``.
+    """
+    rounded = round(float(value), digits)
+    return "0" if rounded == 0 else f"{rounded:+.{digits}f}"
+
+
+def _sex_coverage_sentences(directory: str) -> str:
+    """Where this fit's frame records sex, for the section's closing callout.
+
+    Read from the frame rather than written into the callout, because the carrying
+    models span both pools and record sex differently: the Down syndrome pool by
+    whole studies, VG11's typically developing frame by one study that records none
+    and two that miss a handful of children. The frame is used only if it still
+    hashes to the one the fit recorded.
+    """
+    frame, reason = _verified_frame(read_manifest(directory))
+    if frame is None:
+        return f"Where this fit's frame records sex is not shown because {reason}."
+    return sex_coverage_sentences(frame)
+
+
+def sex_coverage_sentences(frame) -> str:
+    """Describe sex coverage by child and by study in an analysis frame.
+
+    Children are counted once per study and child code. A study that records no sex
+    leans on its study effect to absorb its mix of girls and boys; a study that
+    misses some children places those children at the midpoint beside coded ones,
+    which is only sound if whether sex was recorded is unrelated to sex. The two
+    are said separately because they rest on different assumptions.
+    """
+    if not {"study", "subject_id", "sex"} <= set(frame.columns):
+        return "This fit's frame carries no per-child sex column, so its coverage is not shown."
+    children = frame.drop_duplicates(["study", "subject_id"])
+    recorded = children["sex"].notna()
+    total = len(children)
+    girls = int((children["sex"] == "F").sum())
+    boys = int((children["sex"] == "M").sum())
+    if bool(recorded.all()):
+        return (
+            f"Every child in this fit's frame has sex recorded ({girls:,} girls, {boys:,} "
+            f"boys), so the coefficients rest on all {total:,} children."
+        )
+    by_study = recorded.groupby(children["study"]).agg(["sum", "size"])
+    none = by_study[by_study["sum"] == 0]
+    partial = by_study[(by_study["sum"] > 0) & (by_study["sum"] < by_study["size"])]
+    recording = int((by_study["sum"] > 0).sum())
+    sentences = [
+        f"Sex is recorded for {int(recorded.sum()):,} of this fit's {total:,} children "
+        f"({girls:,} girls, {boys:,} boys), from {recording} of its {len(by_study)} studies."
+    ]
+    if len(none):
+        names = ", ".join(f"`{study}`" for study in none.index)
+        count = int(none["size"].sum())
+        if len(none) == 1:
+            which, lean = "The study that records", "leans on its study effect to absorb its"
+        else:
+            which, lean = f"The {len(none)} studies that record", "lean on their study effects to absorb their"
+        sentences.append(
+            f"{which} none ({names}; {count:,} children) {lean} mix of girls and boys, and "
+            "the coefficients assume the difference there is the one the recording studies show."
+        )
+    if len(partial):
+        listed = [
+            f"`{study}` ({int(row['size'] - row['sum']):,} of {int(row['size']):,})"
+            for study, row in partial.iterrows()
+        ]
+        names = listed[0] if len(listed) == 1 else ", ".join(listed[:-1]) + " and " + listed[-1]
+        sentences.append(
+            f"Sex is missing for some children only in {names}; those children sit at the "
+            "midpoint beside coded children of the same study, which is sound only if whether "
+            "sex was recorded is unrelated to sex."
+        )
+    return " ".join(sentences)

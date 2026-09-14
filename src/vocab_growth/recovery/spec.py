@@ -395,6 +395,10 @@ _TARGETS: dict[str, EngineRecoverySpec] = {
     "vg21": BIVARIATE_RE_SPEC,
     "vg22": BIVARIATE_RE_SPEC,
     "vg23": BIVARIATE_RE_SPEC,
+    # VG26 is to VG21 what VG23 is to VG13, on the same engine and the same class
+    # as VG20 and VG23, so the same argument holds: the correlation is a prior on
+    # the pair of child deviates, and `rho_uq` is picked up by dimension.
+    "vg26": BIVARIATE_RE_SPEC,
     # VG24 is to VG15 what VG20 is to VG10, and the argument carries across
     # unchanged: the correlation changes the PRIOR on a child's three deviates,
     # not how any count is drawn, and the simulator samples the observation nodes

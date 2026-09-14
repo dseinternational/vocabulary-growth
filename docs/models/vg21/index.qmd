@@ -622,6 +622,18 @@ else:
 
 Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
+## By sex {#sec-sex}
+
+This model carries sex as a covariate, so its predictions can be read for a girl or a boy of a given age as well as for a child of unrecorded sex ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)). Every other figure and table on this page is the sex-balanced reference child; the tables below put girls and boys either side of it.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sex_section
+
+render_sex_section()
+```
+
 ## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.
