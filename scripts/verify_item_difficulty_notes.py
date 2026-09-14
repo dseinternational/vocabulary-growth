@@ -7,10 +7,10 @@ Verifies the numbers in
 ``notes/202607261540-item-difficulty-and-the-aggregate-likelihood.md``
 (§§2, 3.3, 4, 5, 8, 9, 10, 11 — the consolidation of two earlier notes whose
 figures this script originally pinned; their git history holds the trail) from
-the raw CSVs and, where present, the fitted VG10 output. Each check prints
-CLAIM vs COMPUTED; the script exits non-zero if any executed check fails.
-Sections that need fitted output are skipped (not failed) when the output root
-has no VG10 directory.
+the raw CSVs and, where present, the fitted output of the Down syndrome model of
+record (``FITTED_MODEL``). Each check prints CLAIM vs COMPUTED; the script exits
+non-zero if any executed check fails. Sections that need fitted output are
+skipped (not failed) when the output root has no directory for that model.
 
 Run from anywhere::
 
@@ -46,6 +46,14 @@ N_ITEMS = int(STRATUM_SIZES.sum())
 # 810-item reference scale, which the denominator decision leaves alone.
 MODEL_N_TRIALS = 810
 SIM_SEED = 20260726
+# The fit §3.3 and §4 read. VG10 until 2026-09-14, when the study owner re-based
+# both sections on VG20, the Down syndrome model of record (note §15 item 12).
+# VG20's point values are reported, not pinned, until the VM refit produces a fit
+# current on its definition and frame: the 2026-09-07 fit predates the sex
+# covariate and the uk_01 comprehension correction, so its digits will move.
+# What is checked meanwhile is the argument each section makes -- a refit could
+# overturn that, and a change of digits cannot.
+FITTED_MODEL = "VG20"
 
 _failures: list[str] = []
 
@@ -59,6 +67,11 @@ def check(label: str, computed, claim, tol: float = 0.0) -> None:
     print(f"  [{status}] {label}: computed {np.round(computed_arr, 4).tolist()} vs claim {claim_arr.tolist()}")
     if not ok:
         _failures.append(label)
+
+
+def report(label: str, computed) -> None:
+    """Print a value the note quotes provisionally, without pinning it."""
+    print(f"  [info] {label}: {np.round(np.asarray(computed, dtype=float), 4).tolist()} (reported, not pinned)")
 
 
 def check_exchangeability(ie: pd.DataFrame) -> None:
@@ -210,64 +223,60 @@ def check_data_defects(ie: pd.DataFrame, uk: pd.DataFrame) -> None:
 
 
 def check_fitted_dispersion(output_root: Path) -> None:
-    print("§4 — VG10 fitted dispersion (skipped if no fitted output)")
-    vg10_dirs = sorted((output_root / "models").glob("VG10-*")) if (output_root / "models").is_dir() else []
-    if not vg10_dirs:
-        print("  [skip] no VG10 output found under", output_root / "models")
+    print(f"§4 — {FITTED_MODEL} fitted dispersion (skipped if no fitted output)")
+    fit_dirs = sorted((output_root / "models").glob(f"{FITTED_MODEL}-*")) if (output_root / "models").is_dir() else []
+    if not fit_dirs:
+        print(f"  [skip] no {FITTED_MODEL} output found under", output_root / "models")
         return
-    vg10 = vg10_dirs[0]
-    ages = np.array([12, 24, 30, 48, 66])
+    fit = fit_dirs[0]
+    ages = np.array([12, 18, 24, 30, 48, 66])
 
-    summary = pd.read_csv(vg10 / "posterior_summary_u.csv")
-    p_fit = np.array([summary.loc[(summary["age_months"] - a).abs().idxmin(), "p_median"] for a in ages])
-    check("fitted p at 12/24/30/48/66", p_fit, [0.0201, 0.1393, 0.2156, 0.3813, 0.5368], tol=0.0005)
+    def at(table: pd.DataFrame, column: str) -> np.ndarray:
+        return np.array([table.loc[(table["age_months"] - a).abs().idxmin(), column] for a in ages])
 
-    kappa_tab = pd.read_csv(vg10 / "posterior_kappa_u.csv")
-    kappa = np.array([kappa_tab.loc[(kappa_tab["age_months"] - a).abs().idxmin(), "kappa_median"] for a in ages])
-    check("fitted kappa (posterior_kappa_u medians)", kappa, [109.64, 65.19, 50.57, 24.69, 13.41], tol=0.02)
-
-    diagnostics = pd.read_csv(vg10 / "diagnostics.csv", index_col=0)
-    tau_subj = float(diagnostics.loc["tau_subj_u", "mean"])
-    check("tau_subj_u posterior mean", tau_subj, 0.797, tol=0.0005)
-
+    p_fit = at(pd.read_csv(fit / "posterior_summary_u.csv"), "p_median")
+    kappa = at(pd.read_csv(fit / "posterior_kappa_u.csv"), "kappa_median")
+    tau_subj = float(pd.read_csv(fit / "diagnostics.csv", index_col=0).loc["tau_subj_u", "mean"])
     residual_sd = 1 / np.sqrt(p_fit * (1 - p_fit) * (kappa + 1))
-    check("implied residual latent SD", residual_sd, [0.678, 0.355, 0.339, 0.407, 0.529], tol=0.002)
-    check("total latent SD with tau_subj_u", np.sqrt(tau_subj**2 + residual_sd**2), [1.046, 0.872, 0.865, 0.894, 0.956], tol=0.002)
+    total_sd = np.sqrt(tau_subj**2 + residual_sd**2)
+    report("ages", ages)
+    report("fitted p (posterior_summary_u medians)", p_fit)
+    report("fitted kappa (posterior_kappa_u medians)", kappa)
+    report("tau_subj_u posterior mean", tau_subj)
+    report("implied residual latent SD", residual_sd)
+    report("total latent SD with tau_subj_u", total_sd)
 
-    # RE-PINNED 2026-08-16 on the study owner's ruling, closing the hold placed
-    # on 2026-08-14. These four and the §3.3 kernel shares below are the note's
-    # *argument* rather than measurements it reports, so they were held failing
-    # until the prose behind them had been ruled on rather than re-pinned by
-    # reflex. Both sections have since been brought into line with the current
-    # fit -- §4 on 08-15, §3.3 on 08-16 -- and the values below are what that
-    # prose now states.
+    # Until 2026-09-14 these were pinned to VG10's August fit (ratio 0.805 over
+    # 12-66 months) and were the note's *argument* rather than measurements it
+    # reports -- which is why the checks below test the argument, not the digits.
     #
-    # What moved and why: mostly the comprehension reporting cap rising 72 -> 84
-    # months on 08-13, which extends `posterior_kappa_u.csv` at both ends. The
-    # fixed-age checks above still reproduce, so the posterior is stable where it
-    # is compared; only the quantities computed *across* the range moved.
-    #
-    # The two sections moved in opposite directions, which is why they were worth
-    # separating before re-pinning. §4's ratio rising 0.52 -> 0.805 *strengthens*
-    # its conclusion: the argument is that kappa's decline must not be read as
-    # children fanning out on the latent scale, because constant latent spread on
-    # a bounded inventory already produces a declining kappa, and 0.805 says
-    # constant spread now accounts for four-fifths of the observed decline rather
-    # than half. §3.3's exposure roughly tripling *weakens* its reassurance, and
-    # the note responds by withdrawing its "order of magnitude below what 613
-    # children can resolve" claim rather than restating it -- that power
-    # calculation was never done, and at a 2.85% shift it is not established.
-    decline_kp1 = np.log((kappa[0] + 1) / (kappa[-1] + 1))
-    predicted = np.log((p_fit[-1] * (1 - p_fit[-1])) / (p_fit[0] * (1 - p_fit[0])))
-    check("log decline in kappa+1", decline_kp1, 2.038, tol=0.005)
-    check("constant-spread prediction", predicted, 2.533, tol=0.005)
-    check("ratio", decline_kp1 / predicted, 0.805, tol=0.005)
-    check("log decline in kappa", np.log(kappa[0] / kappa[-1]), 2.101, tol=0.005)
+    # The ratio is the fitted decline in log(kappa + 1) divided by the decline a
+    # constant latent spread would produce. Read it that way round: below 1,
+    # kappa falls *less* than the level effect alone requires, so the residual
+    # latent spread narrows with age; above 1 it would widen. The 2026-08-16
+    # comment here read 0.805 as "constant spread accounts for four-fifths of the
+    # observed decline", which inverts it. §4's claim that kappa's decline is not
+    # children fanning out needs the ratio below 1 -- not near 1 -- and it depends
+    # strongly on where the range starts (12 months sits below the 18-month
+    # kappa anchor), so it is tested from each start age.
+    end = int(np.where(ages == 66)[0][0])
+    ratios = []
+    for start_age in (12, 18, 24):
+        start = int(np.where(ages == start_age)[0][0])
+        decline = np.log((kappa[start] + 1) / (kappa[end] + 1))
+        predicted = np.log((p_fit[end] * (1 - p_fit[end])) / (p_fit[start] * (1 - p_fit[start])))
+        report(f"{start_age}-66 months: log decline in kappa+1 / constant-spread prediction / ratio", [decline, predicted, decline / predicted])
+        ratios.append(decline / predicted)
+    check("kappa falls less than a constant latent spread requires, from every start age (all ratios < 1)", float(all(r < 1 for r in ratios)), 1.0)
+    early = residual_sd[ages <= 18].min()
+    check("residual latent SD at 48 and 66 months is below its value at 12 and 18 (it does not grow)", float(residual_sd[ages >= 48].max() < early), 1.0)
+    late = total_sd[ages >= 30]
+    check("total latent SD is nearly flat from 30 months (max / min < 1.05)", float(late.max() / late.min() < 1.05), 1.0)
 
-    check_kernel_share(vg10)
+    check_kernel_share(fit)
 
 
-def check_kernel_share(vg10: Path) -> None:
+def check_kernel_share(fit: Path) -> None:
     """Note §3.3: how much total variance the item-exchangeability kernel carries.
 
     Rasch sufficiency means heterogeneous item difficulty can only reach the model
@@ -275,21 +284,26 @@ def check_kernel_share(vg10: Path) -> None:
     It is `1 / VIF` where `VIF = (N + kappa) / (kappa + 1)` is the Beta-Binomial's
     inflation over its Binomial kernel. An earlier draft of the note quoted VG07's
     figures as though they were the model of record's, understating the exposure
-    threefold — hence checking against VG10's own output here.
+    threefold -- hence reading the model of record's own output here. The shares
+    are reported; what is checked is §3.3's claim that the worst case stays under
+    3% of the total standard deviation.
     """
-    print("§3.3 — kernel share of total variance (VG10)")
-    for outcome, share_claim, sd_claim in (("u", [1.13, 14.05], 2.85), ("s", [1.60, 5.80], 1.17)):
-        table = vg10 / f"posterior_kappa_{outcome}.csv"
-        if not table.exists():
-            print(f"  [skip] {table.name} not present")
+    print(f"§3.3 — kernel share of total variance ({FITTED_MODEL})")
+    for outcome in ("u", "s"):
+        table_path = fit / f"posterior_kappa_{outcome}.csv"
+        if not table_path.exists():
+            print(f"  [skip] {table_path.name} not present")
             continue
-        kappa = pd.read_csv(table)["kappa_median"].to_numpy(float)
+        table = pd.read_csv(table_path)
+        kappa = table["kappa_median"].to_numpy(float)
         share = 100.0 * (kappa + 1.0) / (MODEL_N_TRIALS + kappa)
-        check(f"kernel share % ({outcome}, min/max)", [share.min(), share.max()], share_claim, tol=0.01)
+        report(f"kappa range ({outcome}), over ages {table['age_months'].min():.0f}-{table['age_months'].max():.0f}", [kappa.min(), kappa.max()])
+        report(f"kernel share % ({outcome}, min/max)", [share.min(), share.max()])
         # A 40% error in a component carrying `share` of the variance (the
         # underdispersion at a 2-logit difficulty spread) moves the total SD by:
         worst = 100.0 * (1.0 - np.sqrt(1.0 - 0.40 * share.max() / 100.0))
-        check(f"worst-case total SD shift % ({outcome})", worst, sd_claim, tol=0.01)
+        report(f"worst-case total SD shift % ({outcome})", worst)
+        check(f"worst-case total SD shift under 3% ({outcome})", float(worst < 3.0), 1.0)
 
 
 def _pooled_profile(ie: pd.DataFrame) -> np.ndarray:
@@ -346,35 +360,43 @@ def check_link_tables(ie: pd.DataFrame) -> None:
 
 def check_frame_counts(merged: pd.DataFrame) -> None:
     print("§9 and §10 — frame counts and the Edgin anchor")
+    # Re-pinned 2026-09-14 (note §15 item 12): the pool grew with the us_03
+    # ingestion and moved with the masking and withholding rules added since
+    # August (1,636 / 845 / 413 / 432 then).
     with_age = merged.dropna(subset=["age"])
     raw_pairs = with_age.groupby(["study", "subject_id"]).size()
-    check("raw view: observations / children / singletons / repeated", [len(with_age), len(raw_pairs), (raw_pairs == 1).sum(), (raw_pairs > 1).sum()], [1636, 845, 413, 432])
+    check("raw view: observations / children / singletons / repeated", [len(with_age), len(raw_pairs), (raw_pairs == 1).sum(), (raw_pairs > 1).sum()], [1918, 1024, 487, 537])
 
-    fitted = with_age.copy()
-    outcome_cols = ["understood", "spoken", "signed", "produced"]
-    masked = (fitted["study"] == "ie_01") & (fitted["survey_vocab_max"] == 460)
-    fitted.loc[masked, outcome_cols] = np.nan
-    fitted = fitted[~fitted[outcome_cols].isna().all(axis=1)]
-    fit_pairs = fitted.groupby(["study", "subject_id"]).size()
-    check("fitted frame: children / singletons / repeated", [len(fit_pairs), (fit_pairs == 1).sum(), (fit_pairs > 1).sum()], [832, 460, 372])
-
-    # The note's understood-pool figures (§8 item 3, §12 item 6) are counted
-    # through the loader itself: two earlier hand-derived versions of these
-    # counts went stale when masking rules changed under them.
+    # The note's frame and understood-pool figures (§9, §8 item 3, §12 item 6)
+    # are counted through the package itself. Two hand-derived versions of the
+    # understood counts went stale when masking rules changed under them, and so
+    # did a hand-built "fitted frame" here -- the merged CSV with only ie_01's
+    # baseline wave masked -- which by 2026-09-14 counted 1,011 children against
+    # the 943 the model of record actually fits (832 / 460 / 372 in August).
     try:
+        from vocab_growth.analysis_frames import build_analysis_frame
         from vocab_growth.data_utils import load_combined_data
+        from vocab_growth.models.definitions import MODEL_REGISTRY
 
         pool = load_combined_data()
+        key = FITTED_MODEL.lower()
+        frame, _meta = build_analysis_frame(key, MODEL_REGISTRY[key])
     except Exception as error:  # pragma: no cover - environment-dependent
-        print(f"  [skip] loader-derived counts unavailable ({error})")
+        print(f"  [skip] package-derived counts unavailable ({error})")
     else:
+        pairs = frame.groupby(["study", "subject_id"]).size()
+        check(
+            f"{FITTED_MODEL} analysis frame: rows / children / singletons / repeated",
+            [len(frame), len(pairs), (pairs == 1).sum(), (pairs > 1).sum()],
+            [1708, 943, 504, 439],
+        )
         understood = pool[pool["understood"].notna()]
         native = understood[understood["survey_vocab_max"] == 810]
-        check("understood observations after all masking", len(understood), 987)
+        check("understood observations after all masking", len(understood), 1301)
         check(
             "dse-native understood observations / children / sources",
             [len(native), native["subject_id"].nunique(), native["study"].nunique()],
-            [259, 178, 4],
+            [250, 170, 4],
         )
 
     us_01 = merged[merged["study"] == "us_01"]
