@@ -32,8 +32,19 @@ import pandas as pd
 from scipy import optimize, stats
 
 REPO = Path(__file__).resolve().parents[1]
-STRATUM_SIZES = np.array([120, 340, 350])
-N_ITEMS = 810
+# The ie_01 checklists' printed word lists run to 120 / 340 / 350, and each also
+# admits the child's own name, family and pet names, so the maximum achievable
+# counts are 127 / 349 / 353 (settled 2026-08-25). The note's proportions are
+# taken against the achievable sizes, on the study owner's decision of
+# 2026-09-14 (#320): the recorded counts include the proper-noun slots, so only
+# the achievable denominator matches its numerator.
+PRINTED_STRATUM_SIZES = np.array([120, 340, 350])
+STRATUM_SIZES = np.array([127, 349, 353])
+N_ITEMS = int(STRATUM_SIZES.sum())
+# Two different numbers that used to be written the same way. N_ITEMS is the
+# checklists' inventory (829); MODEL_N_TRIALS is every model's `n_trials`, the
+# 810-item reference scale, which the denominator decision leaves alone.
+MODEL_N_TRIALS = 810
 SIM_SEED = 20260726
 
 _failures: list[str] = []
@@ -57,23 +68,28 @@ def check_exchangeability(ie: pd.DataFrame) -> None:
     totals = end_u.sum(axis=1)
     tested = complete & (totals > 0) & (totals < N_ITEMS)
     check("complete follow-up records", complete.sum(), 46)
-    check("records with 0 < T < 810", tested.sum(), 44)
+    check("records with 0 < T < 829", tested.sum(), 44)
 
     counts = end_u[tested]
     T = totals[tested]
     mean_k = np.outer(T, STRATUM_SIZES / N_ITEMS)
     var_k = np.outer(T * (N_ITEMS - T) / (N_ITEMS - 1), (STRATUM_SIZES / N_ITEMS) * (1 - STRATUM_SIZES / N_ITEMS))
     z = (counts - mean_k) / np.sqrt(var_k)
-    check("RMS z, all strata", np.sqrt((z**2).mean()), 9.61, tol=0.005)
-    check("mean z per checklist", z.mean(axis=0), [8.40, 3.00, -9.01], tol=0.005)
+    # Re-pinned 2026-09-14 against the achievable checklist sizes (#320). Under
+    # the printed sizes these read RMS z 9.61, mean z 8.40 / 3.00 / -9.01, a
+    # Checklist 3 deficit in 42 of 44 (p = 1.1e-10), pooled proportions 0.671 /
+    # 0.452 / 0.253 of an overall 0.398, per-child means 0.701 / 0.473 / 0.264
+    # and an outer-checklist spread of 1.8 logits. Every conclusion stands.
+    check("RMS z, all strata", np.sqrt((z**2).mean()), 9.24, tol=0.005)
+    check("mean z per checklist", z.mean(axis=0), [7.72, 2.86, -8.48], tol=0.005)
 
     n = len(T)
     pos1 = int((counts[:, 0] > mean_k[:, 0]).sum())
     neg3 = int((counts[:, 2] < mean_k[:, 2]).sum())
     check("Checklist 1 positive excess", pos1, 37)
-    check("Checklist 3 negative deficit", neg3, 42)
+    check("Checklist 3 negative deficit", neg3, 41)
     check("sign test p, Checklist 1 (1e-6)", stats.binomtest(pos1, n).pvalue / 1e-6, 5.3, tol=0.05)
-    check("sign test p, Checklist 3 (1e-10)", stats.binomtest(neg3, n).pvalue / 1e-10, 1.1, tol=0.05)
+    check("sign test p, Checklist 3 (1e-9)", stats.binomtest(neg3, n).pvalue / 1e-9, 1.6, tol=0.05)
 
     props = counts / STRATUM_SIZES
     monotone = (props[:, 0] >= props[:, 1]) & (props[:, 1] >= props[:, 2])
@@ -89,12 +105,12 @@ def check_exchangeability(ie: pd.DataFrame) -> None:
     check("simulations reaching the observed rate", (rates >= monotone.mean()).sum(), 0)
 
     pooled_46 = end_u[complete]
-    check("pooled proportions over the 46", pooled_46.sum(axis=0) / (complete.sum() * STRATUM_SIZES), [0.671, 0.452, 0.253], tol=0.0005)
-    check("overall pooled proportion", pooled_46.sum() / (complete.sum() * N_ITEMS), 0.398, tol=0.0005)
-    check("per-child mean proportions over the 44", props.mean(axis=0), [0.701, 0.473, 0.264], tol=0.0005)
+    check("pooled proportions over the 46", pooled_46.sum(axis=0) / (complete.sum() * STRATUM_SIZES), [0.634, 0.441, 0.250], tol=0.0005)
+    check("overall pooled proportion", pooled_46.sum() / (complete.sum() * N_ITEMS), 0.389, tol=0.0005)
+    check("per-child mean proportions over the 44", props.mean(axis=0), [0.6625, 0.4607, 0.2618], tol=0.0005)
     pooled_props = pooled_46.sum(axis=0) / (complete.sum() * STRATUM_SIZES)
     spread = np.log(pooled_props[0] / (1 - pooled_props[0])) - np.log(pooled_props[2] / (1 - pooled_props[2]))
-    check("outer-checklist spread (logits)", spread, 1.8, tol=0.05)
+    check("outer-checklist spread (logits)", spread, 1.6, tol=0.05)
 
 
 def check_production_gradient(ie: pd.DataFrame) -> None:
@@ -106,6 +122,15 @@ def check_production_gradient(ie: pd.DataFrame) -> None:
     check("coherent records", coherent.sum(), 38)
 
     S, U = says[coherent], end_u[coherent]
+    # The stratum table in docs/report/_caveats-ds.qmd: this coherence screen was
+    # chosen for it by the study owner on 2026-09-14 (#320), and its shares are of
+    # the achievable checklist sizes. The eight records it drops each report more
+    # words said than understood on at least one checklist.
+    check("caveats table: records dropped for said > understood", int((both & (says > end_u).any(axis=1)).sum()), 8)
+    ages = ie["age_months_end"].to_numpy(float)[coherent]
+    check("caveats table: age range (months)", [ages.min(), ages.max()], [27, 86])
+    check("caveats table: understood share", U.sum(axis=0) / (len(U) * STRATUM_SIZES), [0.7536, 0.5002, 0.2814], tol=0.0001)
+    check("caveats table: said share", S.sum(axis=0) / (len(S) * STRATUM_SIZES), [0.5025, 0.2633, 0.1466], tol=0.0001)
     with np.errstate(invalid="ignore", divide="ignore"):
         qk = np.where(U > 0, S / np.where(U > 0, U, 1), np.nan)
     check("q_k ratio of sums", S.sum(axis=0) / U.sum(axis=0), [0.667, 0.526, 0.521], tol=0.0005)
@@ -140,8 +165,21 @@ def check_data_defects(ie: pd.DataFrame, uk: pd.DataFrame) -> None:
     end_u = ie[["understands_1_end", "understands_2_end", "understands_3_end"]].to_numpy(float)
     complete = ~np.isnan(end_u).any(axis=1)
     start_1 = ie["understands_1_start"].to_numpy(float)
-    check("pooled Checklist 1, baseline (46)", np.nansum(start_1[complete]) / (complete.sum() * 120), 0.855, tol=0.0005)
-    check("pooled Checklist 1, follow-up (46)", np.nansum(end_u[complete, 0]) / (complete.sum() * 120), 0.671, tol=0.0005)
+    check("pooled Checklist 1, baseline (46)", np.nansum(start_1[complete]) / (complete.sum() * STRATUM_SIZES[0]), 0.808, tol=0.0005)
+    check("pooled Checklist 1, follow-up (46)", np.nansum(end_u[complete, 0]) / (complete.sum() * STRATUM_SIZES[0]), 0.634, tol=0.0005)
+    # The printed-words-only proportion the aggregate counts cannot give directly:
+    # bounded below by assuming every child filled every proper-noun slot, above
+    # by assuming none did. The achievable-denominator figure lies between.
+    slots = STRATUM_SIZES - PRINTED_STRATUM_SIZES
+    pooled_counts = end_u[complete].sum(axis=0)
+    n_complete = complete.sum()
+    check(
+        "printed-words-only pooled proportions, lower bound",
+        (pooled_counts - n_complete * slots) / (n_complete * PRINTED_STRATUM_SIZES),
+        [0.612, 0.426, 0.244],
+        tol=0.0005,
+    )
+    check("printed-words-only pooled proportions, upper bound", pooled_counts / (n_complete * PRINTED_STRATUM_SIZES), [0.671, 0.452, 0.253], tol=0.0005)
     check(
         "mean understood total, baseline -> follow-up (46)",
         [ie["understands_total_start"].to_numpy(float)[complete].mean(), ie["understands_total_end"].to_numpy(float)[complete].mean()],
@@ -151,20 +189,24 @@ def check_data_defects(ie: pd.DataFrame, uk: pd.DataFrame) -> None:
     delta_1 = end_u[:, 0] - start_1
     check("children whose Checklist 1 falls", (delta_1 < 0).sum(), 22)
     check("largest fall", np.nanmin(delta_1), -124)
-    over = int((start_1 > 120).sum() + (end_u[:, 0] > 120).sum())
-    check("records with Checklist 1 > 120", over, 27)
-    check("maximum Checklist 1 count", np.nanmax(np.concatenate([start_1, end_u[:, 0]])), 124)
+    over = int((start_1 > PRINTED_STRATUM_SIZES[0]).sum() + (end_u[:, 0] > PRINTED_STRATUM_SIZES[0]).sum())
+    check("records with Checklist 1 above the printed 120", over, 27)
+    check("maximum Checklist 1 count (achievable 127)", np.nanmax(np.concatenate([start_1, end_u[:, 0]])), 124)
 
+    # §8 item 3, settled 2026-09-14 (#320): uk_01's `c` columns count words
+    # understood *only*, and the prepared `understood` now adds every word said
+    # or signed. Before the correction these checks read "29 complete category
+    # rows" and "spoken/understood > 1 for 2, maximum 1.95" -- the evidence that
+    # led to it.
     category_cols = [c for c in uk.columns if c.endswith("c") and not c.startswith("t")]
-    check("uk_01 comprehension category columns", len(category_cols), 19)
-    categories = uk[category_cols].to_numpy(float)
-    complete_uk = ~np.isnan(categories).any(axis=1)
-    check("uk_01 complete category rows", complete_uk.sum(), 29)
-    understood = uk.loc[complete_uk, "understood"].to_numpy(float)
-    check("category sums reconcile exactly", np.abs(categories[complete_uk].sum(axis=1) - understood).max(), 0)
-    ratio = uk.loc[complete_uk, "spoken"].to_numpy(float) / understood
-    check("children with spoken/understood > 1", (ratio > 1).sum(), 2)
-    check("maximum spoken/understood", np.nanmax(ratio), 1.95, tol=0.005)
+    check("uk_01 understood-only category columns", len(category_cols), 19)
+    wg = uk[uk["survey"] == "WG"]
+    check("uk_01 Words and Gestures rows / with comprehension", [len(wg), int(wg["understood"].notna().sum())], [70, 70])
+    check("understood_only reconciles with the c categories", np.abs(wg[category_cols].sum(axis=1) - wg["understood_only"]).max(), 0)
+    check("understood == understood_only + produced", np.abs(wg["understood"] - wg["understood_only"] - wg["produced"]).max(), 0)
+    check("rows with spoken above understood", int((wg["spoken"] > wg["understood"]).sum()), 0)
+    ws = uk[uk["survey"] == "WS"]
+    check("Words and Sentences rows marking any word understood-only", int((ws["understood_only"] > 0).sum()), 0)
 
 
 def check_fitted_dispersion(output_root: Path) -> None:
@@ -242,7 +284,7 @@ def check_kernel_share(vg10: Path) -> None:
             print(f"  [skip] {table.name} not present")
             continue
         kappa = pd.read_csv(table)["kappa_median"].to_numpy(float)
-        share = 100.0 * (kappa + 1.0) / (N_ITEMS + kappa)
+        share = 100.0 * (kappa + 1.0) / (MODEL_N_TRIALS + kappa)
         check(f"kernel share % ({outcome}, min/max)", [share.min(), share.max()], share_claim, tol=0.01)
         # A 40% error in a component carrying `share` of the variance (the
         # underdispersion at a 2-logit difficulty spread) moves the total SD by:
@@ -283,7 +325,10 @@ def check_link_tables(ie: pd.DataFrame) -> None:
     plain = [implied_kappa(plain_mean, False, p) for p in (0.05, 0.20, 0.50)]
     mixed = [implied_kappa(mixed_mean, True, p) for p in (0.05, 0.20, 0.50)]
     check("plain-link implied kappa", plain, [16.28, 6.47, 4.76], tol=0.01)
-    check("difficulty-mixed implied kappa", mixed, [17.94, 7.44, 5.50], tol=0.01)
+    # Re-pinned 2026-09-14 against the achievable checklist sizes (#320); under
+    # the printed sizes: 17.94 / 7.44 / 5.50, and a mixed link reaching p = 0.5
+    # at f = 0.45 and p = 0.9 at 2.79 (difference 2.34), peak slope 0.228.
+    check("difficulty-mixed implied kappa", mixed, [17.65, 7.29, 5.41], tol=0.01)
 
     def mixed_p(f: float) -> float:
         return float(sum(w / (1 + np.exp(-(f - d))) for w, d in zip(weights, d_k, strict=True)))
@@ -292,10 +337,10 @@ def check_link_tables(ie: pd.DataFrame) -> None:
     f_90 = optimize.brentq(lambda f: mixed_p(f) - 0.9, -30, 30)
     grid = np.linspace(-6, 9, 6001)
     peak = float(np.gradient([mixed_p(f) for f in grid], grid).max())
-    check("mixed link: f for p = 0.5", f_50, 0.45, tol=0.005)
-    check("mixed link: f for p = 0.9", f_90, 2.79, tol=0.005)
-    check("mixed link: f(0.9) - f(0.5)", f_90 - f_50, 2.34, tol=0.005)
-    check("mixed link: peak dp/df", peak, 0.228, tol=0.001)
+    check("mixed link: f for p = 0.5", f_50, 0.49, tol=0.005)
+    check("mixed link: f for p = 0.9", f_90, 2.81, tol=0.005)
+    check("mixed link: f(0.9) - f(0.5)", f_90 - f_50, 2.32, tol=0.005)
+    check("mixed link: peak dp/df", peak, 0.230, tol=0.001)
     check("plain link: f for p = 0.9", np.log(9), 2.20, tol=0.005)
 
 
