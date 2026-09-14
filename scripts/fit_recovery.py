@@ -179,6 +179,8 @@ def _score(
             label=f"r{replicate:02d}",
             truth_source=record["simulation"]["truth_source"],
             query_ages=query_ages,
+            definition=fit_definition,
+            truth_definition=definition,
         )
         prefix = f"recovery_{label}_r{replicate:02d}"
         table.to_csv(os.path.join(out_dir, f"{prefix}.csv"), index=False)

@@ -40,17 +40,29 @@ Estimands, per outcome, written to the configured comparisons dir (default
   Δκ, Δσ_Y, φ_TD/φ_DS. All three are *observation*-level: in these models κ is
   what the Beta-Binomial layer carries once the study and subject random effects
   have taken their share, so none of them is the between-child contrast.
-* ``ds_td_<outcome>_re_subject_heterogeneity.csv`` — the between-child contrast
-  proper: τ, the SD across children of the child's own logit for this outcome,
-  and the spread in expected words σ_child it induces, per population, with
-  Δτ, τ_TD/τ_DS and Δσ_child. See ``comparison.subject_heterogeneity`` for why
-  this is not simply VG20's ``tau_subj_q`` read against VG11's ``tau_subject``.
+* ``ds_td_<outcome>_re_subject_heterogeneity.csv`` — τ, the SD across children
+  of the child's own logit for this outcome, and the spread in expected words
+  σ_child it induces, per population, with Δτ, τ_TD/τ_DS and Δσ_child. See
+  ``comparison.subject_heterogeneity`` for why this is not simply VG20's
+  ``tau_subj_q`` read against VG11's ``tau_subject``. It is one half of a split
+  the typically developing models identify by functional form rather than by
+  repeat visits (#229), so it is not the between-child contrast adopted for
+  publication; the two tables below are.
+* ``ds_td_<outcome>_re_total_spread.csv`` — the between-child contrast adopted
+  for publication (#229 option 4, 2026-09-14): the SD in words of one administration of
+  one new child at each age, child differences and administration noise together,
+  with the new child's expected count, per population, and ΔSD (TD − DS) and
+  SD_TD/SD_DS. See ``comparison.total_spread``.
+* ``ds_td_<outcome>_re_total_spread_at_level.csv`` — the same SD read at the age
+  each population's curve reaches each vocabulary level v of this outcome, so
+  the two are compared at the same level rather than the same age; the Down
+  syndrome delay otherwise makes the age-matched SD mostly a contrast of means.
 
 Each panel is emitted as its own standalone figure (linear axes, no subplot
 grids) so the figures are usable individually:
 ``ds_td_<outcome>_re_{expected_words,learning_rate,attainment_delay,spread,
-spread_contrast,overdispersion,subject_tau,subject_spread}.{png,svg}`` and, for
-the comprehension-matched view,
+spread_contrast,overdispersion,subject_tau,subject_spread,total_spread,
+total_spread_at_level}.{png,svg}`` and, for the comprehension-matched view,
 ``ds_td_comprehension_{q_at_U,dq,latency,q_at_age}.{png,svg}``.
 
 Usage::
@@ -140,6 +152,13 @@ N_GRID = np.array(
 )
 MIN_COVERAGE = 0.80
 KEY_AGES = [12, 18, 24, 30]
+# Grid step (months) on which the total spread is computed over each model's own
+# age range before being read at the age a level is reached. Coarser than
+# GRID_STEP because the Down syndrome range runs to 115 months and the spoken
+# quadrature is two-dimensional; the SD is smooth in age, and the crossing age
+# itself is interpolated, not snapped to the grid.
+LEVEL_GRID_STEP = 1.0
+KEY_LEVELS = [25, 50, 100, 200, 400]
 
 # Comprehension-matched lens needs JOINT models (U and S coupled per draw): the
 # DS joint VG20 vs the TD joint VG21 (RE-based, 8-22 mo). The TD comparator was
@@ -351,6 +370,35 @@ def run_outcome(outcome: str, *, allow_stale: bool = False) -> None:
         dsdchild=C.summarise_draws(SDC_td - SDC_ds, grid, with_p_gt0=True),
     )
 
+    # ---- 6. Total spread: the between-child contrast adopted for publication (#229 option 4) ----
+    # The SD in words of one administration of one new child, with no split into
+    # a child scale and a dispersion: the typically developing models identify
+    # that split by functional form rather than by repeat visits, so its halves
+    # are not contrasted across populations. Same draws as block 5.
+    ts_ds = C.total_spread(DISP_DS_KEY, outcome, ages=grid, draws=i_disp)
+    ts_td = C.total_spread(td_key, outcome, ages=grid, draws=ib)
+    SDT_ds, SDT_td = ts_ds.sd_words, ts_td.sd_words
+    total = _merge(
+        grid, "age_months",
+        mean_TD=C.summarise_draws(ts_td.mean_words, grid),
+        mean_DS=C.summarise_draws(ts_ds.mean_words, grid),
+        sd_TD=C.summarise_draws(SDT_td, grid), sd_DS=C.summarise_draws(SDT_ds, grid),
+        dsd=C.summarise_draws(SDT_td - SDT_ds, grid, with_p_gt0=True),
+        sd_ratio=C.summarise_draws(SDT_td / SDT_ds, grid),
+    )
+    # At matched level: each population's SD read at the age its own curve
+    # reaches v words, so the Down syndrome delay does not turn the contrast into
+    # one of means.
+    LV_ds = _total_spread_at_level(DISP_DS_KEY, outcome, i_disp)
+    LV_td = _total_spread_at_level(td_key, outcome, ib)
+    at_level = _merge(
+        N_GRID, "words",
+        sd_TD=C.summarise_draws(LV_td, N_GRID, "words"),
+        sd_DS=C.summarise_draws(LV_ds, N_GRID, "words"),
+        dsd=C.summarise_draws(LV_td - LV_ds, N_GRID, "words", with_p_gt0=True),
+        sd_ratio=C.summarise_draws(LV_td / LV_ds, N_GRID, "words"),
+    )
+
     # ---- Write CSVs ----
     os.makedirs(OUT_DIR, exist_ok=True)
     prefix = os.path.join(OUT_DIR, f"ds_td_{outcome}_re_")
@@ -359,6 +407,9 @@ def run_outcome(outcome: str, *, allow_stale: bool = False) -> None:
     ad.to_csv(prefix + "attainment_delay.csv", index=False)
     disp.to_csv(prefix + "dispersion.csv", index=False)
     het.to_csv(prefix + "subject_heterogeneity.csv", index=False)
+    total.to_csv(prefix + "total_spread.csv", index=False)
+    at_level.to_csv(prefix + "total_spread_at_level.csv", index=False)
+    _plot_total_spread(outcome, td_key, total, at_level)
 
     _plot_outcome(outcome, td_key, grid,
                   C.summarise_draws(W_td, grid), C.summarise_draws(W_ds, grid),
@@ -372,6 +423,7 @@ def run_outcome(outcome: str, *, allow_stale: bool = False) -> None:
                   C.model_label(DISP_DS_KEY))
 
     _print_summary(outcome, ew, lr, ad, disp, het, C.model_label(DISP_DS_KEY))
+    _print_total_spread(outcome, total, at_level)
 
     write_comparison_manifest(
         OUT_DIR,
@@ -498,6 +550,41 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
     )
 
 
+def _plot_total_spread(outcome, td_key, total, at_level) -> None:
+    """The two total-spread panels: at matched age, and at matched level."""
+    td_lab, ds_lab = C.model_label(td_key), C.model_label(DISP_DS_KEY)
+    pre = f"ds_td_{outcome}_re_"
+
+    def by_age(ax):
+        for col, lab, colour in (("sd_TD", td_lab, COL_TD), ("sd_DS", ds_lab, COL_DS)):
+            _band(ax, _unprefix(total, col, "age_months"), "age_months", lab, colour)
+
+    _save_single(
+        pre + "total_spread",
+        dict(xlabel="Age (months)", ylabel="SD of a new child's count (words)",
+             title=f"Total spread at matched age — words {outcome}"),
+        by_age,
+    )
+
+    def by_level(ax):
+        for col, lab, colour in (("sd_TD", td_lab, COL_TD), ("sd_DS", ds_lab, COL_DS)):
+            _band(ax, _unprefix(at_level, col, "words"), "words", lab, colour, cov=MIN_COVERAGE)
+
+    _save_single(
+        pre + "total_spread_at_level",
+        dict(xlabel=f"Vocabulary level v (words {outcome}, population curve)",
+             ylabel="SD of a new child's count (words)",
+             title=f"Total spread at matched level — words {outcome}"),
+        by_level,
+    )
+
+
+def _unprefix(frame: pd.DataFrame, name: str, grid_name: str) -> pd.DataFrame:
+    """One population's columns from a ``_merge``d frame, under summarise_draws' names."""
+    cols = {c: c[len(name) + 1:] for c in frame.columns if c.startswith(name + "_")}
+    return frame[[grid_name, *cols]].rename(columns=cols)
+
+
 def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
                         da_td, da_ds, qa_td, qa_ds) -> None:
     """Emit the four comprehension-matched panels as standalone figures."""
@@ -587,6 +674,41 @@ def _print_summary(outcome, ew, lr, ad, disp, het, disp_ds_lab) -> None:
               f"σ_child TD={_at_age(het,a,'sdchild_TD_median'):5.1f} "
               f"DS={_at_age(het,a,'sdchild_DS_median'):5.1f} words "
               f"(P(TD>DS)={_at_age(het,a,'dsdchild_p_gt0'):.2f})")
+
+
+def _print_total_spread(outcome, total, at_level) -> None:
+    print(f"  Total spread, SD of a new child's count in words ({outcome}):")
+    for a in KEY_AGES:
+        shown = _grid_age(total, a)
+        print(f"    {shown:>4g} mo: TD={_at_age(total, a, 'sd_TD_median'):6.1f}  "
+              f"DS={_at_age(total, a, 'sd_DS_median'):6.1f}  "
+              f"(means {_at_age(total, a, 'mean_TD_median'):.0f} / "
+              f"{_at_age(total, a, 'mean_DS_median'):.0f} words; "
+              f"ratio={_at_age(total, a, 'sd_ratio_median'):.2f}, "
+              f"P(TD>DS)={_at_age(total, a, 'dsd_p_gt0'):.2f})")
+    print("  ... at matched level (coverage-filtered):")
+    shown = at_level[at_level["words"].isin(KEY_LEVELS)
+                     & (at_level["dsd_coverage"] >= MIN_COVERAGE)]
+    for _, r in shown.iterrows():
+        print(f"    {int(r['words']):>3} words: TD={r['sd_TD_median']:6.1f}  "
+              f"DS={r['sd_DS_median']:6.1f}  ratio={r['sd_ratio_median']:.2f} "
+              f"[{r['sd_ratio_ci_lo']:.2f}, {r['sd_ratio_ci_hi']:.2f}]  "
+              f"P(TD>DS)={r['dsd_p_gt0']:.2f}")
+
+
+def _total_spread_at_level(key: str, outcome: str, draws: np.ndarray) -> np.ndarray:
+    """``(n_draw, n_level)``: ``key``'s total spread at the age its curve reaches each level.
+
+    Computed over the model's whole plot range on ``LEVEL_GRID_STEP``, then read
+    at each draw's crossing age of its population curve -- the reference child
+    the attainment delay D(v) also crosses, so both contrasts put the two
+    populations at the same level. NaN where a draw never reaches the level.
+    """
+    native = C.plot_ages(key)
+    ages = np.arange(np.ceil(native[0] / LEVEL_GRID_STEP) * LEVEL_GRID_STEP,
+                     native[-1] + 1e-9, LEVEL_GRID_STEP)
+    spread = C.total_spread(key, outcome, ages=ages, draws=draws)
+    return C.value_at_level(spread.reference_words, spread.sd_words, spread.ages, N_GRID)
 
 
 # ----------------------------------------------------------------------------
@@ -844,9 +966,33 @@ def _verify() -> None:
     tau_s, _ = C.child_spread_single(np.zeros((1, 3)), np.array([0.7]), n)
     assert np.allclose(tau_s, 0.7), tau_s
 
+    # Total spread against simulated new children, drawn the way the engines'
+    # own y_query / y_s_query are: a child effect, then a Beta-Binomial count,
+    # and for spoken a second Beta-Binomial on the child's understood count.
+    m = 200_000
+    z1 = rng.standard_normal(m)
+    z2 = 0.4 * z1 + np.sqrt(1 - 0.4**2) * rng.standard_normal(m)
+    kappa_u, kappa_s = 30.0, 12.0
+    pu = 1 / (1 + np.exp(-(f_u[0, 1] + 0.9 * z1)))
+    qq = 1 / (1 + np.exp(-(h[0, 1] + 1.3 * z2)))
+    u = rng.binomial(n, rng.beta(pu * kappa_u, (1 - pu) * kappa_u))
+    s = rng.binomial(u, rng.beta(qq * kappa_s, (1 - qq) * kappa_s))
+    mean_u, sd_u = C.total_spread_single(f_u[:, 1:2], np.array([0.9]), np.array([[kappa_u]]), n)
+    mean_s, sd_s = C.total_spread_product(
+        f_u[:, 1:2], h[:, 1:2], np.array([0.9]), np.array([1.3]),
+        np.array([[kappa_u]]), np.array([[kappa_s]]), n, rho=np.array([0.4]))
+    assert np.allclose([mean_u[0, 0], sd_u[0, 0]], [u.mean(), u.std()], rtol=0.02), (mean_u, sd_u)
+    assert np.allclose([mean_s[0, 0], sd_s[0, 0]], [s.mean(), s.std()], rtol=0.03), (mean_s, sd_s)
+    # And read at a level, curves shifted by different amounts in age give the
+    # same values at the same level. The shifts put the crossings between grid
+    # points, so this exercises the interpolation, not a lookup at a node.
+    shifted = np.stack([np.clip(20.0 * (ages - 8 - s), 0, None) for s in (0.33, 3.77, 9.41)])
+    lv = C.value_at_level(shifted, shifted * 0.5, ages, np.array([50.0, 100.0]))
+    assert np.allclose(lv, [[25.0, 50.0]] * 3, atol=1e-9), lv
+
     print("self-check OK: implied_sd_y == scipy.betabinom.std; "
           "D(v) recovers a constant age shift; between-child quadrature "
-          "matches Monte Carlo.\n")
+          "matches Monte Carlo; total spread matches simulated new children.\n")
 
 
 def main() -> None:
