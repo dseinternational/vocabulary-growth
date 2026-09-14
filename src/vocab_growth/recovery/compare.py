@@ -38,11 +38,13 @@ import pandas as pd
 import xarray as xr
 
 from vocab_growth import intervals
+from vocab_growth.comparison import total_spread_from_values, total_spread_plan
 from vocab_growth.fit_artifacts import (
     FIT_MANIFEST_FILENAME,
     read_json,
     require_full_trace,
 )
+from vocab_growth.models.definitions import ModelType
 from vocab_growth.sensitivity.compare import CAVEATS_SEPARATOR, diagnostics_gate
 
 # Dimensions whose elements are reported individually. Observation-level
@@ -143,6 +145,106 @@ def target_variables(
         elif len(dims) == 1 and dims[0] in AGGREGATE_DIMS:
             aggregate.append(name)
     return elementwise, aggregate
+
+
+# The total spread: derived, not read from the graph (#229 option 4; #289 task
+# 4.12). The between-child contrast adopted for publication is the SD in words of
+# a new child's count at matched age or level, and until it is scored here no
+# recovery run had ever tested it -- the 1.2-13.9% shortfall on VG10 and VG20 was
+# reconstructed from tau and kappa after the fact. It is computed from the
+# probability-scale curves, the concentrations and the child scales at the query
+# ages, identically for the recovered posterior and the truth draw, by the same
+# function the comparison uses, so a recovery result speaks to the number the
+# comparison reports.
+#
+# Its variables sit on ``query_id``, so :func:`target_variables` selects them with
+# every other trajectory quantity. It is not excluded as the ``f_``/``h_`` logits
+# are: those are monotone transforms of one scored quantity each, while this is a
+# distinct estimand built from several, as ``p_s_query`` is from ``p_u_query`` and
+# ``q_query``. Its rows are correlated with its inputs' all the same, so they make
+# ``coverage_ci89`` lean further on the trajectory block, and they change the
+# target count: a matrix scored before 2026-09-14 is not comparable row for row
+# with one scored after.
+
+
+def total_spread_targets(definition) -> tuple[tuple[str, str], ...]:
+    """``(outcome, variable)`` pairs of the total spread scored for ``definition``.
+
+    Empty where it is not derived -- the joint and trivariate engines, and a
+    low-rank factor child block (VG22) -- so those models score what they did.
+    """
+    model_type = getattr(definition, "model_type", None)
+    if model_type is ModelType.UNIVARIATE:
+        pairs: tuple[tuple[str, str], ...] = (
+            (definition.outcome.value, "total_spread_words_query"),
+        )
+    elif model_type is ModelType.BIVARIATE:
+        pairs = (
+            ("understood", "total_spread_words_u_query"),
+            ("spoken", "total_spread_words_s_query"),
+        )
+    else:
+        return ()
+    try:
+        for outcome, _ in pairs:
+            total_spread_plan(definition, outcome, "query")
+    except NotImplementedError:
+        return ()
+    return pairs
+
+
+def total_spread_inputs(definition) -> tuple[str, ...]:
+    """The variables :func:`with_total_spread` reads for ``definition``."""
+    names: list[str] = []
+    for outcome, _ in total_spread_targets(definition):
+        plan = total_spread_plan(definition, outcome, "query")
+        for name in plan.grid_variables + plan.scalar_variables:
+            if name not in names:
+                names.append(name)
+    return tuple(names)
+
+
+def with_total_spread(
+    dataset: xr.Dataset, definition, *, query_ages: np.ndarray | None = None
+) -> xr.Dataset:
+    """``dataset`` (``chain``, ``draw``, ...) with the total spread added per draw.
+
+    A variable the computation needs and ``dataset`` lacks is an error rather than
+    a silently smaller target set: both engines emit every input on the query
+    grid, and the truth draw carries them as reported deterministics.
+    """
+    pairs = total_spread_targets(definition)
+    if not pairs:
+        return dataset
+    ages = np.asarray(
+        definition.ages_query if query_ages is None else query_ages, dtype=float
+    )
+    n_chain, n_draw = dataset.sizes["chain"], dataset.sizes["draw"]
+    added = {}
+    for outcome, name in pairs:
+        plan = total_spread_plan(definition, outcome, "query")
+        values: dict[str, np.ndarray] = {}
+        for variable in plan.grid_variables + plan.scalar_variables:
+            if variable not in dataset:
+                raise KeyError(
+                    f"{name} needs {variable!r}, which this dataset does not carry."
+                )
+            array = dataset[variable].transpose("chain", "draw", ...).values
+            if variable in plan.grid_variables:
+                if array.shape[-1] != ages.size:
+                    raise ValueError(
+                        f"{variable} has {array.shape[-1]} query ages but "
+                        f"{ages.size} were supplied."
+                    )
+                values[variable] = np.asarray(array, dtype=float).reshape(n_chain * n_draw, -1)
+            else:
+                values[variable] = np.asarray(array, dtype=float).reshape(n_chain * n_draw)
+        spread = total_spread_from_values(plan, values, ages, definition.n_trials)
+        added[name] = (
+            ("chain", "draw", "query_id"),
+            spread.sd_words.reshape(n_chain, n_draw, ages.size),
+        )
+    return dataset.assign(added)
 
 
 def _score(draws: np.ndarray, truth_value: float, name: str) -> dict[str, Any]:
@@ -498,13 +600,46 @@ def compare_replicate(
     label: str,
     truth_source: str,
     query_ages: np.ndarray | None = None,
+    definition=None,
+    truth_definition=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    """Score one replicate: ``(table, aggregate_table, summary)``."""
+    """Score one replicate: ``(table, aggregate_table, summary)``.
+
+    ``definition`` is the fitted model's and ``truth_definition`` the one the
+    data were simulated from (the same model unless the run is a cross-definition
+    one); given them, the total spread is derived on each side and scored.
+    Without them it is not, which is how a caller outside ``fit_recovery.py``
+    keeps the previous target set.
+
+    Each side is derived on its own definition's query ages, and only when the
+    two grids are the same ages: a cross-definition run whose truth sits on a
+    different grid (a window variant, say) has no age at which the two spreads
+    describe the same child, so the quantity is left out rather than compared
+    across ages. ``query_ages`` overrides the fitted side's grid, and the truth's
+    too when there is no separate ``truth_definition``.
+    """
     if not os.path.isfile(trace_path):
         raise FileNotFoundError(f"No recovery trace at {trace_path}.")
     truth = _as_dataset(
         truth_tree["posterior"] if "posterior" in getattr(truth_tree, "children", {}) else truth_tree
     )
+    derive_spread = False
+    if definition is not None:
+        fit_ages = np.asarray(
+            definition.ages_query if query_ages is None else query_ages, dtype=float
+        )
+        truth_ages = (
+            fit_ages
+            if truth_definition is None
+            else np.asarray(truth_definition.ages_query, dtype=float)
+        )
+        derive_spread = np.array_equal(fit_ages, truth_ages)
+    if derive_spread:
+        truth = with_total_spread(
+            truth,
+            definition if truth_definition is None else truth_definition,
+            query_ages=truth_ages,
+        )
     # Targets are the intersection of truth and posterior, so anything the fit
     # did not persist drops out of the score silently rather than failing. The
     # scaled random effects are exactly the targets a compacted trace omits (the
@@ -516,6 +651,14 @@ def compare_replicate(
     )
     with xr.open_datatree(trace_path) as tree:
         posterior_full = _as_dataset(tree["posterior"])
+        if derive_spread:
+            inputs = list(total_spread_inputs(definition))
+            derived_names = [name for _, name in total_spread_targets(definition)]
+            if derived_names:
+                derived = with_total_spread(
+                    posterior_full[inputs].load(), definition, query_ages=fit_ages
+                )[derived_names]
+                posterior_full = posterior_full.assign(derived.data_vars)
         elementwise, aggregate = target_variables(posterior_full, truth)
         wanted = elementwise + aggregate
         posterior = posterior_full[wanted].load().compute() if wanted else posterior_full[[]]

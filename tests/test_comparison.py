@@ -868,3 +868,265 @@ def test_joint_weighted_child_matches_the_univariate_construction(tmp_path):
     np.testing.assert_allclose(S[:, 0], expit(1.0) * expit(-1.0) * 810, rtol=1e-9)
     np.testing.assert_allclose(U[:, -1], expit(-1.0) * 810, rtol=1e-9)
     np.testing.assert_allclose(S[:, -1], expit(-1.0) * expit(1.0) * 810, rtol=1e-9)
+
+
+# ----------------------------------------------------------------------------
+# Total spread (#229 option 4, #289 task 4.12)
+# ----------------------------------------------------------------------------
+def _simulated_new_children(rng, *, f_u, tau_u, kappa_u, h=None, tau_q=None, kappa_s=None,
+                            rho=0.0, n=810, m=400_000):
+    """Counts drawn the way the engines' ``y_query`` / ``y_s_query`` draw them.
+
+    A child effect on each logit, a Beta-Binomial understood (or single-outcome)
+    count, and for spoken a second Beta-Binomial on the child's own understood
+    count. Returns ``(understood, spoken)``, ``spoken`` ``None`` without ``h``.
+    """
+    z1 = rng.standard_normal(m)
+    p_u = 1.0 / (1.0 + np.exp(-(f_u + tau_u * z1)))
+    u = rng.binomial(n, rng.beta(p_u * kappa_u, (1 - p_u) * kappa_u))
+    if h is None:
+        return u, None
+    z2 = rho * z1 + np.sqrt(1.0 - rho**2) * rng.standard_normal(m)
+    q = 1.0 / (1.0 + np.exp(-(h + tau_q * z2)))
+    s = rng.binomial(u, rng.beta(q * kappa_s, (1 - q) * kappa_s))
+    return u, s
+
+
+@pytest.mark.parametrize(
+    ("f", "tau", "kappa"),
+    [(-1.5, 0.9, 30.0), (-5.5, 1.2, 20.0), (1.0, 0.7, 60.0)],
+    ids=["mid", "floor", "upper"],
+)
+def test_total_spread_single_matches_simulated_new_children(f, tau, kappa):
+    """Exact variance, so it must agree with children drawn as the engine draws them."""
+    rng = np.random.default_rng(20260914)
+    u, _ = _simulated_new_children(rng, f_u=f, tau_u=tau, kappa_u=kappa)
+    mean, sd = comparison.total_spread_single(
+        np.array([[f]]), np.array([tau]), np.array([[kappa]]), 810
+    )
+    assert mean[0, 0] == pytest.approx(u.mean(), rel=0.01)
+    assert sd[0, 0] == pytest.approx(u.std(), rel=0.01)
+
+
+@pytest.mark.parametrize(
+    ("f_u", "h", "rho"),
+    [(-1.0, -0.8, 0.4), (-3.5, -3.0, 0.4), (-1.0, -0.8, 0.0)],
+    ids=["mid", "floor", "independent"],
+)
+def test_total_spread_product_matches_simulated_nested_counts(f_u, h, rho):
+    """The nested spoken count, correlation included, needs no marginal approximation."""
+    rng = np.random.default_rng(20260915)
+    kwargs = dict(f_u=f_u, tau_u=0.9, kappa_u=30.0, h=h, tau_q=1.3, kappa_s=12.0)
+    _, s = _simulated_new_children(rng, rho=rho, **kwargs)
+    mean, sd = comparison.total_spread_product(
+        np.array([[f_u]]), np.array([[h]]), np.array([0.9]), np.array([1.3]),
+        np.array([[30.0]]), np.array([[12.0]]), 810,
+        rho=None if rho == 0.0 else np.array([rho]),
+    )
+    assert mean[0, 0] == pytest.approx(s.mean(), rel=0.015)
+    assert sd[0, 0] == pytest.approx(s.std(), rel=0.015)
+
+
+def test_total_spread_without_a_child_effect_is_the_administration_spread():
+    """With no child effect only the Beta-Binomial remains, and both forms say so exactly."""
+    rng = np.random.default_rng(5)
+    f_u = rng.normal(-1.0, 1.0, size=(4, 6))
+    h = rng.normal(-1.5, 1.0, size=(4, 6))
+    k_u = rng.uniform(5.0, 80.0, size=(4, 6))
+    k_s = rng.uniform(5.0, 80.0, size=(4, 6))
+    p_u = 1.0 / (1.0 + np.exp(-f_u))
+    q = 1.0 / (1.0 + np.exp(-h))
+
+    mean, sd = comparison.total_spread_single(f_u, None, k_u, 810)
+    np.testing.assert_allclose(mean, 810 * p_u, rtol=1e-12)
+    np.testing.assert_allclose(sd, comparison.implied_sd_y(p_u, k_u, 810), rtol=1e-10)
+
+    # The product's variance is exact, so it equals the Beta-Binomial whose
+    # concentration matches the product's two moments -- which is what
+    # product_marginal_kappa builds.
+    mean_s, sd_s = comparison.total_spread_product(f_u, h, None, None, k_u, k_s, 810)
+    np.testing.assert_allclose(mean_s, 810 * p_u * q, rtol=1e-12)
+    np.testing.assert_allclose(
+        sd_s,
+        comparison.implied_sd_y(p_u * q, comparison.product_marginal_kappa(p_u, k_u, q, k_s), 810),
+        rtol=1e-8,
+    )
+
+
+def test_total_spread_is_the_child_spread_plus_administration_noise():
+    """The child part is child_spread_single's, and the rest is the count's own noise.
+
+    With the Beta degenerate (kappa -> inf) the only noise left is binomial
+    sampling of the 810 items, so the variance beyond the child part must be
+    ``E_child[n p (1 - p)]`` exactly; a looser Beta only adds to it.
+    """
+    rng = np.random.default_rng(6)
+    f = rng.normal(-1.0, 1.0, size=(3, 5))
+    tau = np.array([0.6, 0.9, 1.2])
+    _, child = comparison.child_spread_single(f, tau, 810)
+    _, loose = comparison.total_spread_single(f, tau, np.full(f.shape, 4.0), 810)
+    _, tight = comparison.total_spread_single(f, tau, np.full(f.shape, 1e12), 810)
+
+    x, w = np.polynomial.hermite_e.hermegauss(21)
+    w = w / w.sum()
+    binomial = sum(
+        wi * 810 * p * (1 - p)
+        for xi, wi in zip(x, w, strict=True)
+        for p in [1.0 / (1.0 + np.exp(-(f + tau[:, None] * xi)))]
+    )
+    np.testing.assert_allclose(tight**2 - child**2, binomial, rtol=1e-6)
+    assert np.all(loose > tight)
+
+
+def test_total_spread_product_refuses_an_age_varying_scale_with_rho():
+    with pytest.raises(ValueError, match="4x4"):
+        comparison.total_spread_product(
+            np.zeros((2, 3)), np.zeros((2, 3)), np.ones((2, 3)), np.ones(2),
+            np.ones((2, 3)), np.ones((2, 3)), 810, rho=np.full(2, 0.2),
+        )
+
+
+def test_total_spread_plan_reads_what_the_child_effect_structure_implies():
+    """Which variables are read is decided by the definition's child-effect
+    structure: a partitioned scale, a correlation, a child slope, A1's grid, and
+    refusals for the factor, the joint engine and the wrong outcome."""
+    from dataclasses import replace
+
+    from vocab_growth.models.definitions import MODEL_REGISTRY, AgeVaryingSubjectScale
+    from vocab_growth.models.subject_effects import SubjectEffectKind
+
+    plan = comparison.total_spread_plan(MODEL_REGISTRY["vg12"], "understood", "query")
+    assert plan.grid_variables == ("p_query", "kappa_query")
+    assert plan.scalar_variables == ("tau_subject",)
+    assert plan.scale.kind is SubjectEffectKind.VARIANCE_PARTITION
+
+    plan = comparison.total_spread_plan(MODEL_REGISTRY["vg20"], "spoken", "plot")
+    assert plan.nested
+    assert plan.grid_variables == ("p_u_plot", "kappa_u_plot", "q_plot", "kappa_s_plot")
+    assert plan.scalar_variables == ("tau_subj_u", "tau_subj_q", "rho_uq")
+
+    plan = comparison.total_spread_plan(MODEL_REGISTRY["vg21"], "spoken", "plot")
+    assert plan.rho_name is None
+
+    plan = comparison.total_spread_plan(MODEL_REGISTRY["vg19"], "understood", "query")
+    assert plan.scalar_variables == ("tau_subj_u_0", "tau_subj_u_1", "tau_subj_u_rho")
+
+    a1 = replace(
+        MODEL_REGISTRY["vg12"],
+        tau_subject_sigma=AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg12"].kappa.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        ),
+    )
+    plan = comparison.total_spread_plan(a1, "understood", "query")
+    assert plan.grid_variables == ("p_query", "kappa_query", "tau_subject_query")
+    assert plan.scalar_variables == ()
+
+    with pytest.raises(NotImplementedError, match="factor"):
+        comparison.total_spread_plan(MODEL_REGISTRY["vg22"], "spoken", "plot")
+    with pytest.raises(ValueError, match="not supported"):
+        comparison.total_spread_plan(MODEL_REGISTRY["vg15"], "spoken", "plot")
+    with pytest.raises(ValueError, match="cannot serve"):
+        comparison.total_spread_plan(MODEL_REGISTRY["vg11"], "understood", "plot")
+
+
+def _vg20_like_trace(tmp_path, ages, values):
+    import xarray as xr
+
+    n_draw = values["p_u_plot"].shape[0]
+    post = xr.Dataset({
+        name: xr.DataArray(
+            np.asarray(v, dtype=float).reshape(1, n_draw, *np.shape(v)[1:]).copy(),
+            dims=("chain", "draw", "plot_id")[: 2 + np.ndim(v) - 1],
+        )
+        for name, v in values.items()
+    })
+    const = xr.Dataset({"X_plot": xr.DataArray(np.asarray(ages, dtype=float), dims=("plot_id",))})
+    path = tmp_path / "vg20_like.nc"
+    xr.DataTree.from_dict({"posterior": post, "constant_data": const}).to_netcdf(str(path))
+    return str(path)
+
+
+def test_total_spread_reads_a_trace_through_the_plan(tmp_path, monkeypatch):
+    """The registry-keyed reader computes the same thing as the array form, on
+    the native grid and on a caller's grid with a draw subset."""
+    rng = np.random.default_rng(7)
+    ages = np.array([12.0, 24.0, 36.0, 48.0])
+    n_draw = 5
+    values = {
+        "p_u_plot": rng.uniform(0.05, 0.6, size=(n_draw, 4)),
+        "q_plot": rng.uniform(0.02, 0.5, size=(n_draw, 4)),
+        "kappa_u_plot": rng.uniform(10.0, 60.0, size=(n_draw, 4)),
+        "kappa_s_plot": rng.uniform(5.0, 40.0, size=(n_draw, 4)),
+        "tau_subj_u": rng.uniform(0.6, 1.0, size=n_draw),
+        "tau_subj_q": rng.uniform(0.9, 1.4, size=n_draw),
+        "rho_uq": rng.uniform(0.2, 0.5, size=n_draw),
+    }
+    _patch_trace(monkeypatch, _vg20_like_trace(tmp_path, ages, values))
+
+    def logit(p):
+        return np.log(p) - np.log1p(-p)
+
+    got = comparison.total_spread("vg20", "spoken")
+    want_mean, want_sd = comparison.total_spread_product(
+        logit(values["p_u_plot"]), logit(values["q_plot"]),
+        values["tau_subj_u"], values["tau_subj_q"],
+        values["kappa_u_plot"], values["kappa_s_plot"], 810, rho=values["rho_uq"],
+    )
+    np.testing.assert_allclose(got.ages, ages)
+    np.testing.assert_allclose(got.sd_words, want_sd, rtol=1e-9)
+    np.testing.assert_allclose(got.mean_words, want_mean, rtol=1e-9)
+    np.testing.assert_allclose(got.reference_words, 810 * values["p_u_plot"] * values["q_plot"], rtol=1e-12)
+
+    draws = np.array([4, 1])
+    at = np.array([18.0, 30.0])
+    sub = comparison.total_spread("vg20", "understood", ages=at, draws=draws)
+    _, want_sub = comparison.total_spread_single(
+        logit(comparison.interp_draws(ages, values["p_u_plot"][draws], at)),
+        values["tau_subj_u"][draws],
+        comparison.interp_draws(ages, values["kappa_u_plot"][draws], at),
+        810,
+    )
+    np.testing.assert_allclose(sub.ages, at)
+    np.testing.assert_allclose(sub.sd_words, want_sub, rtol=1e-9)
+
+
+def test_value_at_level_reads_each_draw_at_its_own_crossing_age():
+    """A curve shifted in age gives the same value at the same level, whatever the shift.
+
+    The shifts put every crossing between grid points, so the interpolation
+    inside a grid interval is what is tested, not a lookup at a node.
+    """
+    ages = np.linspace(8.0, 60.0, 105)
+    shifts = np.array([0.13, 6.37, 15.71])
+    level_curve = np.clip(10.0 * (ages[None, :] - 8.0 - shifts[:, None]), 0.0, None)
+    value = 0.25 * level_curve + 3.0
+    levels = np.array([40.0, 200.0])
+    crossings = 8.0 + shifts[:, None] + levels[None, :] / 10.0
+    on_grid = np.isclose((crossings - 8.0) / 0.5, np.round((crossings - 8.0) / 0.5))
+    assert not on_grid.any(), "the test needs crossings between grid points"
+    got = comparison.value_at_level(level_curve, value, ages, levels)
+    np.testing.assert_allclose(got, [[13.0, 53.0]] * 3, atol=1e-9)
+
+
+def test_value_at_level_interpolates_a_nonlinear_value_linearly_within_an_interval():
+    """Off the grid the value is the linear interpolation of its two neighbours."""
+    ages = np.linspace(8.0, 60.0, 105)
+    shifts = np.array([0.13, 6.37, 15.71])
+    level_curve = np.clip(10.0 * (ages[None, :] - 8.0 - shifts[:, None]), 0.0, None)
+    value = np.sin(ages)[None, :] * np.array([[1.0], [2.0], [3.0]])
+    got = comparison.value_at_level(level_curve, value, ages, np.array([75.0]))
+    crossing = 8.0 + shifts + 7.5
+    want = np.array([np.interp(crossing[i], ages, value[i]) for i in range(3)])
+    np.testing.assert_allclose(got[:, 0], want, rtol=1e-12)
+
+
+def test_value_at_level_is_nan_where_a_level_is_not_identified():
+    ages = np.array([10.0, 20.0, 30.0])
+    curve = np.array([[5.0, 50.0, 80.0], [60.0, 70.0, 90.0]])
+    value = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    got = comparison.value_at_level(curve, value, ages, np.array([50.0, 100.0]))
+    assert got[0, 0] == pytest.approx(2.0)
+    assert np.isnan(got[1, 0]), "already past the level at the youngest age"
+    assert np.isnan(got).all(axis=0)[1], "never reached"

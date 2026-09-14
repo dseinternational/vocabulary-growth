@@ -34,6 +34,7 @@ excluded, and are emitted under the same names by every bivariate model
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 
 import arviz as az
 import dse_research_utils.plot.io as plot_io
@@ -43,12 +44,13 @@ import pandas as pd
 
 from vocab_growth import environment as env
 from vocab_growth import intervals
+from vocab_growth.models import subject_effects
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     ModelType,
     subject_slope_spec,
 )
-from vocab_growth.models.subject_effects import slope_reference_age
+from vocab_growth.models.subject_effects import SubjectEffectKind, slope_reference_age
 
 DEFAULT_MILESTONES = (25, 50, 100, 200, 400)
 DEFAULT_MIN_COVERAGE = 0.80
@@ -941,6 +943,39 @@ def child_spread_product(
     ``tau_subject``; contrasting ``tau_subj_q`` against it instead would compare the
     spread of a conversion ratio with the spread of a level.
     """
+    p1 = np.zeros_like(f_u)
+    p2 = np.zeros_like(f_u)
+    l1 = np.zeros_like(f_u)
+    l2 = np.zeros_like(f_u)
+    for weight, a, b in _product_nodes(f_u, h, tau_u, tau_q, rho=rho, n_nodes=n_nodes):
+        p = _sigmoid(a) * _sigmoid(b)
+        lg = _logit_sigmoid_product(a, b)
+        p1 += weight * p
+        p2 += weight * p * p
+        l1 += weight * lg
+        l2 += weight * lg * lg
+    tau_logit = np.sqrt(np.maximum(l2 - l1 * l1, 0.0))
+    sd_words = n * np.sqrt(np.maximum(p2 - p1 * p1, 0.0))
+    return tau_logit, sd_words
+
+
+def _product_nodes(
+    f_u: np.ndarray,
+    h: np.ndarray,
+    tau_u: np.ndarray,
+    tau_q: np.ndarray,
+    *,
+    rho: np.ndarray | None,
+    n_nodes: int,
+):
+    """Tensor Gauss-Hermite nodes over a child's two deviations in a ``p_u * q`` model.
+
+    Validates eagerly and returns an iterator of ``(weight, a, b)``, where ``a``
+    is the child's understood logit and ``b`` their production-ratio logit at one
+    node pair, each ``(n_draw, n_age)``. Shared by :func:`child_spread_product`
+    and :func:`total_spread_product` so that both integrate over the same
+    children, correlation included.
+    """
     x, w = _gauss_hermite_standard_normal(n_nodes)
     # Decide age-varying from the CALLER's input, not from the adapter's output:
     # the adapter returns (n_draw, 1) for a constant scale, which is also 2-D.
@@ -966,24 +1001,15 @@ def child_spread_product(
         # Clipped rather than trusted: rho lives on (-1, 1) by construction, but
         # a floating-point 1 - rho^2 can go very slightly negative at the edge.
         s = np.sqrt(np.maximum(1.0 - r * r, 0.0))
-    p1 = np.zeros_like(f_u)
-    p2 = np.zeros_like(f_u)
-    l1 = np.zeros_like(f_u)
-    l2 = np.zeros_like(f_u)
-    for xi, wi in zip(x, w, strict=True):
-        a = f_u + tu * xi
-        for xj, wj in zip(x, w, strict=True):
-            b = h + (tq * xj if r is None else tq * (r * xi + s * xj))
-            weight = wi * wj
-            p = _sigmoid(a) * _sigmoid(b)
-            lg = _logit_sigmoid_product(a, b)
-            p1 += weight * p
-            p2 += weight * p * p
-            l1 += weight * lg
-            l2 += weight * lg * lg
-    tau_logit = np.sqrt(np.maximum(l2 - l1 * l1, 0.0))
-    sd_words = n * np.sqrt(np.maximum(p2 - p1 * p1, 0.0))
-    return tau_logit, sd_words
+
+    def nodes():
+        for xi, wi in zip(x, w, strict=True):
+            a = f_u + tu * xi
+            for xj, wj in zip(x, w, strict=True):
+                b = h + (tq * xj if r is None else tq * (r * xi + s * xj))
+                yield wi * wj, a, b
+
+    return nodes()
 
 
 def subject_heterogeneity(
@@ -1165,6 +1191,428 @@ def subject_heterogeneity(
     raise ValueError(
         f"{key}: model_type {mt} is not supported by subject_heterogeneity."
     )
+
+
+# ----------------------------------------------------------------------------
+# Total spread: how far apart children's counts sit, without splitting it
+# ----------------------------------------------------------------------------
+# The between-child contrast adopted for publication (#229 option 4, adopted
+# 2026-09-14; #289 task 4.12). The functions above split a population's scatter
+# into a persistent child scale and observation-level dispersion; in the typically
+# developing models that split is identified by the Beta-Binomial's functional form
+# rather than by repeat visits, so it is not reported as a cross-population
+# contrast. What is reported instead is the spread of the counts themselves: the
+# SD, in words, of one administration of one new child at a given age.
+#
+# The new child is the one every engine's own ``y_query`` draws: a fresh child
+# effect, zero study effect (the average study) and sex contrast zero, so the
+# population curves, ``subject_heterogeneity`` and the new-child predictive all
+# describe the same child. The variance is exact, by the law of total variance
+# over the child effect, with the Beta-Binomial's conditional variance in closed
+# form:
+#
+#     Var(Y) = n^2 Var_child(E[theta]) + E_child[n m (1 - m) + n (n - 1) Var(theta)]
+#
+# where ``theta`` is the administration's Beta-distributed proportion and ``m``
+# its mean. The nested spoken count needs no marginal approximation: binomial
+# thinning makes ``S | theta_U, theta_S ~ Binomial(n, theta_U * theta_S)`` exactly,
+# so only the product's first two moments are needed, and those are elementary.
+#
+# It is in words and on no transformed scale, by decision of 2026-09-14. On the
+# 2026-09-08 fits the logit-scale versions disagreed about the direction of the
+# Down syndrome / typically developing spoken contrast at the floor: the two that
+# convert dispersion to logits were dominated by the tiny means there, and the
+# exact SD of the observed log-odds rests on the continuity correction there. The
+# mean dependence a transform was meant to remove is removed instead by comparing
+# the two populations at the same vocabulary level (:func:`value_at_level`) as
+# well as at the same age. See notes/202609141600-total-spread-estimand.md.
+
+
+def _beta_second_moment(p: np.ndarray, kappa: np.ndarray) -> np.ndarray:
+    """``E[theta^2]`` for ``theta ~ Beta(p kappa, (1 - p) kappa)``."""
+    return p * (p * kappa + 1.0) / (kappa + 1.0)
+
+
+def _binomial_mixture_variance(m: np.ndarray, second_moment: np.ndarray, n: int) -> np.ndarray:
+    """``Var(Y)`` for ``Y | theta ~ Binomial(n, theta)`` given ``theta``'s first two moments."""
+    return n * m * (1.0 - m) + n * (n - 1.0) * (second_moment - m * m)
+
+
+def total_spread_single(
+    f: np.ndarray,
+    tau: np.ndarray | None,
+    kappa: np.ndarray,
+    n: int,
+    *,
+    n_nodes: int = 21,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Mean and SD of a new child's count when one Normal intercept sits on the logit.
+
+    ``f`` is the reference child's logit ``(n_draw, n_age)``, ``tau`` the child
+    scale — ``(n_draw,)``, ``(n_draw, n_age)`` for an age-varying one, or ``None``
+    for a model with no child effect — and ``kappa`` the concentration on the
+    same grid. A child's count is ``BetaBinomial(n, p kappa, (1 - p) kappa)``
+    with ``p = sigmoid(f + tau Z)``. Returns ``(mean_words, sd_words)``, both
+    ``(n_draw, n_age)``; ``sd_words`` carries the child effect and the
+    administration noise together. At ``tau = 0`` it is :func:`implied_sd_y`.
+    """
+    x, w = _gauss_hermite_standard_normal(n_nodes)
+    kappa = np.asarray(kappa, dtype=float)
+    tau_col = (
+        np.zeros((f.shape[0], 1)) if tau is None else _tau_to_draw_age(tau, f.shape, what="tau")
+    )
+    m1 = np.zeros_like(f)
+    m2 = np.zeros_like(f)
+    within = np.zeros_like(f)
+    for xi, wi in zip(x, w, strict=True):
+        p = _sigmoid(f + tau_col * xi)
+        m1 += wi * p
+        m2 += wi * p * p
+        within += wi * _binomial_mixture_variance(p, _beta_second_moment(p, kappa), n)
+    variance = n * n * (m2 - m1 * m1) + within
+    return n * m1, np.sqrt(np.maximum(variance, 0.0))
+
+
+def total_spread_product(
+    f_u: np.ndarray,
+    h: np.ndarray,
+    tau_u: np.ndarray | None,
+    tau_q: np.ndarray | None,
+    kappa_u: np.ndarray,
+    kappa_s: np.ndarray,
+    n: int,
+    *,
+    rho: np.ndarray | None = None,
+    n_nodes: int = 21,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Mean and SD of a new child's *spoken* count in a nested ``p_u * q`` model.
+
+    The engines draw ``U ~ BetaBinomial(n, p_u kappa_u, ...)`` and then
+    ``S | U ~ BetaBinomial(U, q kappa_s, ...)``, with the child's two deviations
+    on the logits of ``p_u`` and ``q`` (correlated through ``rho`` where the model
+    estimates it). Binomial thinning gives ``S | theta_U, theta_S ~ Binomial(n,
+    theta_U theta_S)`` with independent Betas, so the count's conditional variance
+    follows exactly from the product's first two moments, without the
+    moment-matched concentration :func:`product_marginal_kappa` builds for the
+    dispersion contrast. Arguments as :func:`child_spread_product`, plus the two
+    concentrations on the same grid; a ``None`` scale means no child effect on
+    that logit. Returns ``(mean_words, sd_words)``.
+    """
+    kappa_u = np.asarray(kappa_u, dtype=float)
+    kappa_s = np.asarray(kappa_s, dtype=float)
+    no_effect = np.zeros(f_u.shape[0])
+    m1 = np.zeros_like(f_u)
+    m2 = np.zeros_like(f_u)
+    within = np.zeros_like(f_u)
+    nodes = _product_nodes(
+        f_u,
+        h,
+        no_effect if tau_u is None else tau_u,
+        no_effect if tau_q is None else tau_q,
+        rho=rho,
+        n_nodes=n_nodes,
+    )
+    for weight, a, b in nodes:
+        p_u = _sigmoid(a)
+        q = _sigmoid(b)
+        m = p_u * q
+        second = _beta_second_moment(p_u, kappa_u) * _beta_second_moment(q, kappa_s)
+        m1 += weight * m
+        m2 += weight * m * m
+        within += weight * _binomial_mixture_variance(m, second, n)
+    variance = n * n * (m2 - m1 * m1) + within
+    return n * m1, np.sqrt(np.maximum(variance, 0.0))
+
+
+@dataclass(frozen=True)
+class ChildScaleSource:
+    """Where one logit's child scale lives in a trace, and what shape it takes."""
+
+    kind: SubjectEffectKind
+    names: tuple[str, ...]
+    """One scalar (constant or partitioned scale), one grid variable (A1), or
+    ``tau0``, ``tau1`` and their correlation (a child slope)."""
+
+
+@dataclass(frozen=True)
+class TotalSpreadPlan:
+    """The trace variables one outcome's total spread is computed from.
+
+    Resolved from the definition, never from which variables a trace happens to
+    contain, for the reason :func:`subject_heterogeneity` gives: a child-slope
+    model also emits ``tau_subj_u``, so reading whatever is present would
+    silently report a flat scale. Variables are named on one grid (``plot`` or
+    ``query``). Probabilities are read rather than logits because a recovery
+    truth draw carries the probability-scale deterministics and not the logits.
+    """
+
+    outcome: str
+    grid: str
+    nested: bool
+    """Spoken on a ``p_u * q`` model: two logits, two concentrations."""
+    p_name: str
+    kappa_name: str
+    scale: ChildScaleSource | None
+    q_name: str | None = None
+    kappa_s_name: str | None = None
+    scale_q: ChildScaleSource | None = None
+    rho_name: str | None = None
+    slope_ref_age_months: float = 36.0
+
+    def _sources(self) -> tuple[ChildScaleSource, ...]:
+        return tuple(s for s in (self.scale, self.scale_q) if s is not None)
+
+    @property
+    def grid_variables(self) -> tuple[str, ...]:
+        names = [self.p_name, self.kappa_name]
+        if self.nested:
+            names += [self.q_name, self.kappa_s_name]
+        names += [
+            s.names[0] for s in self._sources() if s.kind is SubjectEffectKind.AGE_VARYING
+        ]
+        return tuple(names)
+
+    @property
+    def scalar_variables(self) -> tuple[str, ...]:
+        names = [
+            name
+            for s in self._sources()
+            if s.kind is not SubjectEffectKind.AGE_VARYING
+            for name in s.names
+        ]
+        if self.rho_name is not None:
+            names.append(self.rho_name)
+        return tuple(names)
+
+
+def _child_scale_source(effect, grid: str, where: str) -> ChildScaleSource | None:
+    kind = effect.kind
+    if kind is SubjectEffectKind.NONE:
+        return None
+    if kind in (SubjectEffectKind.CONSTANT, SubjectEffectKind.VARIANCE_PARTITION):
+        return ChildScaleSource(kind, (effect.scale_name,))
+    if kind is SubjectEffectKind.AGE_VARYING:
+        return ChildScaleSource(kind, (f"{effect.scale_name}_{grid}",))
+    if kind is SubjectEffectKind.CHILD_SLOPE:
+        base = effect.scale_name
+        return ChildScaleSource(kind, (f"{base}_0", f"{base}_1", f"{base}_rho"))
+    raise NotImplementedError(
+        f"{where}: total spread is not derived for a {kind.value} child effect. "
+        "A low-rank factor (VG22) gives each child a level and a rate on both "
+        "outcomes, which this quadrature does not integrate over."
+    )
+
+
+def total_spread_plan(definition, outcome: str, grid: str = "plot") -> TotalSpreadPlan:
+    """Resolve which trace variables ``outcome``'s total spread reads.
+
+    Supports the single-outcome random-effect models (VG11, VG12) and the
+    bivariate ones (VG07-VG10, VG13, VG16, VG19-VG21, VG23, VG26), with constant,
+    partitioned, age-varying (A1) and child-slope scales and VG20's correlation.
+    Refuses the joint engine and the low-rank factor rather than returning a
+    number for a structure it does not integrate over.
+    """
+    if grid not in ("plot", "query"):
+        raise ValueError(f"grid must be 'plot' or 'query', got {grid!r}.")
+    where = getattr(definition, "model_id", "definition")
+    mt = definition.model_type
+    plan = subject_effects.resolve(definition)
+    if mt is ModelType.UNIVARIATE:
+        if definition.outcome.value != outcome:
+            raise ValueError(
+                f"{where} is a '{definition.outcome.value}' model; cannot serve '{outcome}'."
+            )
+        effect = plan[subject_effects.UNIVARIATE_OUTCOME] if plan.effects else None
+        return TotalSpreadPlan(
+            outcome=outcome,
+            grid=grid,
+            nested=False,
+            p_name=f"p_{grid}",
+            kappa_name=f"kappa_{grid}",
+            scale=None if effect is None else _child_scale_source(effect, grid, where),
+            slope_ref_age_months=plan.slope_ref_age_months,
+        )
+    if mt is ModelType.BIVARIATE:
+        scale_u = _child_scale_source(plan["u"], grid, where)
+        if outcome == "understood":
+            return TotalSpreadPlan(
+                outcome=outcome,
+                grid=grid,
+                nested=False,
+                p_name=f"p_u_{grid}",
+                kappa_name=f"kappa_u_{grid}",
+                scale=scale_u,
+                slope_ref_age_months=plan.slope_ref_age_months,
+            )
+        if outcome == "spoken":
+            return TotalSpreadPlan(
+                outcome=outcome,
+                grid=grid,
+                nested=True,
+                p_name=f"p_u_{grid}",
+                kappa_name=f"kappa_u_{grid}",
+                scale=scale_u,
+                q_name=f"q_{grid}",
+                kappa_s_name=f"kappa_s_{grid}",
+                scale_q=_child_scale_source(plan["q"], grid, where),
+                rho_name="rho_uq" if plan.correlation_eta is not None else None,
+                slope_ref_age_months=plan.slope_ref_age_months,
+            )
+        raise ValueError(f"outcome must be 'spoken' or 'understood', got {outcome!r}.")
+    raise ValueError(f"{where}: model_type {mt} is not supported by total_spread_plan.")
+
+
+@dataclass(frozen=True)
+class TotalSpread:
+    """One outcome's total spread on an age grid, per posterior draw."""
+
+    ages: np.ndarray
+    """``(n_age,)``, months."""
+    mean_words: np.ndarray
+    """``(n_draw, n_age)``: the new child's expected count."""
+    sd_words: np.ndarray
+    """``(n_draw, n_age)``: SD of the new child's count, child effect and
+    administration noise together."""
+    reference_words: np.ndarray
+    """``(n_draw, n_age)``: the reference child's count, the population curve
+    every other contrast here reads, used to match populations on level."""
+    n_trials: int
+
+
+def _logit_of(p: np.ndarray) -> np.ndarray:
+    p = np.clip(np.asarray(p, dtype=float), 1e-12, 1.0 - 1e-12)
+    return np.log(p) - np.log1p(-p)
+
+
+def _child_scale_values(
+    source: ChildScaleSource | None,
+    values: dict[str, np.ndarray],
+    ages: np.ndarray,
+    ref_age_months: float,
+) -> np.ndarray | None:
+    if source is None:
+        return None
+    if source.kind is SubjectEffectKind.CHILD_SLOPE:
+        t0, t1, r = (values[name] for name in source.names)
+        return child_scale_of_age(t0, t1, r, ages, ref_age_months=ref_age_months)
+    return values[source.names[0]]
+
+
+def total_spread_from_values(
+    plan: TotalSpreadPlan,
+    values: dict[str, np.ndarray],
+    ages: np.ndarray,
+    n_trials_: int,
+    *,
+    n_nodes: int = 21,
+) -> TotalSpread:
+    """Compute :class:`TotalSpread` from arrays keyed by the plan's variable names.
+
+    Grid variables are ``(n_draw, n_age)`` on ``ages``; scalars are ``(n_draw,)``.
+    Shared by :func:`total_spread`, which reads a fitted trace's plot grid, and
+    by parameter-recovery scoring, which reads the query grid of a posterior and
+    of a truth draw, so the contrast and its recovery check are one computation.
+    """
+    missing = [
+        name for name in plan.grid_variables + plan.scalar_variables if name not in values
+    ]
+    if missing:
+        raise KeyError(
+            f"total spread for {plan.outcome!r} needs {', '.join(missing)}, "
+            "which the supplied values do not carry."
+        )
+    ages = np.asarray(ages, dtype=float)
+    ref = plan.slope_ref_age_months
+    p = np.asarray(values[plan.p_name], dtype=float)
+    kappa = values[plan.kappa_name]
+    tau = _child_scale_values(plan.scale, values, ages, ref)
+    if not plan.nested:
+        mean, sd = total_spread_single(_logit_of(p), tau, kappa, n_trials_, n_nodes=n_nodes)
+        return TotalSpread(ages, mean, sd, n_trials_ * p, n_trials_)
+    q = np.asarray(values[plan.q_name], dtype=float)
+    mean, sd = total_spread_product(
+        _logit_of(p),
+        _logit_of(q),
+        tau,
+        _child_scale_values(plan.scale_q, values, ages, ref),
+        kappa,
+        values[plan.kappa_s_name],
+        n_trials_,
+        rho=None if plan.rho_name is None else values[plan.rho_name],
+        n_nodes=n_nodes,
+    )
+    return TotalSpread(ages, mean, sd, n_trials_ * p * q, n_trials_)
+
+
+def total_spread(
+    key: str,
+    outcome: str = "spoken",
+    *,
+    ages: np.ndarray | None = None,
+    draws: np.ndarray | None = None,
+    n_nodes: int = 21,
+) -> TotalSpread:
+    """Total spread of ``outcome`` for registry model ``key``, from its fitted trace.
+
+    The counterpart of :func:`subject_heterogeneity` for the contrast adopted for
+    publication.
+    ``ages`` evaluates on a caller-supplied grid, interpolating the plot-grid
+    curves first (a child-slope scale is instead built on that grid directly);
+    ``draws`` selects posterior draws before the quadrature, as there.
+    """
+    d = MODEL_REGISTRY[key]
+    plan = total_spread_plan(d, outcome, "plot")
+    native, arrays, scalars = _load_reshaped_draws(
+        trace_path(key), plan.grid_variables, plan.scalar_variables
+    )
+    grid = native if ages is None else np.asarray(ages, dtype=float)
+    values: dict[str, np.ndarray] = {}
+    for name, array in zip(plan.grid_variables, arrays, strict=True):
+        if draws is not None:
+            array = array[draws]
+        values[name] = array if ages is None else interp_draws(native, array, grid)
+    for name, array in scalars.items():
+        values[name] = array if draws is None else array[draws]
+    return total_spread_from_values(plan, values, grid, n_trials(key), n_nodes=n_nodes)
+
+
+def plot_ages(key: str) -> np.ndarray:
+    """The ascending plot-grid ages (months) of ``key``'s fitted trace."""
+    d = az.from_netcdf(trace_path(key))
+    return np.sort(np.asarray(_dataset(d, "constant_data")["X_plot"].values, dtype=float))
+
+
+def value_at_level(
+    level_curve: np.ndarray,
+    value: np.ndarray,
+    ages: np.ndarray,
+    levels: np.ndarray,
+) -> np.ndarray:
+    """Per draw, ``value`` read at the age ``level_curve`` first reaches each level.
+
+    Both arrays are ``(n_draw, n_age)`` on ``ages``. The age comes from
+    :func:`first_crossing_age`, so a level never reached, or already passed at
+    the youngest age, gives NaN rather than an edge value. Returns
+    ``(n_draw, n_level)``. This is how the two populations are compared at the
+    same vocabulary level instead of the same age.
+    """
+    ages = np.asarray(ages, dtype=float)
+    value = np.asarray(value, dtype=float)
+    rows = np.arange(value.shape[0])
+    out = np.full((value.shape[0], len(levels)), np.nan)
+    for k, level in enumerate(levels):
+        at = first_crossing_age(level_curve, ages, float(level))
+        ok = np.isfinite(at)
+        if not ok.any():
+            continue
+        hi = np.clip(np.searchsorted(ages, at[ok], side="right"), 1, ages.size - 1)
+        lo = hi - 1
+        span = ages[hi] - ages[lo]
+        t = np.where(span > 0, (at[ok] - ages[lo]) / np.where(span > 0, span, 1.0), 0.0)
+        t = np.clip(t, 0.0, 1.0)
+        r = rows[ok]
+        out[ok, k] = value[r, lo] * (1.0 - t) + value[r, hi] * t
+    return out
 
 
 def subject_effect_correlation(
