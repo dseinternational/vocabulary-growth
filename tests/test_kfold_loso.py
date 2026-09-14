@@ -231,3 +231,24 @@ def test_unconverged_folds_flag_rows_rather_than_dropping_them():
     assert pair.loc[0, "model_b"] == "VG08"
     # A comparison involving the unconverged model is flagged, not dropped.
     assert bool(pair.loc[0, "all_folds_converged"]) is False
+
+
+def test_the_fold_frame_carries_sex_for_the_models_that_read_it(require_prepared_data):
+    """VG20 carries the sex covariate from 2026-09-13; its build refuses a frame without it."""
+    from vocab_growth.models.definitions import VG20
+    from vocab_growth.models.observation_arrays import sex_contrast_codes
+    from vocab_growth.models.sex_covariate import sex_effect_sigma
+
+    frame = _MODULE.load_analysis_frame()
+    assert sex_effect_sigma(VG20) is not None
+    codes = sex_contrast_codes(frame, allow_unknown=True)
+    assert set(np.unique(codes)) == {-0.5, 0.0, 0.5}
+
+
+def test_a_comparison_across_the_sex_covariate_says_so():
+    from vocab_growth.models.definitions import VG10, VG20, VG22
+
+    assert _MODULE.sex_covariate_mismatch([("VG10", VG10), ("VG22", VG22)]) is None
+    message = _MODULE.sex_covariate_mismatch([("VG20", VG20), ("VG22", VG22)])
+    assert message is not None
+    assert "VG20 carry it; VG22 do not" in message

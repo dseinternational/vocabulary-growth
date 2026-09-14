@@ -89,7 +89,7 @@ def build_kappa_of_z(kappa_min_dist, a_kappa_dist, b_kappa_mag_dist, suffix=""):
     return make_kappa_of_z(kappa_min, a_kappa, b_kappa)
 
 
-def build_subject_scale_of_z(spec, *, anchor_z, name):
+def build_subject_scale_of_z(spec, *, anchor_z, name, tau_young=None):
     """Create the A1 age-varying subject-effect scale and return its closure.
 
     ``spec`` is an
@@ -104,8 +104,10 @@ def build_subject_scale_of_z(spec, *, anchor_z, name):
         log_{name}_ratio ~ Normal(0, spec.log_ratio_sigma)
         tau(z) = {name}_young * exp(log_ratio * (z - z_young) / (z_old - z_young))
 
-    so ``log_{name}_ratio = 0`` is the constant-scale model of record and its
-    posterior interval *is* the answer to "does the between-child spread widen".
+    so ``log_{name}_ratio = 0`` is a constant child scale and its posterior
+    interval answers "does the between-child spread widen". It is the model of
+    record's scale, not the model of record: A1 also holds dispersion flat, which
+    this helper does not see (:class:`~vocab_growth.models.definitions.AgeVaryingSubjectScale`).
     The ratio is multiplicative rather than log-linear between two independent
     anchors: no logarithm is taken of a ``HalfNormal`` that can approach zero,
     and the young anchor keeps the record's own prior unmodified.
@@ -115,6 +117,12 @@ def build_subject_scale_of_z(spec, *, anchor_z, name):
     name — the posterior summaries, the heterogeneity comparators, the recovery
     scorer — keeps working and reads a quantity with a stated age attached.
     ``{name}_old`` is emitted for symmetry with the kappa anchors.
+
+    ``tau_young``, when given, is the young-anchor scale built elsewhere -- the
+    variance partition's ``tau_subject`` on VG11 and VG12, which is already a
+    named ``Deterministic`` of the shared budget. It is used as the young anchor
+    unchanged, so neither ``{name}_young`` nor ``{name}`` is emitted again and
+    ``spec.young_sigma`` places no prior; only the ratio is new.
 
     Returns ``(tau_of_z, tau_young)`` — the closure, and the young-anchor scalar
     itself so the caller can reuse it without going back through the model's
@@ -126,11 +134,14 @@ def build_subject_scale_of_z(spec, *, anchor_z, name):
             f"subject-scale anchor_z must be ordered (young, old); got {anchor_z!r}."
         )
     span = z_old - z_young
-    tau_young = pm.HalfNormal(f"{name}_young", sigma=spec.young_sigma)
+    supplied = tau_young is not None
+    if not supplied:
+        tau_young = pm.HalfNormal(f"{name}_young", sigma=spec.young_sigma)
     log_ratio = pm.Normal(
         f"log_{name}_ratio", mu=0.0, sigma=spec.log_ratio_sigma
     )
-    _ = pm.Deterministic(name, tau_young)
+    if not supplied:
+        _ = pm.Deterministic(name, tau_young)
     _ = pm.Deterministic(f"{name}_old", tau_young * pm.math.exp(log_ratio))
 
     def tau_of_z(z):

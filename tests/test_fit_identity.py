@@ -288,6 +288,72 @@ def test_the_exclude_studies_backfill_entry_is_the_call_sites_own_default():
         assert difference.role is FieldRole.DATA
 
 
+def test_the_sex_backfill_entries_are_the_readers_own_defaults():
+    """The last two entries' claim, checked rather than asserted (#324).
+
+    Both fields reach every engine and frame builder through the two readers in
+    ``sex_covariate``, so a definition that predates them resolves to exactly the
+    readers' defaults -- no sex term, no restriction -- and the entries must equal
+    those. A development step keeping the defaults must validate against a record
+    that lacks both fields; a reporting model setting one must not.
+    """
+    import inspect
+    from types import SimpleNamespace
+
+    from vocab_growth.models import sex_covariate
+    from vocab_growth.models.definitions import VG13, VG20, VG21
+
+    assert 'getattr(definition, "sex_effect_sigma", None)' in inspect.getsource(
+        sex_covariate.sex_effect_sigma
+    )
+    assert 'getattr(definition, "sex_known_only", False)' in inspect.getsource(
+        sex_covariate.sex_known_only
+    )
+    bare = SimpleNamespace()
+    assert sex_covariate.sex_effect_sigma(bare) is BACKFILL_DEFAULTS["sex_effect_sigma"]
+    assert sex_covariate.sex_known_only(bare) is BACKFILL_DEFAULTS["sex_known_only"]
+
+    for definition in (VG10, VG13):
+        recorded = normalise_for_json(definition)
+        recorded.pop("sex_effect_sigma")
+        recorded.pop("sex_known_only")
+        assert definition_differences(recorded, definition) == []
+
+    for definition in (VG20, VG21):
+        recorded = normalise_for_json(definition)
+        recorded.pop("sex_effect_sigma")
+        recorded.pop("sex_known_only")
+        (difference,) = definition_differences(recorded, definition)
+        assert difference.field == "sex_effect_sigma"
+        assert difference.role is FieldRole.GRAPH
+
+    altered = dataclasses.replace(VG10, sex_known_only=True)
+    (difference,) = definition_differences(normalise_for_json(VG10), altered)
+    assert difference.role is FieldRole.DATA
+
+
+def test_the_study_slope_backfill_entry_is_the_call_sites_own_default():
+    """#240 item 5: both random-effect engines read the field with this default."""
+    import inspect
+
+    from vocab_growth.models import common_bivariate_re, common_univariate_re
+    from vocab_growth.models.definitions import VG12, VG21
+
+    for module in (common_univariate_re, common_bivariate_re):
+        source = inspect.getsource(module.build_model_graph)
+        assert 'getattr(definition, "study_age_slope_sigma", None)' in source
+    assert BACKFILL_DEFAULTS["study_age_slope_sigma"] is None
+
+    for definition in (VG12, VG21, VG10):
+        recorded = normalise_for_json(definition)
+        recorded.pop("study_age_slope_sigma")
+        assert definition_differences(recorded, definition) == []
+        altered = dataclasses.replace(definition, study_age_slope_sigma=0.5)
+        (difference,) = definition_differences(recorded, altered)
+        assert difference.field == "study_age_slope_sigma"
+        assert difference.role is FieldRole.GRAPH
+
+
 def test_backfill_entries_name_real_fields():
     live = set()
     for definition in MODEL_REGISTRY.values():

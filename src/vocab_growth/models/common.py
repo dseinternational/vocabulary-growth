@@ -91,7 +91,7 @@ from vocab_growth.fit_artifacts import (
     write_json_atomic,
 )
 from vocab_growth.loo_reff import sampled_parameter_reff
-from vocab_growth.models import fit_identity
+from vocab_growth.models import fit_identity, sex_covariate
 from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
@@ -2152,6 +2152,12 @@ def configure_univariate_priors(
     partition_fields = _configure_variance_partition_priors(
         context, getattr(definition, "subject_variance_partition", None)
     )
+    # Sex covariate (#324), on `UnivariateREModelDefinition` only; the plain
+    # univariate engine's definitions do not carry the field.
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
+    if sex_sigma is not None:
+        beta_sex_dist = pz.Normal(mu=0.0, sigma=sex_sigma)
+        plot_and_print_dist(context, beta_sex_dist, "beta_sex_dist")
 
     config = ModelConfiguration(
         slope_anchors=definition.slope_anchors,

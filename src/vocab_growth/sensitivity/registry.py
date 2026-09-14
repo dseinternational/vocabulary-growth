@@ -979,6 +979,129 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "beta_sign_lag_sigma": 0.25}},
     ("vg25", "beta-sign-wide"): {"suffix": "beta-sign-wide", "scalar": {
         "beta_sign_lag_sigma": 1.0}},
+
+    # -- #240: the typically developing variants its review asked for --
+    #
+    # Registered on the typically developing models whose numbers are reported
+    # -- VG11 and VG12, VG21 and VG23 -- and on VG26, VG21's registered
+    # successor, so the evidence exists for whichever of VG21 and VG26 holds the
+    # reference role after the refit. VG13 is superseded and gets none. None has
+    # been fitted. Each is a one-factor change against its base, including the
+    # sex covariate every one of these bases now carries.
+    #
+    # ITEM 5, THE 200-ROW STUDY THRESHOLD. `min_study_observations = 200` removes
+    # a third of the study units for under 2% of the rows (VG11 15 -> 10 studies
+    # for 315 rows; VG12, VG13 9 -> 6 for 136), which changes which population of
+    # studies "the average study" averages over. A hierarchical model can carry a
+    # small study through partial pooling, so the threshold is a choice to test,
+    # not a necessity. `no-study-threshold` keeps every study.
+    ("vg11", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg12", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg21", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg23", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg26", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    #
+    # ITEM 5, THE ADEQUACY OF INTERCEPT-ONLY STUDY EFFECTS. Studies cover very
+    # different age ranges -- VG12 rests on two studies above 18 months and one at
+    # 25 -- and a constant study offset cannot represent a study whose children
+    # rise faster or slower than the pool's, so an older-age shape can be partly a
+    # study, a language or a form. `study-age-slopes` gives each study a zero-sum
+    # age slope, `HalfNormal(0.5)` logits per year: over these one-to-two-year
+    # windows that lets a study's trajectory diverge by up to about a logit at the
+    # window's ends without asserting that it does. Nested at `tau_slope = 0`,
+    # whose posterior interval is the answer.
+    ("vg11", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg12", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg21", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg23", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg26", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    #
+    # ITEM 1, THE FORM-SCALE COMPRESSION. Every count is scored against the
+    # 810-item reference, and as children work up a shorter form the logit-scale
+    # spread between them compresses; a child scale constant in age cannot follow
+    # that, so `kappa(age)` absorbs it. The review measured it in-sample: one
+    # age-varying child loading gains 237 log-likelihood units on VG11, 162 on
+    # VG12 and 111 on VG13's understood outcome, and rescoring on native forms
+    # removes 84-96% of the loading drift (notes/202608231537 §3). This is
+    # Proposal A1, as VG10 registers it: the child scale varies log-linearly in
+    # age between the dispersion anchors and dispersion is held flat, so the age
+    # variation is moved rather than duplicated. The young anchor keeps the
+    # record's prior, so `log_tau_*_ratio = 0` is a constant child scale -- but
+    # with dispersion still flat, so it is the base model only where the base's
+    # dispersion is already flat in age, which on these three it is not; read a
+    # ratio interval covering zero accordingly. On VG11 and
+    # VG12 the young-anchor scale is the variance partition's own, and
+    # `young_sigma` is recorded at the inert value the definitions carry.
+    #
+    # Not on VG23 or VG26: the resolver refuses an age-varying scale with a
+    # correlated child block, because scaling one deviate by tau(age) and
+    # correlating it with a constant one is not a structure either model defines.
+    # And NOT a candidate model of record, for the reason on VG10's entry: one
+    # deviate scaled by age makes children's ranks identical at every age. It is a
+    # measurement of where the age variation belongs, which is what item 1 asks.
+    ("vg11", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subject_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg11"].kappa.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
+    ("vg12", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subject_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg12"].kappa.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
+    ("vg21", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subj_u_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg21"].kappa_u.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        ),
+        "tau_subj_q_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg21"].kappa_s.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
+    #
+    # ITEM 6, THE GP AMPLITUDE. VG21's own page says its `q` amplitude presses
+    # its prior (the 76th percentile, contraction 0.13) and that widening
+    # `eta_q_sigma` is the sensitivity worth running; none was registered, and
+    # none was ever registered against VG13 either. `eta-q-wide` doubles it on
+    # the 8-22-month models, where the wider window brings in curvature, and moves
+    # VG23 from VG13's 0.2 to VG21's 0.5 over its 8-18-month window, where the
+    # amplitude was uninformed (contraction 0.004) rather than content.
+    ("vg21", "eta-q-wide"): {"suffix": "eta-q-wide", "scalar": {"eta_q_sigma": 1.0}},
+    ("vg26", "eta-q-wide"): {"suffix": "eta-q-wide", "scalar": {"eta_q_sigma": 1.0}},
+    ("vg23", "eta-q-wide"): {"suffix": "eta-q-wide", "scalar": {"eta_q_sigma": 0.5}},
+    #
+    # ITEM 6, VG13's DEBT, CARRIED TO ITS SUCCESSORS. VG13's `single-admin` and
+    # `window-22-vague-anchors` were registered and never fitted, and VG21's page
+    # names `single-admin` as the variant most worth carrying across: repeated
+    # administrations are the mechanism behind both the child scales and the
+    # energy caveat. One administration per child, child effects removed. On
+    # VG26 the correlation goes with them, since it correlates the two child
+    # blocks the variant removes. VG26's `vague-anchors` is VG21's entry
+    # unchanged, so the two stay comparable.
+    ("vg21", "single-admin"): {"suffix": "single-admin", "scalar": {
+        "one_observation_per_subject": True,
+        "use_subject_re_u": False, "use_subject_re_q": False}},
+    ("vg26", "single-admin"): {"suffix": "single-admin", "scalar": {
+        "one_observation_per_subject": True,
+        "use_subject_re_u": False, "use_subject_re_q": False,
+        "subject_re_correlation_eta": None}},
+    ("vg26", "vague-anchors"): {"suffix": "vague-anchors", "scalar": {
+        "p_slope_hi_u_alpha": 1.2, "p_slope_hi_u_beta": 2.0,   # median 0.346
+        "p_slope_hi_q_alpha": 1.3, "p_slope_hi_q_beta": 1.3}},  # median 0.500
 }
 
 

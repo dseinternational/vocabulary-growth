@@ -443,6 +443,7 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg23": "bivariate_re",
         "vg24": "joint",
         "vg25": "joint",
+        "vg26": "bivariate_re",
     }
     # Sourced from the roles table in ``docs/models/README.md`` and the
     # decision notes it cites -- not inferred. A model whose role that record
@@ -507,6 +508,11 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg19": ModelRole.DEVELOPMENT_STEP,
         "vg22": ModelRole.DEVELOPMENT_STEP,
     }
+    # VG26 (#240) is absent for the same reason, and one more. It is registered
+    # to supersede VG21 (and with it VG13), but VG21 keeps its TD-reference role
+    # until VG26 has a fit and the checks recorded above its definition have been
+    # read, so neither role changes on registration alone.
+    #
     # VG25 (#297) is deliberately absent, and so is its row in the roles table.
     # Its role is a study-owner decision taken with #190's other scope questions
     # (#297 check 7), and until it is taken UNCLASSIFIED is the right answer

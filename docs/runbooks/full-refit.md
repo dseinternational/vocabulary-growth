@@ -197,18 +197,21 @@ comes from the **catalogue's roles** rather than from `MODEL_REGISTRY`:
 
 | `-Scope`      | covers                                                                                   |
 | ------------- | ---------------------------------------------------------------------------------------- |
-| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 8 today |
-| `all`         | every registered model, including development steps — 22 today                           |
+| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 9 today |
+| `all`         | every registered model, including development steps — 23 today                           |
 
 A development step supplies no reported number, and a superseded model never
 supplies one at all, so refitting them buys nothing publishable. Since the
-roles were settled on 2026-09-09 the default covers eight of the twenty-two —
-three models of record, four TD references, and `vg25`, registered on 2026-09-11
-with no role yet assigned ([#297](https://github.com/dseinternational/vocabulary-growth/issues/297)
-check 7). Seven of those eight were about 12 h of the 30 h 27 m a serial `rep`
-cycle of the whole registry took on 2026-09-07/08
+roles were settled on 2026-09-09 the default covers nine of the twenty-three —
+three models of record, four TD references, and two models with no role yet
+assigned: `vg25`, registered on 2026-09-11
+([#297](https://github.com/dseinternational/vocabulary-growth/issues/297) check 7),
+and `vg26`, registered on 2026-09-13
+([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)) to
+supersede `vg21` once it has a fit. Seven of those nine were about 12 h of the
+30 h 27 m a serial `rep` cycle of the whole registry took on 2026-09-07/08
 (`notes/202609091600-model-roles-settled.md`); `vg25` costs roughly what `vg24`
-does on top of that.
+does on top of that, and `vg26` roughly what `vg21` does (1 h 45 m, 28 GB peak).
 
 **Unclassified fails closed**, so a model whose role has not been decided is
 still refitted. Narrowing happens only when someone declares a role, in
@@ -251,21 +254,22 @@ memory-heavy. So:
   itself rather than stacking peaks — the post-sampling assembly step is where
   these fits spike, not the sampling.
 
-- **TD models** (`vg03 vg04 vg11 vg12 vg13 vg21 vg23`): **strictly one at a time** — the
+- **TD models** (`vg03 vg04 vg11 vg12 vg13 vg21 vg23 vg26`): **strictly one at a time** — the
   full-data TD fits can OOM if stacked. `vg03` and `vg04` are the exception and may
-  share the box; `vg11`, `vg12`, `vg13`, `vg21` and `vg23` must not share it with anything,
+  share the box; `vg11`, `vg12`, `vg13`, `vg21`, `vg23` and `vg26` must not share it with anything,
   including a batch of small DS sensitivity fits (see below). Run them as a separate
   `-MaxParallel 1` pass; a single pool with a mixed model list cannot express this.
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23,vg26
   ```
 
-  `vg21` and `vg23` join this pass because both are VG13 with one thing changed and
-  neither is lighter than it: `vg23` is VG13's frame exactly, plus `rho_uq`, and
-  `vg21` widens VG13's 8–18 month window to 8–22, so it sees strictly more of the
-  TD pool than the model the serial rule was written for. Neither has a `rep` fit
-  yet, so neither has a measured peak — treat them as VG13-class until one exists.
+  `vg21`, `vg23` and `vg26` join this pass because each is VG13-class and none is
+  lighter than it: `vg23` is VG13's frame exactly, plus `rho_uq`; `vg21` widens
+  VG13's 8–18 month window to 8–22, so it sees strictly more of the TD pool than
+  the model the serial rule was written for; and `vg26` is `vg21`'s frame exactly,
+  plus `rho_uq`. `vg26` has no `rep` fit yet, so it has no measured peak of its
+  own — treat it as `vg21`'s (28 GB) until one exists.
 
   > [!NOTE]
   > **2026-09-08: measured, and far below every earlier figure.** The VG11 `rep`

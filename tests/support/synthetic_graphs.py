@@ -115,6 +115,12 @@ def synthetic_frame(definition, n_rows: int = N_ROWS) -> pd.DataFrame:
     # the graph -- the one direction a synthetic stand-in must never move in.
     frame["survey_vocab_max"] = float(definition.n_trials)
 
+    # Sex, recorded per child and cycling girl / boy / unrecorded, so a model
+    # carrying the covariate builds every branch of its contrast (#324). Read
+    # only by a definition that sets `sex_effect_sigma`; every other graph is
+    # unaffected by the column.
+    frame["sex"] = [("F", "M", None)[child % 3] for child in frame["subject_code"]]
+
     frame["holdout"] = False
     return frame
 

@@ -57,10 +57,11 @@ def pair_plot_priority(definition) -> tuple[str, ...]:
     # because `psi` happened to make the list non-empty.
     priority: list[str] = []
 
-    # Exploratory sex-shift variant of VG20 (issue #295): the two coefficients
-    # it exists to estimate, ahead of the correlation it inherits.
-    if getattr(definition, "sex_effect_sigma", None) is not None:
-        priority += ["beta_sex_u", "beta_sex_q"]
+    # The sex coefficients (#324) are deliberately not prioritised. They led this
+    # list while the only model carrying them was the VG20 sex experiment, where
+    # they were the headline; on the reporting models they are a covariate, a
+    # scalar with no ridge the pair grid exists to show, and putting them first
+    # would push out the parameters each of those models was registered for.
 
     if getattr(definition, "use_cross_lag", False):
         priority.append("beta_lag")

@@ -123,7 +123,7 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
                 "understood": np.nan,
                 "spoken": np.nan,
                 "signed": np.nan,
-                "subject_id": "empty_child",
+                "subject_id": "empty_child", "sex": "F",
             },
             {
                 "study": "uk_05",
@@ -131,7 +131,7 @@ def test_prepare_joint_data_uses_cell_total_and_drops_empty_rows(
                 "understood": 30,
                 "spoken": np.nan,
                 "signed": np.nan,
-                "subject_id": "valid_child",
+                "subject_id": "valid_child", "sex": "M",
             },
         ]
     )
@@ -223,7 +223,7 @@ def test_uk07_cells_join_uk02_in_the_psi_likelihood(tmp_path, monkeypatch):
                 "understood": 50,
                 "spoken": 12,
                 "signed": 7,
-                "subject_id": "uk07_c",
+                "subject_id": "uk07_c", "sex": "F",
             },
             {
                 "study": "uk_05",
@@ -231,7 +231,7 @@ def test_uk07_cells_join_uk02_in_the_psi_likelihood(tmp_path, monkeypatch):
                 "understood": 30,
                 "spoken": 5,
                 "signed": 2,
-                "subject_id": "valid_child",
+                "subject_id": "valid_child", "sex": "M",
             },
         ]
     )
@@ -370,9 +370,9 @@ def test_es01_cells_join_the_psi_likelihood_and_fall_back_when_off(
     merged = pd.DataFrame(
         [
             {"study": "es_01", "age": 40.0, "understood": 60, "spoken": 20,
-             "signed": 10, "subject_id": "es_c"},
+             "signed": 10, "subject_id": "es_c", "sex": "F"},
             {"study": "uk_05", "age": 25.0, "understood": 30, "spoken": 5,
-             "signed": 2, "subject_id": "valid_child"},
+             "signed": 2, "subject_id": "valid_child", "sex": "M"},
         ]
     )
     monkeypatch.setattr(
@@ -432,7 +432,7 @@ def test_es01_defective_row_keeps_its_marginals_but_not_its_gestural_total(
         "load_data",
         lambda **kwargs: pd.DataFrame(
             [{"study": "uk_05", "age": 25.0, "understood": 30, "spoken": 5,
-              "signed": 2, "subject_id": "valid_child"}]
+              "signed": 2, "subject_id": "valid_child", "sex": "M"}]
         )[kwargs["columns"]],
     )
 
@@ -687,3 +687,48 @@ def test_signing_milestones_flag_a_milestone_never_reached():
     # state was not already-true at establishment either.
     assert got.loc["speech_only_overtakes_sign_only_age", "draws_censored"] == 0.0
     assert np.isnan(got.loc["speech_only_overtakes_sign_only_age", "median"])
+
+
+def _prepare_with_merged(tmp_path, monkeypatch, merged):
+    monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
+    _write_uk02_csv(tmp_path / "vocab_data_uk_02.csv")
+    _write_uk07_csv(tmp_path / "vocab_data_uk_07.csv")
+    _write_es01_csv(tmp_path / "vocab_data_es_01.csv")
+    monkeypatch.setattr(
+        cjm.vocab_data_utils, "load_data", lambda **kwargs: merged[kwargs["columns"]]
+    )
+    context = ModelFitContext(
+        reporting=reporting.ReportingConfiguration(
+            model_name="TEST_VG15_SEX", config_name="test", output_root_dir=str(tmp_path),
+            ci_prob=0.90, interval_kind="hdi",
+        ),
+        sampling=sampling.get_sampling_configuration("test"),
+    )
+    cjm.prepare_joint_data(context, _FIXTURE_VG15)
+    return context.analysis_df
+
+
+def _merged_row(study, subject_id, sex, age=40.0):
+    return {
+        "study": study, "age": age, "understood": 50, "spoken": 8, "signed": 3,
+        "subject_id": subject_id, "sex": sex,
+    }
+
+
+def test_a_cross_tab_child_takes_its_sex_from_the_merged_view(tmp_path, monkeypatch):
+    import pytest
+
+    merged = pd.DataFrame(
+        [_merged_row("uk_07", "uk07_c", "F"), _merged_row("uk_05", "valid_child", "M", 25.0)]
+    )
+    analysis_df = _prepare_with_merged(tmp_path, monkeypatch, merged)
+    uk07 = analysis_df[analysis_df["study"] == "uk_07"]
+    assert len(uk07) and (uk07["sex"] == "F").all()
+
+    # The same child missing from the merged view, in a study that records sex
+    # for another child: refused rather than coded as unrecorded.
+    merged = pd.DataFrame(
+        [_merged_row("uk_07", "uk07_other", "M"), _merged_row("uk_05", "valid_child", "M", 25.0)]
+    )
+    with pytest.raises(ValueError, match="absent from the merged view"):
+        _prepare_with_merged(tmp_path, monkeypatch, merged)

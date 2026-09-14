@@ -521,19 +521,24 @@ class AgeVaryingSubjectScale:
     :data:`CLAMP_Q_ONLY` on ``clamp_mean_above_hi_anchor``.
 
     The scale is log-linear in standardised age between two reference ages, and
-    is parameterised so the model of record is **nested at zero**::
+    is parameterised so a constant child scale is **nested at zero**::
 
         tau_young       ~ HalfNormal(young_sigma)      # the record's own prior
         log_tau_ratio   ~ Normal(0, log_ratio_sigma)   # log(tau_old / tau_young)
         tau(z)          = tau_young * exp(log_tau_ratio * (z - z_young) / (z_old - z_young))
 
-    Two properties follow, and both are the point of the design. At the young
-    anchor the prior on the subject scale is *exactly* the prior the model of
-    record places on its constant ``tau``, so the variant is one-factor. And
-    ``log_tau_ratio = 0`` reproduces the model of record exactly, so the
-    posterior for that one parameter answers "does the spread between children
-    widen with age?" as a credible interval around a null, rather than as a
-    model comparison. A multiplicative ratio also keeps the scale positive
+    At the young anchor the prior on the subject scale is *exactly* the prior the
+    model of record places on its constant ``tau``, and ``log_tau_ratio = 0``
+    gives that constant scale at every age. **It does not give the model of
+    record**, because A1 also holds dispersion flat (below): at zero the variant
+    is the model of record with ``b_kappa = 0``, which is a different model
+    wherever the record's dispersion varies with age -- VG10, VG11, VG12 and
+    VG21 among them. So an interval on the ratio that covers zero says the child
+    spread need not widen *once dispersion is flat*, not that the model of
+    record is adequate; the comparison the variant supports is where the age
+    variation belongs. (Stated as exact nesting until 2026-09-13, when #240's
+    typically developing arms were registered and the test pinning the held-flat
+    dispersion made the gap visible.) A multiplicative ratio also keeps the scale positive
     without taking a logarithm of a ``HalfNormal`` that can approach zero.
 
     ``hold_kappa_constant`` is part of A1 rather than a separate switch: the
@@ -711,7 +716,7 @@ class UnivariateModelDefinition:
     use_subject_re: bool = False
     """If True, add a subject-level random intercept to account for repeated
     assessments of the same child."""
-    tau_subject_sigma: float = 1.5
+    tau_subject_sigma: float | AgeVaryingSubjectScale = 1.5
     """HalfNormal scale for the subject intercept SD (logit scale).
 
     Calibrated, 1.5 rather than the 0.5 every model carried until section 23 of
@@ -822,6 +827,40 @@ class UnivariateREModelDefinition(UnivariateModelDefinition):
     if the cause is missing within-child replication rather than bad coordinates,
     which is what §4 of the note argues. Kept for the divergence reduction, not as
     a BFMI remedy. See :class:`SubjectVariancePartitionParams`."""
+    sex_effect_sigma: float | None = None
+    """Prior SD of the sex coefficient ``beta_sex``, or ``None`` for no sex term.
+
+    The single-outcome counterpart of
+    :attr:`BivariateModelDefinition.sex_effect_sigma`, which carries the full
+    rationale: a girls ``+1/2`` / boys ``-1/2`` contrast on the outcome logit,
+    constant in age, a child of unrecorded sex at contrast zero, and population
+    trajectories reported at that midpoint with the girls' and boys' either side.
+    On this class rather than :class:`UnivariateModelDefinition` because only the
+    random-effect engine implements it. A single-outcome model cannot test the
+    expressive-not-receptive shape the Down syndrome literature describes -- only
+    the paired models can -- so VG11 and VG12 carry it for the by-sex
+    predictions, not for that comparison. ``fit_identity.BACKFILL_DEFAULTS``
+    records ``None``."""
+    study_age_slope_sigma: float | None = None
+    """Prior SD of a per-study age slope, in logits per year, or ``None`` for
+    intercept-only study effects.
+
+    A registered sensitivity, not a reporting structure (#240 item 5). Every
+    random-effect model gives a study a constant offset from the population
+    trajectory, which cannot represent a study whose children's vocabularies rise
+    faster or slower than the pool's -- and in the typically developing pool
+    studies cover very different age ranges (VG12 rests on two studies above 18
+    months and one at 25), so an older-age shape can be partly a study, a
+    language or a form rather than development. When set, each study also gets
+    ``delta_slope[s] * (age - reference) / 12``: a zero-sum offset scaled by
+    ``tau_slope ~ HalfNormal(sigma)``, measured from the GP anchor age (or the
+    midpoint of the slope anchors) so the study intercept stays the offset at
+    that age. The population trajectories remain at zero study effects, so the
+    field changes what they are averaged over rather than how they are read.
+
+    Nested at ``tau_slope = 0``. Added 2026-09-13 with a
+    ``fit_identity.BACKFILL_DEFAULTS`` entry of ``None``, read through ``getattr``
+    with that default."""
 
 
 @dataclass(frozen=True)
@@ -1166,6 +1205,70 @@ class BivariateModelDefinition:
     it set to ``False``. That claim is pinned in ``tests/test_fit_identity.py``
     against the loader's own signature."""
 
+    # -- Sex as a covariate (issue #324) --
+    sex_effect_sigma: float | None = None
+    """Prior SD of the sex coefficients, or ``None`` for no sex term.
+
+    When set, the engine adds ``beta_sex_u`` and ``beta_sex_q``, each
+    ``Normal(0, sigma)``, multiplying a girls ``+1/2`` / boys ``-1/2`` contrast on
+    the understood and production-ratio logits. Each coefficient is the
+    girl-minus-boy difference in logits, and the effect is constant in age by
+    design: a fixed logit shift already opens up in words and in months along a
+    rising curve, which is what the literature's "growing gap" describes, and
+    ``notes/202609041206-sex-differences-in-vocabulary.md`` found no age-by-sex
+    interaction on the logit scale in either population.
+
+    **A child whose sex is not recorded takes contrast zero** -- the logit
+    midpoint between girls and boys -- and contributes to the trajectory as
+    before, so no row is dropped. That is licensed by where the missingness
+    sits: in the Down syndrome pool it is exactly study-level (eight studies
+    record sex for every row, seven for none), and every model carrying this
+    field also carries study intercepts, which absorb the seven studies' sex
+    mix. The coefficients are therefore identified from the studies that record
+    sex, on the assumption that the effect is common across studies. Of the
+    typically developing frames only VG11's has unrecorded sex, measured
+    2026-09-13: 778 of 14,553 children (1,449 of 18,500 rows), 757 of them
+    ``Smith``'s, which records none, and 21 missing within ``Hoff`` (17 of 257)
+    and ``Kalashnikova`` (4 of 1,497). Those 21 sit at the midpoint beside coded
+    children of their own study, which is sound only if whether sex was recorded
+    is unrelated to sex. The model pages state each fit's own coverage.
+
+    The population trajectories these models report are evaluated at contrast
+    zero, so they describe the sex-balanced midpoint in both populations rather
+    than each pool's own sex mix; the girls' and boys' trajectories sit half a
+    coefficient either side. The engines write both.
+
+    Added 2026-09-13 with a ``fit_identity.BACKFILL_DEFAULTS`` entry of ``None``:
+    every engine reads it through ``getattr(definition, "sex_effect_sigma",
+    None)``, and until this date the only definition that set it was the
+    unregistered VG20 sex-shift experiment, so no registered fit carries a sex
+    term. The prior the reporting models set, 0.5, is the experiment's: the
+    descriptive estimates are 0.2 to 0.35 logits, and the typically developing
+    CDI norms put the whole effect well inside one such SD."""
+    sex_known_only: bool = False
+    """Keep only administrations whose child has a recorded sex.
+
+    A **data** change and a sensitivity control, not the reporting design: on
+    the Down syndrome pool it removes the seven studies that record no sex (711
+    of VG20's 1,708 rows, ``us_03`` among them). It is what makes a sex-known
+    control arm comparable with its effect arm, since both see the same rows,
+    and it refuses a study that records sex for only part of its rows rather
+    than turning silently into a row-level filter. Down syndrome pool only.
+
+    Added 2026-09-13 with a ``fit_identity.BACKFILL_DEFAULTS`` entry of
+    ``False``, read through ``getattr`` with that default."""
+    study_age_slope_sigma: float | None = None
+    """Prior SD of a per-study age slope on each outcome, in logits per year, or
+    ``None`` for intercept-only study effects.
+
+    The paired counterpart of
+    :attr:`UnivariateREModelDefinition.study_age_slope_sigma`, which carries the
+    rationale (#240 item 5). Here each study gets a slope on the understood
+    trajectory and one on the production ratio, ``delta_u_slope`` and
+    ``delta_q_slope``, with their own scales ``tau_u_slope`` and ``tau_q_slope``,
+    both ``HalfNormal(sigma)``. Implemented by the bivariate random-effect engine
+    only. ``fit_identity.BACKFILL_DEFAULTS`` records ``None``."""
+
     @property
     def model_type(self) -> ModelType:
         return ModelType.BIVARIATE
@@ -1180,7 +1283,7 @@ class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
     exists: a fit is validated by comparing the serialised definition field for
     field, so adding a field to a definition class invalidates every existing fit
     of that class — which for ``BivariateModelDefinition`` means **every instance
-    of its whole tree, subclasses included**: today twelve models, only eight of
+    of its whole tree, subclasses included**: today thirteen models, only eight of
     them direct instances. The subclasses added since this was written (VG19's
     slope, VG20's and VG23's correlation, VG22's factor) inherit the parent's fields
     and are invalidated by a change to them just the same. Both sizes are asserted
@@ -1204,73 +1307,6 @@ class BivariateCorrelatedSubjectREModelDefinition(BivariateModelDefinition):
     which is the point of the model. The nesting is exact: at ``rho_uq = 0`` the
     graph emits what VG10's does.
     """
-
-
-@dataclass(frozen=True)
-class BivariateSexShiftModelDefinition(BivariateCorrelatedSubjectREModelDefinition):
-    """VG20 plus a constant sex shift on the understood and production-ratio logits.
-
-    **Exploratory and unregistered** (issue #295,
-    ``notes/202609041206-sex-differences-in-vocabulary.md``). No entry in
-    ``MODEL_REGISTRY`` or the catalogue instantiates this class; the only
-    consumer is ``scripts/experiments/vg20_sex_arm.py``, which derives its arms
-    from ``VG20`` through ``_as_definition_subclass`` and fits them into a
-    separate output root. It lives here rather than in the harness so the engine
-    seam it drives is typed and visible beside the other sibling subclasses, and
-    so registering it later is a one-line change rather than a move.
-
-    Two fields, both inert at their defaults, so a definition of this class with
-    neither set is VG20 op for op:
-
-    * ``sex_known_only`` restricts the frame to administrations with a recorded
-      sex. That is a **data** change: the seven studies with no sex column
-      leave the pool (ie_01, it_01, nz_01, uk_03, uk_04, us_02, us_03 — 384 of
-      VG20's 943 children, two fifths, and 711 of its 1,708 rows), and the
-      frame gains a ``sex`` column, so its hash moves. It is
-      what makes the control arm and the effect arm comparable: both see the
-      same rows.
-    * ``sex_effect_sigma`` adds ``beta_sex_u`` and ``beta_sex_q``, each
-      ``Normal(0, sigma)``, multiplying a girls ``+1/2`` / boys ``-1/2`` contrast
-      on the understood and production-ratio logits. At contrast zero, the
-      logit is the midpoint of the logits for girls and boys. Transforming this
-      midpoint does not generally give their mean probability.
-      Each coefficient is the girl-minus-boy difference
-      in logits. Requires ``sex_known_only``: a coefficient on a covariate two
-      fifths of the rows lack has nothing to multiply.
-
-    The effect is **constant in age** by design. The note's age-by-sex
-    interaction test found nothing on the logit scale in either population, and a
-    fixed logit shift already opens up in words and in months along a rising
-    curve, which is what the literature's "growing gap" describes. Check the
-    assumption after the fit, by residual means by sex within age band, rather
-    than build a sex-specific curve in.
-
-    Neither field is in ``fit_identity.FIELD_ROLES``, because that registry is
-    tested against the fields registered models carry and this class has none.
-    ``role_of`` therefore classifies both as graph-affecting, which fails closed
-    and is the strictest reading; ``sex_known_only`` is really a data field and
-    should be classified as one if the class is ever registered.
-    """
-
-    sex_known_only: bool = False
-    """Keep only administrations whose child has a recorded sex, and carry the
-    ``sex`` column (``'F'``/``'M'``) in the frame. Down syndrome pool only."""
-
-    sex_effect_sigma: float | None = None
-    """Prior SD of the two sex coefficients, ``Normal(0, sigma)`` on the logit
-    scale, or ``None`` for no coefficient. The note recommends 0.5: the
-    descriptive estimates are 0.2 to 0.35 logits, and the typically developing
-    CDI norms put the whole effect well inside one such SD."""
-
-    def __post_init__(self) -> None:
-        # The coupling is a property of the definition, so it is checked here
-        # at construction, before a fit's prepare and priors stages can write a
-        # manifest and a prior figure for a coefficient that never existed.
-        if self.sex_effect_sigma is not None and not self.sex_known_only:
-            raise ValueError(
-                "sex_effect_sigma needs sex_known_only: a coefficient on a covariate "
-                "a quarter of the rows lack has nothing to multiply."
-            )
 
 
 @dataclass(frozen=True)
@@ -2085,6 +2121,35 @@ class JointModelDefinition:
     notes/202608120030-uk07-pactds-integration-and-ds-refit.md,
     notes/202608271551-es01-gesture-construct.md and
     notes/202609021903-es01-gesture-construct-revisited.md."""
+
+    # -- Sex as a covariate (issue #324) --
+    sex_effect_sigma: float | None = None
+    """Prior SD of the sex coefficients, or ``None`` for no sex term.
+
+    The joint counterpart of :attr:`BivariateModelDefinition.sex_effect_sigma`,
+    which carries the rationale: a girls ``+1/2`` / boys ``-1/2`` contrast,
+    constant in age, a child of unrecorded sex at contrast zero, and population
+    trajectories reported at that midpoint with the girls' and boys' either side.
+    Here there are three coefficients, ``beta_sex_u``, ``beta_sex_q`` and
+    ``beta_sex_sign``, one per latent trajectory, all ``Normal(0, sigma)``.
+
+    **They enter the cross-tab compositions as well as the marginals**, which is
+    the opposite of what the child effects do, and deliberately so. The child
+    effects are kept out of the Dirichlet-Multinomials because a free offset per
+    child, on those thin rows, is co-identified with ``psi`` and pulled it from
+    1.78 to about 2.8 when it was let in. A sex coefficient is one scalar per
+    trajectory multiplying a covariate the data fix -- the same argument that
+    lets VG25's lag into the cells -- so it adds three dimensions rather than one
+    per child, and leaving it out would model a girl's composition with a boy's
+    marginals. ``psi`` becomes the association conditional on the child's sex as
+    well as their study, which on the three cell-partition sources that record
+    sex (``uk_02``, ``uk_07``, ``es_01``) is the more accurate reading; ``nz_01``
+    records none and takes contrast zero.
+
+    The cross-tab rows are read from their own CSVs rather than the merged view,
+    so the frame builder takes each such child's sex from the merged view by
+    study and child, where it is recorded once per child.
+    ``fit_identity.BACKFILL_DEFAULTS`` records ``None``."""
 
     @property
     def model_type(self) -> ModelType:
@@ -2974,6 +3039,25 @@ def _as_definition_subclass[Derived](
     return cls(**values)
 
 
+#: Prior SD of every sex coefficient the reporting models carry (issue #324).
+#:
+#: ``Normal(0, 0.5)`` on the logit scale, the prior the VG20 sex-shift
+#: experiment used (``notes/202609041530-vg20-sex-shift-arm.md``): the
+#: descriptive girl-minus-boy estimates are 0.2 to 0.35 logits and the typically
+#: developing CDI norms put the whole effect well inside one SD. One constant for
+#: both populations, so the Down syndrome and typically developing coefficients
+#: are estimated under the same prior.
+#:
+#: Carried by the models whose numbers are reported -- the Down syndrome models
+#: of record (VG15, VG20, VG24, and VG25 through VG24), the typically developing
+#: references (VG11, VG12, VG21, VG23) and VG21's registered successor VG26 --
+#: on the study owner's decision of 2026-09-08 that predictions should be
+#: available by age and sex in both populations. The development steps do not
+#: carry it, so VG10 and VG13 are no longer exact nested nulls of VG20 and VG23:
+#: each pair now differs by the correlation and the sex term.
+_SEX_EFFECT_SIGMA = 0.5
+
+
 VG01 = UnivariateModelDefinition(
     model_id="VG01",
     config_name="age-spoken-ds",
@@ -3315,6 +3399,8 @@ VG11 = UnivariateREModelDefinition(
     centred_study_re=True,
     subject_variance_partition=_TD_SPOKEN_VARIANCE_PARTITION,
     kappa=_TD_SPOKEN_KAPPA_RE,
+    # Sex as a covariate for the by-sex predictions (#324); see the constant.
+    sex_effect_sigma=_SEX_EFFECT_SIGMA,
 )
 
 VG12 = UnivariateREModelDefinition(
@@ -3402,6 +3488,8 @@ VG12 = UnivariateREModelDefinition(
     # Reporting only -- it cannot move the posterior.
     report_max_age_understood=25,
     kappa=_TD_UNDERSTOOD_KAPPA_RE,
+    # Sex as a covariate for the by-sex predictions (#324); see the constant.
+    sex_effect_sigma=_SEX_EFFECT_SIGMA,
 )
 
 VG13 = BivariateModelDefinition(
@@ -3642,6 +3730,10 @@ VG15 = JointModelDefinition(
     # from the signed ratio, so they take the tighter of this cap and the
     # comprehension one (reporting_ages.max_age_for_sign_ratio) -- currently 72.
     report_max_age_signed=84,
+    # Sex as a covariate for the by-sex predictions (#324); see the constant and
+    # the field, which says why it reaches the cross-tab compositions. VG24 and
+    # VG25 inherit it.
+    sex_effect_sigma=_SEX_EFFECT_SIGMA,
 )
 
 # ============================================================
@@ -3719,7 +3811,9 @@ VG16 = BivariateModelDefinition(
 
 # Derived from VG10 so the two differ in exactly one thing, which is what makes
 # the comparison in #224 readable: VG10 is nested at rho_uq = 0, so the reported
-# population trajectories should sit close to VG10's.
+# population trajectories should sit close to VG10's. Since 2026-09-13 they differ
+# in two: VG20 also carries the sex covariate (#324), which VG10, a development
+# step, does not. The #224 comparison was made before that, on the one-factor pair.
 #
 # That closeness is an empirical stability check, NOT a mathematical correctness
 # invariant, and #233 was right to flag the earlier wording here as too strong.
@@ -3752,6 +3846,8 @@ VG20 = _as_definition_subclass(
     # no cross-lag at all -- so a prior that made a large correlation cheap would
     # be assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
     subject_re_correlation_eta=2.0,
+    # Sex as a covariate for the by-sex predictions (#324); see the constant.
+    sex_effect_sigma=_SEX_EFFECT_SIGMA,
 )
 
 VG19 = _as_definition_subclass(
@@ -3844,6 +3940,9 @@ VG21 = _as_definition_subclass(
     eta_q_sigma=0.5,
     kappa_u=_TD_WINDOW22_UNDERSTOOD_KAPPA_RE,
     kappa_s=_TD_WINDOW22_Q_KAPPA_RE,
+    # Sex as a covariate for the by-sex predictions (#324); see the constant.
+    # VG26 inherits it.
+    sex_effect_sigma=_SEX_EFFECT_SIGMA,
 )
 
 
@@ -3902,7 +4001,9 @@ VG22 = _as_definition_subclass(
 # Derived from VG13 so the two differ in exactly one thing, which is the whole
 # point: VG13 is nested at rho_uq = 0, so the pair is a one-factor contrast on
 # the typically-developing side of exactly the kind VG20 gives on the Down
-# syndrome side.
+# syndrome side. Since 2026-09-13 VG23 also carries the sex covariate (#324) and
+# VG13, superseded, does not; the one-factor reading ("it moves nothing else")
+# was taken on the 2026-09-02 and 2026-09-08 fits, before that.
 #
 # Why this matters more here than it does on the DS pool. #229 is about a split
 # the typically-developing data barely identify: separating between-child from
@@ -3937,6 +4038,8 @@ VG23 = _as_definition_subclass(
         " (rho_uq) - typically developing"
     ),
     subject_re_correlation_eta=2.0,
+    # Sex as a covariate for the by-sex predictions (#324); see the constant.
+    sex_effect_sigma=_SEX_EFFECT_SIGMA,
 )
 
 # VG24 (issue #296) is to VG15 what VG20 is to VG10: the same graph with the
@@ -4028,6 +4131,52 @@ VG25 = _as_definition_subclass(
     sign_lag_zero_handling=LAG_ZERO_CONTINUITY,
 )
 
+# VG26 (#240) is to VG21 what VG23 is to VG13: the same graph with the two child
+# effects allowed to correlate, derived from VG21 so VG21's window-calibrated
+# priors cannot drift away from it and VG21 is nested exactly at rho_uq = 0.
+#
+# WHY IT EXISTS. The project draws two Down syndrome / typically developing
+# contrasts against different typically developing models. The trajectory and
+# matched-comprehension contrast pairs VG20, which correlates its child effects,
+# with VG21, which does not; the between-child correlation contrast pairs VG20
+# with VG23. VG23 is the evidence that VG21's independence assumption is wrong
+# -- rho_uq 0.128 [0.096, 0.160] on 5,496 children -- and VG21 inherits that
+# assumption from VG13. VG26 carries the correlation on the window the
+# matched-comprehension contrast needs, so one model could serve both contrasts.
+#
+# WHY IT IS NOT "VG23 WITH A WIDER WINDOW". VG21 is not VG13 with
+# `max_age_months` widened: beyond naming, the query grid and the sex covariate,
+# nine fields differ -- the window (`gp_domain_months`, `max_age_months`), four
+# anchor fields re-placed on it (`slope_anchors`, `gp_anchor_age_months`, and
+# the anchor ages inside `kappa_u` and `kappa_s`) and three priors re-centred for
+# it (`p_slope_hi_u_beta`, `p_slope_hi_q_beta`, `eta_q_sigma`). Widening VG23
+# would not reproduce VG21, so the correlation is added to VG21 instead.
+#
+# WHAT TO CHECK BEFORE IT REPLACES ANYTHING. Four things, recorded on #240. (1)
+# Report rho_uq on 8-18 months (VG23) and 8-22 months (this model) side by side:
+# 19-22 months is where Words & Sentences stops supplying comprehension and the
+# Oxford CDI's 418-item ceiling starts to bind, and a correlation between a
+# child's comprehension offset and their conversion offset is the quantity most
+# exposed to a change in how comprehension is measured. (2) The shared-reporter
+# confound travels with it: one parent completes both counts, which biases
+# rho_uq upward, as it does for VG20 and VG23. (3) VG13's unfitted sensitivity
+# debt transfers here rather than disappearing. (4) VG21 keeps its TD-reference
+# role until this model has a fit and a role of its own.
+#
+# `eta = 2` matches VG20 and VG23, so the three correlations are
+# prior-comparable.
+VG26 = _as_definition_subclass(
+    VG21,
+    BivariateCorrelatedSubjectREModelDefinition,
+    model_id="VG26",
+    config_name="age-understood-spoken-td-re-window22-corr",
+    banner=(
+        "Fitting Model VG26: VG21 + correlated subject random effects on U and q"
+        " (rho_uq) - typically developing, 8-22 months"
+    ),
+    subject_re_correlation_eta=2.0,
+)
+
 MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "vg01": VG01,
     "vg02": VG02,
@@ -4051,6 +4200,7 @@ MODEL_REGISTRY: dict[str, ModelDefinition] = {
     "vg23": VG23,
     "vg24": VG24,
     "vg25": VG25,
+    "vg26": VG26,
 }
 
 

@@ -53,6 +53,10 @@ def small_frame() -> pd.DataFrame:
             "subject_code": child,
             "study": np.array(["study_a", "study_b", "study_c"])[child // 2],
             "study_code": child // 2,
+            # Recorded per child; the third study records none, as seven Down
+            # syndrome studies do. Only a model carrying the sex covariate (VG20
+            # here) reads it, and codes an unrecorded child at zero.
+            "sex": np.array(["F", "M", "F", "M", None, None], dtype=object)[child],
         }
     )
 
@@ -142,7 +146,8 @@ def count_variation() -> pd.DataFrame:
 #
 # The example below retains each registered model's 810-word reference.
 # VG01 models understood counts. VG05 adds speech conditional on understood.
-# VG07 adds study offsets; VG10 adds child offsets; VG20 correlates them.
+# VG07 adds study offsets; VG10 adds child offsets; VG20 correlates them, and
+# also carries sex as a covariate, as every reporting model does.
 # `details.tables` contains the build settings for inspection without printing.
 
 

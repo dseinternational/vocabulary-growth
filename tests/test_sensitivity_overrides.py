@@ -262,17 +262,25 @@ def test_registry_counts_and_models():
     # leave-one-study-out pair, once `JointModelDefinition` gained the
     # `exclude_studies` field they need. The two studies the lag's support rests
     # on most: 52 and 43 of its 191 supporting observations.
-    assert len(VARIANTS) == 95
+    #
+    # +19 on 2026-09-13 (#240): the typically developing variants its review
+    # asked for, on VG11, VG12, VG21, VG23 and VG26. `no-study-threshold` and
+    # `study-age-slopes` on all five (item 5), `a1-tau-age-varying` on the three
+    # without a correlated child block (item 1), `eta-q-wide` on the three joint
+    # ones (item 6), and VG13's never-fitted `single-admin` and `vague-anchors`
+    # carried to VG21 and VG26 (item 6).
+    assert len(VARIANTS) == 114
     assert len(variants_for("vg25")) == 10
     assert len(variants_for("vg14")) == 3
     assert len(variants_for("vg16")) == 8
-    assert len(variants_for("vg21")) == 1
-    assert len(variants_for("vg23")) == 1
+    assert len(variants_for("vg21")) == 6
+    assert len(variants_for("vg23")) == 4
+    assert len(variants_for("vg26")) == 5
     assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
     assert len(variants_for("vg10")) == 18
-    assert len(variants_for("vg11")) == 5
-    assert len(variants_for("vg12")) == 5
+    assert len(variants_for("vg11")) == 8
+    assert len(variants_for("vg12")) == 8
     assert len(variants_for("vg13")) == 4
     assert len(variants_for("vg15")) == 31
     assert len(variants_for("vg20")) == 6

@@ -70,13 +70,13 @@ def _write_sources(directory) -> None:
 _MERGED = pd.DataFrame(
     [
         {"study": "uk_04", "age": 25.0, "understood": 30, "spoken": 20, "signed": 12,
-         "subject_id": "c1"},
+         "subject_id": "c1", "sex": None},
         {"study": "uk_04", "age": 31.0, "understood": 38, "spoken": 24, "signed": 15,
-         "subject_id": "c1"},
+         "subject_id": "c1", "sex": None},
         {"study": "uk_05", "age": 29.0, "understood": 41, "spoken": 27, "signed": 16,
-         "subject_id": "c2"},
+         "subject_id": "c2", "sex": "F"},
         {"study": "ie_02", "age": 33.0, "understood": 55, "spoken": 30, "signed": 20,
-         "subject_id": "c3"},
+         "subject_id": "c3", "sex": "M"},
     ]
 )
 

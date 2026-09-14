@@ -75,6 +75,8 @@ EXPECTED = {
     "vg21": ({"u": "constant", "q": "constant"}, None, None, False),
     "vg22": ({"u": "factor", "q": "factor"}, None, 3, False),
     "vg23": ({"u": "constant", "q": "constant"}, 2.0, None, False),
+    # VG26 is VG21 plus the correlation, exactly as VG23 is VG13 plus it.
+    "vg26": ({"u": "constant", "q": "constant"}, 2.0, None, False),
     # VG24 is VG15 plus the correlation, so all three blocks stay constant and
     # the eta appears. The joint engine does not consume this plan -- `resolve`
     # is called only from `common_bivariate_re`, and the joint seam reads the
