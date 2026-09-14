@@ -232,10 +232,12 @@ a hypothesis about how the form was filled in, not something the aggregate count
 can settle.
 
 Withheld here rather than left to the general rule. Since 2026-08-25 the
-comparable records in ``ie_01``, ``uk_01`` and ``it_01`` are masked by
+comparable records in ``ie_01`` and ``it_01`` are masked by
 :func:`mask_comprehension_below_production` -- previously they were retained and
 flagged, and this docstring drew the contrast against that -- and since
-2026-09-13 one in ``uk_02`` as well, eleven in all. The reason for
+2026-09-13 one in ``uk_02`` as well, nine in all. (Two ``uk_01`` records were
+masked too until 2026-09-14, when the source's comprehension count was found to
+exclude words the child also says and was corrected upstream.) The reason for
 keeping a separate mechanism is unchanged: those are a known, stable property
 of closed sources, whereas this one is an open question with a reachable source
 team, so the row is held out of the prepared data entirely until the study owner
@@ -553,29 +555,41 @@ def mask_duplicated_outcome_administrations(
     return out, dropped
 
 
-COMPREHENSION_BELOW_PRODUCTION_STUDIES: tuple[str, ...] = ("ie_01", "it_01", "uk_01", "uk_02")
+COMPREHENSION_BELOW_PRODUCTION_STUDIES: tuple[str, ...] = ("ie_01", "it_01", "uk_02")
 """Studies carrying a comprehension count below the child's own production count.
 
 An inclusive comprehension field cannot be exceeded by production: a word the
 child says is a word the child understands, so ``understood >= produced`` holds
-by construction on any form where comprehension is asked inclusively. Eleven
-administrations violate it -- seven in ``ie_01``, two in ``uk_01``, one in
-``it_01`` and one in ``uk_02`` -- and the violations are not marginal: one
-``ie_01`` child records 13 words understood against 366 spoken, and two record 0
-understood against 83 spoken.
+by construction on any form where comprehension is asked inclusively. Nine
+administrations violate it -- seven in ``ie_01``, one in ``it_01`` and one in
+``uk_02`` -- and the violations are not marginal: one ``ie_01`` child records 13
+words understood against 366 spoken, and two record 0 understood against 83
+spoken.
+
+``uk_01`` held two more until 2026-09-14, and they were a coding error rather
+than a defect of the records. Its source marks each word "understands",
+"understands and says" or "signs" -- one response per word -- and the prepared
+``understood`` had summed the "understands" column alone, so every ``uk_01``
+comprehension count excluded the words the child also produced, and the two
+children producing most were caught here. The source's own inclusive total
+(``UNDERST == WORDSUND + WORDS`` on all 224 rows) settled it, and the count was
+corrected where the CSV is built (``prepare/uk_01_edg.py`` in
+``research-data-analysis``, issue #320). The same correction retired an upstream
+rule that had emptied 41 of uk_01's 70 Words and Gestures comprehension counts,
+so ``uk_01`` now contributes 69 rather than 27.
 
 **The comparison is against the greatest recorded lower bound on production**,
 ``max(produced, spoken)``, with a missing value treated as absent. Until
 2026-09-13 it was against ``produced`` alone, and the guard required that column
 to be present, so a row whose union was never recorded could not be tested at
-all. One such row is the eleventh: a ``uk_02`` child at 48 months recording 347
+all. One such row is the ``uk_02`` one above: a child at 48 months recording 347
 words understood against 387 spoken (and 254 signed) with no ``produced`` value.
 ``spoken`` alone already exceeds ``understood`` there, and a child who says 387
 words produces at least 387, so the record is contradictory on its face and
 needed no question to the source (#236). The same child at 47 months reads 393
 understood, 351 spoken and 388 produced, which is consistent. No recorded
-``produced`` falls below ``spoken``, so the widened rule catches exactly the ten
-it caught before plus that one.
+``produced`` falls below ``spoken``, so the widened rule caught exactly the ten
+it caught before plus that one (eleven, until the ``uk_01`` correction took two).
 
 ``signed`` is **not** a term of the bound, although the proposal on #236 named
 it. ``produced`` is the modality union in some sources and the spoken count
@@ -589,9 +603,9 @@ source.
 **The comprehension count is what gets masked, not the production count.** The
 production figure is corroborated by two columns that agree (``spoken`` and
 ``signed`` sum to the recorded ``produced``), and in both studies with a
-diagnosis the fault has been localised to comprehension: ``uk_01``'s
-``understood`` appears to *exclude* words the child also produces, which is why
-``spoken / understood`` reaches 1.95 there, and ``ie_01``'s seven rows sit in the
+diagnosis the fault was localised to comprehension: ``uk_01``'s ``understood``
+turned out to *exclude* words the child also produces (corrected at source, see
+above), and ``ie_01``'s seven rows sit in the
 wave whose Checklist 1 comprehension field is already known to be unreliable
 (pooled comprehension *falls* between waves while the mean understood total
 rises). Masking the row wholesale would discard production counts that are not
@@ -601,8 +615,8 @@ A maximum is the right bound and ``spoken + signed`` is not. In the
 signing studies the two columns overlap -- a child who both says and signs a word
 is counted in each -- so their sum overstates distinct words produced, badly:
 ``uk_07`` has ``produced < spoken + signed`` on 77 of 82 rows and ``nz_01`` on
-101 of 111. Reconstructing production as the sum would flag 87 administrations
-instead of 11, almost all of them bimodal children penalised for double counting.
+101 of 111. Reconstructing production as the sum would flag 85 administrations
+instead of 9, almost all of them bimodal children penalised for double counting.
 A maximum cannot overstate production, because each of its terms is contained in
 it.
 
@@ -622,7 +636,7 @@ sees it. Its docstring previously contrasted itself with ``ie_01``'s seven
 "retained-and-flagged" records; as of 2026-08-25 those are masked here instead,
 on the study owner's ruling.
 
-Set ``include_comprehension_below_production=True`` to reinstate the eleven
+Set ``include_comprehension_below_production=True`` to reinstate the nine
 comprehension counts for sensitivity analysis.
 """
 
