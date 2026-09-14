@@ -73,7 +73,7 @@ Not registered: #240 item 2, held-out validation for the typically developing mo
 
 ## 5. The spoken fallback is kept
 
-#236 items 1–2 asked to quantify or replace the `product_marginal` fallback. The 2026-09-06 arms answered the question they could: changing how the fallback is parameterised barely moves anything (`fallback-dispersion` 380/381 and 87/88 inside the baseline intervals, `marginal-moments` 88/88 on VG15), while removing the rows (`paired-only`) moves the trajectories a great deal and cannot separate "the fallback rows matter" from "less data". The exact marginalisation #236 contemplated targets the functional form, the part those arms find least consequential. **Decision: keep `product_marginal` as the default**, with the three arms remaining registered on VG10, VG14, VG15 and VG20 as the record of its cost. Nothing in the code changed for this.
+#236 items 1–2 asked to quantify or replace the `product_marginal` fallback. The 2026-09-06 arms answered the question they could: changing how the fallback is parameterised barely moves anything (`fallback-dispersion` 380/381 on VG14 and 87/88 on VG15 within the baseline 89% intervals; `marginal-moments` 88/88 on VG15 but 324/381 on VG14, sensitive on `Ey_understood` and the gap; #289 task 1.2), while removing the rows (`paired-only`) moves the trajectories a great deal and cannot separate "the fallback rows matter" from "less data". The exact marginalisation #236 contemplated targets the functional form, the part those arms find least consequential. **Decision: keep `product_marginal` as the default**, with the three arms remaining registered on VG10, VG14, VG15 and VG20 as the record of its cost. Nothing in the code changed for this.
 
 ## 6. What the refit inherits
 
