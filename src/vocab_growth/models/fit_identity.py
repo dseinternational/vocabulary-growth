@@ -147,6 +147,7 @@ FIELD_ROLES: dict[str, FieldRole] = {
     "include_uk07_cells": FieldRole.DATA,
     "dse_native_only": FieldRole.DATA,
     "one_observation_per_subject": FieldRole.DATA,
+    "sex_known_only": FieldRole.DATA,
     # -- reporting: the grids and caps the fit reports on --------------------
     #
     # `ages_query` and `n_plot` are reporting rather than graph because the
@@ -165,6 +166,12 @@ FIELD_ROLES: dict[str, FieldRole] = {
     "gp_anchor_age_months": FieldRole.GRAPH,
     "centred_study_re": FieldRole.GRAPH,
     "clamp_mean_above_hi_anchor": FieldRole.GRAPH,
+    # Adds the sex coefficients and the contrast they multiply (#324). Also
+    # changes the prepared frame, which gains a `sex` column, but the frame hash
+    # sees that independently; the field is named for what it does to the model.
+    "sex_effect_sigma": FieldRole.GRAPH,
+    # Per-study age slopes (#240 item 5), a sensitivity structure.
+    "study_age_slope_sigma": FieldRole.GRAPH,
 }
 
 #: Fields whose absence from an older manifest is equivalent to this value.
@@ -209,11 +216,54 @@ FIELD_ROLES: dict[str, FieldRole] = {
 #: ``tests/test_fit_identity.py`` reads that default off the call site rather
 #: than restating it, and ``tests/test_cross_lag.py`` pins that the unrestricted
 #: path reproduces the historical arrays exactly.
+#:
+#: The fifth, ``exclude_studies`` (#297 check 5, 2026-09-13), is the same kind
+#: again and checked the same way, on the joint definitions: the joint frame
+#: builder reads it through ``getattr(definition, "exclude_studies", ())`` and
+#: skips its filter entirely when that is empty, so a definition that predates
+#: the field builds exactly the frame every joint fit before it was built from.
+#: Checked on the fits themselves as well as the call site: the VG15 and VG24
+#: fits of record validate with and without the field, and the frame hash the
+#: three joint models share did not move when it was added.
+#:
+#: One thing it carries rather than inherits. The registry is keyed by bare field
+#: name, so this entry also covers ``BivariateModelDefinition``'s own
+#: ``exclude_studies``, added 2026-08-25 without one. The claim holds there too
+#: -- ``2697dc8`` added the bivariate filter in the same commit as the field, so
+#: no earlier bivariate fit could have dropped a study -- but the bivariate
+#: engine reads the field as a plain attribute, so that half rests on the
+#: commit history rather than on a call site. It excuses nothing live: every
+#: bivariate fit of record postdates the field and records it.
+#:
+#: ``sex_effect_sigma`` and ``sex_known_only`` (#324, 2026-09-13) make the first
+#: entries' kind of claim and are checked their way; ``study_age_slope_sigma``,
+#: after them, carries its own comment. Both lived until that date on an unregistered sibling class that only
+#: the VG20 sex experiment instantiated, so no registered fit ever carried a
+#: sex term or a sex restriction; both moved onto the classes the registered
+#: models instantiate, and every engine and frame builder reads them through
+#: :func:`vocab_growth.models.sex_covariate.sex_effect_sigma` and
+#: :func:`~vocab_growth.models.sex_covariate.sex_known_only`, whose defaults are
+#: these values. ``tests/test_fit_identity.py`` reads those defaults off the
+#: readers rather than restating them. They matter for the development steps
+#: that keep the defaults -- VG05, VG07-VG10, VG13, VG16, VG19, VG22 -- whose
+#: existing fits would otherwise fail on a field that changes nothing about
+#: them.
 BACKFILL_DEFAULTS: dict[str, Any] = {
     "spoken_fallback": SPOKEN_FALLBACK_PRODUCT,
     "spoken_fallback_kappa_sigma": 0.5,
     "include_same_day_disagreements": False,
     "lag_same_form_only": False,
+    "exclude_studies": (),
+    # Earlier VG25 fits imposed no form restriction. The shared reader and
+    # test_fit_identity.py check that absence still resolves to False.
+    "sign_lag_same_form_only": False,
+    "sex_effect_sigma": None,
+    "sex_known_only": False,
+    # Per-study age slopes (#240 item 5, 2026-09-13): no fit before the field
+    # carried one, and both random-effect engines read it through
+    # `getattr(definition, "study_age_slope_sigma", None)`, which
+    # `tests/test_fit_identity.py` reads off their source.
+    "study_age_slope_sigma": None,
 }
 
 

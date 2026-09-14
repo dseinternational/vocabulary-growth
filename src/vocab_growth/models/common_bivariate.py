@@ -42,6 +42,7 @@ import preliz as pz
 import pymc as pm
 import xarray as xr
 from preliz.distributions.distributions import Continuous
+from pytensor.tensor.variable import TensorVariable
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.intervals as intervals
@@ -50,7 +51,8 @@ import vocab_growth.posterior_analysis as posterior_analysis
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.administration_loo import LikelihoodFactor
 from vocab_growth.fit_artifacts import save_trace
-from vocab_growth.models import prior_child_checks
+from vocab_growth.models import prior_child_checks, sex_covariate
+from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -69,8 +71,8 @@ from vocab_growth.models.common import (
     get_hsgp_hyperparams,
     kappa_anchor_derived_rows,
     plot_and_print_dist,
-    render_model_graph,
     report,
+    report_model_build,
     run_fit_pipeline,
     validate_kappa_fields,
 )
@@ -85,7 +87,14 @@ from vocab_growth.models.likelihood_utils import (
     nested_outcome_spec,
     resolve_fallback_treatment,
 )
-from vocab_growth.models.subject_effects import DEFAULT_SLOPE_REF_AGE_MONTHS
+from vocab_growth.models.subject_effects import (
+    SubjectEffectKind,
+    SubjectEffectPlan,
+    slope_reference_age,
+)
+from vocab_growth.models.subject_effects import (
+    resolve as resolve_subject_effects,
+)
 from vocab_growth.plotting import (
     plot_comprehension_production_gap,
     plot_production_rate,
@@ -346,7 +355,8 @@ def configure_bivariate_priors(
     definition: BivariateModelDefinition,
 ):
     """Configure priors and hyperparameters from a bivariate model definition."""
-    heading("Understood trajectory priors", style="bold cyan")
+    if context.report_build:
+        heading("Understood trajectory priors", style="bold cyan")
     # --- Understood (U) trajectory priors ---
 
     ell_unit_u_dist = pz.Beta(
@@ -369,7 +379,8 @@ def configure_bivariate_priors(
     plot_and_print_dist(context, p_slope_hi_u_dist, "p_slope_hi_u_dist")
 
     # --- Production ratio (q) priors ---
-    heading("Production ratio priors", style="bold cyan")
+    if context.report_build:
+        heading("Production ratio priors", style="bold cyan")
 
     ell_unit_q_dist = pz.Beta(
         alpha=definition.ell_unit_q_alpha, beta=definition.ell_unit_q_beta
@@ -396,27 +407,31 @@ def configure_bivariate_priors(
     # (the prior translated into q shifts over the empirical x_lag range)
     # remains registered follow-up work in #242.
     if getattr(definition, "use_cross_lag", False):
-        heading("Cross-lag coefficient prior", style="bold cyan")
+        if context.report_build:
+            heading("Cross-lag coefficient prior", style="bold cyan")
         beta_lag_dist = pz.Normal(
             mu=definition.beta_lag_mu, sigma=definition.beta_lag_sigma
         )
         plot_and_print_dist(context, beta_lag_dist, "beta_lag_dist")
 
-    # --- Sex shift prior (exploratory VG20 variant, issue #295) ---
+    # --- Sex covariate prior (issue #324) ---
     # One prior serves both coefficients; the engine draws `beta_sex_u` and
     # `beta_sex_q` from it independently.
-    sex_sigma = getattr(definition, "sex_effect_sigma", None)
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
     if sex_sigma is not None:
-        heading("Sex shift prior", style="bold cyan")
+        if context.report_build:
+            heading("Sex covariate prior", style="bold cyan")
         beta_sex_dist = pz.Normal(mu=0.0, sigma=sex_sigma)
         plot_and_print_dist(context, beta_sex_dist, "beta_sex_dist")
 
     # --- Kappa priors — understood ---
-    heading("Kappa priors — understood", style="bold cyan")
+    if context.report_build:
+        heading("Kappa priors — understood", style="bold cyan")
     kappa_u_fields = configure_kappa_priors(context, definition.kappa_u, "_u")
 
     # --- Kappa priors — spoken ---
-    heading("Kappa priors — spoken", style="bold cyan")
+    if context.report_build:
+        heading("Kappa priors — spoken", style="bold cyan")
     kappa_s_fields = configure_kappa_priors(context, definition.kappa_s, "_s")
 
     # --- Configuration object ---
@@ -450,11 +465,39 @@ def configure_bivariate_priors(
 # ============================================================
 
 
-def build_model(
+def build_model(context: BivariateContext, definition: BivariateModelDefinition):
+    """Pipeline stage: construct the model, then write its build report."""
+    details = build_model_graph(context, definition)
+    report_model_build(context, details)
+
+
+def build_model_graph(
     context: BivariateContext,
     definition: BivariateModelDefinition,
-):
+) -> BuildReport:
     """Build the bivariate PyMC model."""
+    unsupported = [
+        name
+        for name, is_set in (
+            ("sex_effect_sigma / sex_known_only", sex_covariate.needs_sex_column(definition)),
+            (
+                "study_age_slope_sigma",
+                getattr(definition, "study_age_slope_sigma", None) is not None,
+            ),
+        )
+        if is_set
+    ]
+    if unsupported:
+        # These fields are on the class this engine shares with the random-effect
+        # one, and the random-effect engine is the only one that implements them.
+        # Refused here rather than ignored: a definition that asks for a term and
+        # fits without it would report a model it is not.
+        raise ValueError(
+            f"{definition.model_id} sets {', '.join(unsupported)}, which the bivariate "
+            "engine without random effects does not implement; use the bivariate_re "
+            "engine."
+        )
+    build_report = BuildReport()
     config = context.model_config
 
     analysis_df = context.analysis_df
@@ -501,16 +544,9 @@ def build_model(
     has_s_likelihood = np.zeros(n, dtype=bool)
     has_s_likelihood[idx_s] = True
 
-    # Range validation happens ONCE, before the integer cast, and not here: the cast
-    # truncates silently, so a post-cast bound cannot catch 810.9 or -0.1, which
-    # truncate into range. `build_utils.require_valid_counts` covers the parent
-    # column and `likelihood_utils.nested_outcome_spec` covers each nested one, both
-    # on the pre-cast floats (#236, #240).
-
-    # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
-    key_value_table(
+    build_report.add_table(
         "Build configuration",
         [
             ("Total observations", n),
@@ -549,7 +585,6 @@ def build_model(
     n_query = grids.n_query
     n_all = grids.n_all
 
-    # Length-scale bounds
     ell_low_months, ell_high_months = validate_ell_bounds(config.ell_months_range)
     ell_low_z = ell_low_months / X_obs_std
     ell_high_z = ell_high_months / X_obs_std
@@ -557,12 +592,11 @@ def build_model(
 
     L, M = get_hsgp_hyperparams(grids.X_gp_domain_z, ell_range_z)
 
-    # Slope anchors
     slope_age_a_z, slope_age_b_z = standardize_anchor_ages(
         config.slope_anchors, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
     )
 
-    key_value_table(
+    build_report.add_table(
         "Derived quantities",
         [
             ("HSGP basis size (m)", M),
@@ -578,10 +612,9 @@ def build_model(
         ],
     )
 
-    # Slice indices
-    i_obs0, i_obs1 = 0, n
-    i_plot0, i_plot1 = i_obs1, i_obs1 + n_plot
-    i_query0, i_query1 = i_plot1, i_plot1 + n_query
+    i_obs0, i_obs1 = grids.i_obs
+    i_plot0, i_plot1 = grids.i_plot
+    i_query0, i_query1 = grids.i_query
 
     coords = {
         "all_id": np.arange(n_all),
@@ -594,7 +627,6 @@ def build_model(
     }
 
     with pm.Model(coords=coords) as model_pm:
-
         # ---- Data ----
 
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
@@ -631,9 +663,7 @@ def build_model(
 
         # One flag, two means: see definitions.clamp_targets. 'q_only' is
         # truthy, so testing the raw value would clamp both.
-        _clamp_u, _clamp_q = clamp_targets(
-            definition.clamp_mean_above_hi_anchor
-        )
+        _clamp_u, _clamp_q = clamp_targets(definition.clamp_mean_above_hi_anchor)
 
         # ---- Understood (U) trajectory: f_U(a) -> p_U(a) ----
         f_u_all = trend_and_gp(
@@ -807,11 +837,8 @@ def build_model(
 
     variables = pymc_utils.get_variables_dict(model_pm)
 
-    pymc_utils.report_model_summary(model_pm)
-
-    render_model_graph(model_pm, context.reporting.output_dir)
-
     context.set_model(model_pm, variables)
+    return build_report
 
 
 # ============================================================
@@ -895,8 +922,6 @@ def extract_model_samples(trace: xr.DataTree) -> BivariateModelSamples:
     X_obs = np.array(trace.constant_data["X_obs"].values)
     X_plot = np.array(trace.constant_data["X_plot"].values)
     X_query = np.array(trace.constant_data["X_query"].values)
-
-    # Standardised ages
 
     return BivariateModelSamples(
         X_obs=X_obs,
@@ -1120,39 +1145,19 @@ def diagnostics(context: BivariateContext, definition: BivariateModelDefinition)
     )
 
 
-def _subject_scales(context: BivariateContext, name: str):
-    """The A1 plot/query subject scales for ``name``, or ``(None, None)``.
-
-    Their presence is what tells the predictive path that the subject scale is
-    age-varying; a model of record emits neither and takes the scalar branch, so
-    its predictive graph is unchanged.
-    """
-    plot = context.model_variables.get(f"{name}_plot")
-    query = context.model_variables.get(f"{name}_query")
-    if plot is None or query is None:
-        return None, None
-    return plot, query
+def _require_child_variables(context: BivariateContext, *names: str):
+    """Read the variables promised by the resolved child-effect plan."""
+    missing = [name for name in names if name not in context.model_variables]
+    if missing:
+        raise ValueError(
+            f"The child-effect plan needs variables missing from the built model: {missing}."
+        )
+    return tuple(context.model_variables[name] for name in names)
 
 
 def _child_slope_block(context: BivariateContext, name: str):
-    """The VG19 ``(tau0, tau1, rho01)`` scalars for ``name``, or ``None``.
-
-    Detected by the three names :func:`~vocab_growth.models.gp_utils.build_child_slope`
-    emits. This must be checked **before** :func:`_subject_scales`: a slope model
-    also has an age-varying between-child SD, but scaling one deviate by it —
-    the A1 branch — would impose perfect rank correlation across age, which is
-    exactly the constraint the slope exists to relax. Same curve, different
-    children.
-    """
-    mv = context.model_variables
-    tau0, tau1, rho = (
-        mv.get(f"{name}_0"),
-        mv.get(f"{name}_1"),
-        mv.get(f"{name}_rho"),
-    )
-    if tau0 is None or tau1 is None or rho is None:
-        return None
-    return tau0, tau1, rho
+    """The fitted intercept scale, slope scale and their correlation."""
+    return _require_child_variables(context, f"{name}_0", f"{name}_1", f"{name}_rho")
 
 
 def _child_slope_offsets(context: BivariateContext, definition):
@@ -1161,10 +1166,7 @@ def _child_slope_offsets(context: BivariateContext, definition):
     Read from the model's own ``X_plot`` / ``X_query`` data rather than recomputed,
     so the predictive cannot drift from the grids the fit actually used.
     """
-    # The default lives once, in `subject_effects`, beside the plan that resolves
-    # it. `or` is not used: an explicit 0.0 is a legitimate reference age.
-    ref = getattr(definition, "subject_slope_ref_age_months", None)
-    ref = float(DEFAULT_SLOPE_REF_AGE_MONTHS if ref is None else ref)
+    ref = slope_reference_age(definition)
     # From the model's own named vars, not `context.model_variables`:
     # `get_variables_dict` collects free RVs, deterministics and observed RVs, so
     # `pm.Data` grids are absent from it.
@@ -1173,19 +1175,6 @@ def _child_slope_offsets(context: BivariateContext, definition):
         (model["X_plot"] - ref) / 12.0,
         (model["X_query"] - ref) / 12.0,
     )
-
-
-def _child_factor_block(context: BivariateContext):
-    """VG22's loading matrix, or ``None``.
-
-    Detected by the one name :func:`~vocab_growth.models.gp_utils.build_child_factor`
-    emits for it. Checked **before** :func:`_child_slope_block` and
-    :func:`_subject_scales`, both of which a factor model would otherwise match:
-    it emits ``tau_subj_*_0`` and ``tau_subj_*_1`` like a slope model, and a
-    ``tau_subj_*`` like a constant-offset one, but its unseen child is neither a
-    2x2 draw nor a scaled deviate.
-    """
-    return context.model_variables.get("subject_factor_loadings")
 
 
 def unseen_child_correlated_delta_q(delta_u_query, *, tau_subj_u, tau_subj_q, rho):
@@ -1253,6 +1242,75 @@ def _unseen_child_slope_deltas(context, definition, name, tag):
     return b0 + b1 * d_plot, b0 + b1 * d_query
 
 
+@dataclass(frozen=True)
+class NewChildOffsets:
+    """One new child's logit offsets on the model's plot and query age grids."""
+
+    plot: TensorVariable
+    query: TensorVariable
+
+
+def unseen_child_offsets(
+    context: BivariateContext,
+    definition: BivariateModelDefinition,
+    plan: SubjectEffectPlan,
+    outcome: str,
+    *,
+    understood: NewChildOffsets | None = None,
+) -> NewChildOffsets:
+    """Draw the child structure used in fitting, preserving its age dependence.
+
+    A factor draw is shared across outcomes. Correlated constant offsets use
+    the already-drawn comprehension offset. Variable checks expose a mismatch
+    between the definition and graph instead of choosing another structure.
+    """
+    effect = plan[outcome]
+    name = effect.scale_name
+    if effect.kind is SubjectEffectKind.FACTOR:
+        _require_child_variables(context, "subject_factor_loadings")
+        return NewChildOffsets(
+            *_unseen_child_factor_deltas(context, definition, outcome)
+        )
+    if effect.kind is SubjectEffectKind.CHILD_SLOPE:
+        return NewChildOffsets(
+            *_unseen_child_slope_deltas(
+                context,
+                definition,
+                name,
+                f"subj_{outcome}",
+            )
+        )
+    if effect.kind is SubjectEffectKind.AGE_VARYING:
+        plot_scale, query_scale = _require_child_variables(
+            context,
+            f"{name}_plot",
+            f"{name}_query",
+        )
+        deviate = pm.Normal(f"_z_subj_{outcome}_marg", mu=0.0, sigma=1.0)
+        return NewChildOffsets(deviate * plot_scale, deviate * query_scale)
+    if effect.kind is not SubjectEffectKind.CONSTANT:
+        raise ValueError(
+            f"Cannot draw a bivariate child offset for {effect.kind.value!r}."
+        )
+
+    (scale,) = _require_child_variables(context, name)
+    if outcome == "q" and plan.correlation_eta is not None:
+        if understood is None:
+            raise ValueError(
+                "Draw the comprehension offset before its correlated speech offset."
+            )
+        tau_u, rho = _require_child_variables(context, "tau_subj_u", "rho_uq")
+        offset = unseen_child_correlated_delta_q(
+            understood.query,
+            tau_subj_u=tau_u,
+            tau_subj_q=scale,
+            rho=rho,
+        )
+    else:
+        offset = pm.Normal(f"_delta_subj_{outcome}_marg", mu=0.0, sigma=scale)
+    return NewChildOffsets(offset, offset)
+
+
 def sample_posterior_predictive(
     context: BivariateContext, definition: BivariateModelDefinition
 ):
@@ -1277,124 +1335,35 @@ def sample_posterior_predictive(
     kappa_s_plot = context.model_variables["kappa_s_plot"]
     kappa_s_query = context.model_variables["kappa_s_query"]
 
-    use_subject_re_u = bool(getattr(definition, "use_subject_re_u", False))
-    use_subject_re_q = bool(getattr(definition, "use_subject_re_q", False))
-
+    plan = resolve_subject_effects(definition)
+    beta_sex_u = context.model_variables.get("beta_sex_u")
+    beta_sex_q = context.model_variables.get("beta_sex_q")
     with context.model:
-        # Subject-marginalised probabilities if subject REs are present.
-        # delta_subj_*_marg are auxiliary scalar RVs sampled from the subject-RE
-        # prior during sample_posterior_predictive. Reusing one scalar across
-        # plot/query ages makes y_*_plot a coherent unseen-child trajectory.
-        if use_subject_re_u:
-            tau_subj_u = context.model_variables["tau_subj_u"]
-            f_u_plot_var = context.model_variables["f_u_plot"]
-            f_u_query_var = context.model_variables["f_u_query"]
-            plot_scale, query_scale = _subject_scales(context, "tau_subj_u")
-            if _child_factor_block(context) is not None:
-                # VG22. Checked before the slope branch, which its parameter
-                # names would otherwise match.
-                delta_u_plot, delta_u_query = _unseen_child_factor_deltas(
-                    context, definition, "u"
-                )
-            elif _child_slope_block(context, "tau_subj_u") is not None:
-                # VG19. Checked first: a slope model has an age-varying spread
-                # too, but its unseen child is a (b0, b1) pair rather than one
-                # deviate scaled by a curve.
-                delta_u_plot, delta_u_query = _unseen_child_slope_deltas(
-                    context, definition, "tau_subj_u", "subj_u"
-                )
-            elif plot_scale is None:
-                delta_u_marg = pm.Normal("_delta_subj_u_marg", mu=0.0, sigma=tau_subj_u)
-                delta_u_plot = delta_u_query = delta_u_marg
-            else:
-                # Proposal A1: one standard deviate per draw, scaled by tau(age),
-                # so the unseen child stays the *same* child across the grid while
-                # the spread it is drawn from widens or narrows with age. It gets
-                # its own name: `_delta_subj_u_marg` holds a deviate already on
-                # the logit scale, and reusing that name for a standardised one
-                # would put two different quantities under it depending on the
-                # branch taken.
-                z_child_u = pm.Normal("_z_subj_u_marg", mu=0.0, sigma=1.0)
-                delta_u_plot = z_child_u * plot_scale
-                delta_u_query = z_child_u * query_scale
-            p_u_plot = pm.math.sigmoid(f_u_plot_var + delta_u_plot)
-            p_u_query = pm.math.sigmoid(f_u_query_var + delta_u_query)
+        child_u = None
+        child_q = None
+        if plan["u"].is_active:
+            child_u = unseen_child_offsets(context, definition, plan, "u")
+            p_u_plot = pm.math.sigmoid(
+                context.model_variables["f_u_plot"] + child_u.plot
+            )
+            p_u_query = pm.math.sigmoid(
+                context.model_variables["f_u_query"] + child_u.query
+            )
 
-        if use_subject_re_q:
-            tau_subj_q = context.model_variables["tau_subj_q"]
-            h_plot_var = context.model_variables["h_plot"]
-            h_query_var = context.model_variables["h_query"]
-            plot_scale, query_scale = _subject_scales(context, "tau_subj_q")
-            # The unseen child's two deviates must come from the SAME joint
-            # distribution the model fitted. Until 2026-08-19 they were two
-            # independent `pm.Normal` draws, so a model carrying `rho_uq`
-            # estimated the correlation and then discarded it when building the
-            # subject-marginal predictive -- the one quantity the correlation was
-            # added to change. VG20's gate 3 read as "a correlation of +0.368
-            # leaves the spoken intervals unchanged", which was this code path
-            # asserting rho = 0 rather than a result. See #224.
-            #
-            # Same Cholesky construction as `common_bivariate_re.build_model_re`:
-            # each deviate keeps its marginal SD and only their joint behaviour
-            # changes. `rho_uq` is absent from every model without a
-            # `subject_re_correlation_eta`, so the other six draw exactly as
-            # before -- checked by test rather than asserted.
-            #
-            # `z_u` is recovered by dividing the existing logit-scale deviate by
-            # its own scale instead of introducing a standardised RV, so no
-            # variable is renamed and no model's graph gains or loses a node.
-            # The age-varying branch below cannot carry a correlation at all:
-            # `subject_effects.resolve` rejects that combination,
-            # because a constant correlation between per-observation-scaled
-            # deviates is not a model anyone means.
-            rho_marg = context.model_variables.get("rho_uq")
-            correlated = rho_marg is not None and use_subject_re_u
-            if _child_factor_block(context) is not None:
-                # VG22, reading back the same child the u side drew. `correlated`
-                # is False by construction: the engine refuses `rho_uq` as a
-                # field alongside a factor, and the `rho_uq` this model emits is
-                # a deterministic element of the factor covariance rather than a
-                # coupling to apply again here.
-                delta_q_plot, delta_q_query = _unseen_child_factor_deltas(
-                    context, definition, "q"
-                )
-            elif _child_slope_block(context, "tau_subj_q") is not None:
-                # VG19, and `correlated` is False by construction here: the
-                # engine refuses `rho_uq` alongside a slope, so there is no
-                # cross-outcome coupling to carry.
-                delta_q_plot, delta_q_query = _unseen_child_slope_deltas(
-                    context, definition, "tau_subj_q", "subj_q"
-                )
-            elif plot_scale is None:
-                if correlated:
-                    delta_q_marg = unseen_child_correlated_delta_q(
-                        delta_u_query,
-                        tau_subj_u=context.model_variables["tau_subj_u"],
-                        tau_subj_q=tau_subj_q,
-                        rho=rho_marg,
-                    )
-                else:
-                    delta_q_marg = pm.Normal(
-                        "_delta_subj_q_marg", mu=0.0, sigma=tau_subj_q
-                    )
-                delta_q_plot = delta_q_query = delta_q_marg
-            else:
-                z_child_q = pm.Normal("_z_subj_q_marg", mu=0.0, sigma=1.0)
-                delta_q_plot = z_child_q * plot_scale
-                delta_q_query = z_child_q * query_scale
-            q_plot = pm.math.sigmoid(h_plot_var + delta_q_plot)
-            q_query = pm.math.sigmoid(h_query_var + delta_q_query)
+        if plan["q"].is_active:
+            child_q = unseen_child_offsets(
+                context, definition, plan, "q", understood=child_u
+            )
+            q_plot = pm.math.sigmoid(context.model_variables["h_plot"] + child_q.plot)
+            q_query = pm.math.sigmoid(
+                context.model_variables["h_query"] + child_q.query
+            )
             p_s_query = p_u_query * q_query
-        elif use_subject_re_u:
-            # Marginal U but not q: rebuild p_s from new p_u and original q.
+        elif plan["u"].is_active:
             p_s_query = p_u_query * q_query
 
-        pm.Deterministic(
-            "p_u_query_subject_marginal", p_u_query, dims=("query_id",)
-        )
-        pm.Deterministic(
-            "p_s_query_subject_marginal", p_s_query, dims=("query_id",)
-        )
+        pm.Deterministic("p_u_query_subject_marginal", p_u_query, dims=("query_id",))
+        pm.Deterministic("p_s_query_subject_marginal", p_s_query, dims=("query_id",))
         # The same quantities on the plot grid, which is what a *trajectory*
         # needs. `y_*_plot` below is already a coherent unseen child -- one child
         # effect reused across the grid -- but it carries Beta-Binomial noise
@@ -1409,9 +1378,7 @@ def sample_posterior_predictive(
         # under the age-varying scale -- and reproducing that outside this
         # function is how the correlation came to be silently dropped once
         # before (#224).
-        pm.Deterministic(
-            "p_u_plot_subject_marginal", p_u_plot, dims=("plot_id",)
-        )
+        pm.Deterministic("p_u_plot_subject_marginal", p_u_plot, dims=("plot_id",))
         pm.Deterministic(
             "p_s_plot_subject_marginal", p_u_plot * q_plot, dims=("plot_id",)
         )
@@ -1428,12 +1395,8 @@ def sample_posterior_predictive(
         # that is a true statement about the graph rather than a mislabelling:
         # its subject-marginal `p_s` is already the marginal `p_u` times this
         # same population `q`.
-        pm.Deterministic(
-            "q_query_subject_marginal", q_query, dims=("query_id",)
-        )
-        pm.Deterministic(
-            "q_plot_subject_marginal", q_plot, dims=("plot_id",)
-        )
+        pm.Deterministic("q_query_subject_marginal", q_query, dims=("query_id",))
+        pm.Deterministic("q_plot_subject_marginal", q_plot, dims=("plot_id",))
 
         # Understood — plot
         p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
@@ -1472,6 +1435,63 @@ def sample_posterior_predictive(
             dims=("query_id",),
         )
 
+        # By sex (#324), on the query grid: the same new child as above -- the
+        # same child-effect draws, correlated or not -- as a girl and as a boy.
+        # The nodes above are that child at contrast zero, a child of unrecorded
+        # sex, which is how the model treats every such row it was fitted to.
+        # Sharing the child draw makes the two levels paired draw for draw.
+        by_sex_names: list[str] = []
+        if beta_sex_u is not None:
+            u_offset = child_u.query if child_u is not None else 0.0
+            q_offset = child_q.query if child_q is not None else 0.0
+            for level, contrast in sex_covariate.SEX_LEVELS:
+                p_u_level = pm.Deterministic(
+                    f"p_u_query_subject_marginal_{level}",
+                    pm.math.sigmoid(
+                        context.model_variables["f_u_query"]
+                        + u_offset
+                        + contrast * beta_sex_u
+                    ),
+                    dims=("query_id",),
+                )
+                q_level = pm.Deterministic(
+                    f"q_query_subject_marginal_{level}",
+                    pm.math.sigmoid(
+                        context.model_variables["h_query"]
+                        + q_offset
+                        + contrast * beta_sex_q
+                    ),
+                    dims=("query_id",),
+                )
+                pm.Deterministic(
+                    f"p_s_query_subject_marginal_{level}",
+                    p_u_level * q_level,
+                    dims=("query_id",),
+                )
+                p_u_level_clip = pm.math.clip(p_u_level, EPSILON, 1 - EPSILON)
+                y_u_level = pm.BetaBinomial(
+                    f"y_u_query_{level}",
+                    n=n_trials,
+                    alpha=p_u_level_clip * kappa_u_query,
+                    beta=(1 - p_u_level_clip) * kappa_u_query,
+                    dims=("query_id",),
+                )
+                q_level_clip = pm.math.clip(q_level, EPSILON, 1 - EPSILON)
+                pm.BetaBinomial(
+                    f"y_s_query_{level}",
+                    n=y_u_level,
+                    alpha=q_level_clip * kappa_s_query,
+                    beta=(1 - q_level_clip) * kappa_s_query,
+                    dims=("query_id",),
+                )
+                by_sex_names += [
+                    f"p_u_query_subject_marginal_{level}",
+                    f"q_query_subject_marginal_{level}",
+                    f"p_s_query_subject_marginal_{level}",
+                    f"y_u_query_{level}",
+                    f"y_s_query_{level}",
+                ]
+
         trace = pm.sample_posterior_predictive(
             context.trace,
             var_names=[
@@ -1487,6 +1507,7 @@ def sample_posterior_predictive(
                 "q_query_subject_marginal",
                 "q_plot_subject_marginal",
                 "y_s_obs",
+                *by_sex_names,
             ],
             extend_inferencedata=True,
             progressbar=sys.stdout.isatty(),
@@ -1618,6 +1639,118 @@ def posterior_summary(context: BivariateContext):
     summary_q.to_csv(
         os.path.join(context.reporting.output_dir, "posterior_summary_q.csv"),
         index=False,
+    )
+
+    write_sex_summaries(context)
+
+
+def write_sex_summaries(context: BivariateContext) -> None:
+    """The by-sex tables, where the fit carries the sex covariate (#324).
+
+    Population levels are recomputed from the stored zero-effect logits and the
+    coefficients, draw for draw; a new child's counts and probabilities at each
+    level are the ones the predictive stage drew. Nothing is written for a model
+    without the covariate.
+    """
+    trace = context.trace
+    beta_u = sex_covariate.coefficient_draws(trace, "beta_sex_u")
+    beta_q = sex_covariate.coefficient_draws(trace, "beta_sex_q")
+    if beta_u is None or beta_q is None:
+        return
+    samples = context.model_samples
+    n_trials = context.model_data.n_trials
+    ci_prob = context.reporting.ci_prob
+    kind = context.reporting.interval_kind
+    report_max_u = context.model_config.report_max_age_understood
+    output_dir = context.reporting.output_dir
+    levels = [level for level, _ in sex_covariate.SEX_LEVELS]
+
+    f_u_query = extract_posterior(trace, "f_u_query", "query_id")
+    h_query = extract_posterior(trace, "h_query", "query_id")
+    p_u = {
+        level: sex_covariate.shifted(f_u_query, beta_u, contrast)
+        for level, contrast in sex_covariate.SEX_LEVELS
+    }
+    q = {
+        level: sex_covariate.shifted(h_query, beta_q, contrast)
+        for level, contrast in sex_covariate.SEX_LEVELS
+    }
+    p_s = {level: p_u[level] * q[level] for level in levels}
+
+    def predictive(name):
+        return {
+            level: extract_posterior_predictive(trace, f"{name}_{level}", "query_id")
+            for level in levels
+        }
+
+    # The same test the pooled summary makes: without child effects (the
+    # `single-admin` arms) the "new child" columns would repeat the population
+    # ones, and the pooled tables leave them out for that reason.
+    has_subject_re = any(
+        name in context.model_variables for name in ("tau_subj_u", "tau_subj_q")
+    )
+
+    def marginal(name):
+        if not has_subject_re:
+            return None
+        return {
+            level: posterior_analysis.extract_posterior_predictive_float(
+                trace, f"{name}_{level}", "query_id"
+            )
+            for level in levels
+        }
+
+    for suffix, population, counts, new_child, cap in (
+        ("u", p_u, "y_u_query", "p_u_query_subject_marginal", report_max_u),
+        ("s", p_s, "y_s_query", "p_s_query_subject_marginal", None),
+    ):
+        context.dataframes[f"posterior_summary_{suffix}_by_sex"] = (
+            sex_covariate.write_probability_by_sex(
+                output_dir,
+                suffix,
+                samples.X_query,
+                population,
+                n_trials=n_trials,
+                ci_prob=ci_prob,
+                interval_kind=kind,
+                predictive=predictive(counts),
+                subject_marginal=marginal(new_child),
+                max_age_months=cap,
+            )
+        )
+    context.dataframes["posterior_summary_q_by_sex"] = sex_covariate.write_rate_by_sex(
+        output_dir,
+        "q",
+        samples.X_query,
+        q,
+        ci_prob=ci_prob,
+        subject_marginal=marginal("q_query_subject_marginal"),
+        max_age_months=report_max_u,
+    )
+    sex_covariate.write_differences(
+        output_dir,
+        [
+            sex_covariate.difference_rows(
+                samples.X_query,
+                "understood",
+                p_u["girls"],
+                p_u["boys"],
+                n_trials=n_trials,
+                ci_prob=ci_prob,
+                max_age_months=report_max_u,
+            ),
+            sex_covariate.difference_rows(
+                samples.X_query,
+                "spoken",
+                p_s["girls"],
+                p_s["boys"],
+                n_trials=n_trials,
+                ci_prob=ci_prob,
+            ),
+        ],
+    )
+    sex_covariate.write_coefficients(
+        output_dir, {"beta_sex_u": beta_u, "beta_sex_q": beta_q}, ci_prob=ci_prob
     )
 
 

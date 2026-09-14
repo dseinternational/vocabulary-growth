@@ -1,0 +1,503 @@
+---
+title: "Model VG26: Correlated child effects on comprehension and conversion - typically developing children, 8-22 months"
+
+date: now
+date-format: "YYYY-MM-DD HH:mm:ss Z"
+
+format:
+  html:
+    code-fold: true
+    theme: cosmo
+    number-sections: true
+    toc: true
+    toc-depth: 2
+    code-links:
+      # Explicit href rather than `- repo`; see the note in vg20/index.qmd. The
+      # per-model reports render in the OUTPUT directory, which has no
+      # repository above it, so Quarto's `repo` shorthand is a hard error there.
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/dseinternational/vocabulary-growth/
+---
+
+::: {.callout-note}
+Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+:::
+
+::: {.callout-note}
+This narrative was written from the model's specification before its first reporting-quality fit, from VG23's report rather than VG21's, because VG26 differs from VG21 in the way VG23 differs from VG13. Every number on this page is rendered from the fit named in the banner below. The sections on what the correlation means, and on how it compares with the shorter window, were written before that fit existed and should be read as the questions the fit answers, not as its answers.
+:::
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sampling_banner
+
+render_sampling_banner()
+```
+
+VG26 is VG21 plus one parameter. VG21 gives each typically-developing child two deviations — one on the comprehension trajectory, one on the production ratio $q$ — and draws them independently, which fixes at zero the relationship between how much a child understands relative to their age and how much of it they say. VG26 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer. VG21 is nested exactly at $\rho_{uq} = 0$.
+
+It is the change VG23 makes to VG13, applied to VG21's wider 8–22-month window, and the prior is matched deliberately ($\eta = 2$) to VG20 and VG23, so the three correlations are estimated under the same prior.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_model_at_a_glance
+
+render_model_at_a_glance()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reading_routes
+
+render_reading_routes('reference', joint=True)
+```
+
+![The model's structure. VG26 differs from VG21 by one node.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+
+## Why this model exists
+
+The project compares the two populations in two ways, and until this model it drew those comparisons against two different typically developing models ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)).
+
+- The **trajectory and matched-comprehension** comparison sets VG20 against **VG21**. VG20 lets a child's two effects correlate; VG21 does not.
+- The **between-child correlation** comparison sets VG20 against **VG23**, which does, but only over VG13's 8–18-month window.
+
+VG23 is the evidence that the independence assumption VG21 inherits from VG13 is wrong: the correlation it estimates is small but clearly above zero. VG26 carries the correlation on the window the matched-comprehension comparison needs, so one typically developing model could serve both comparisons, with the same child-effect structure the Down syndrome side already has.
+
+It is not "VG23 with a wider window". VG21's priors were calibrated to its own window, and three of them differ from VG13's for that reason, so widening VG23 would not reproduce VG21. The correlation is added to VG21 instead.
+
+::: {.callout-warning}
+## Two confounds, stated up front
+
+**One parent completes both counts.** A parent who over-reports tends to over-report both, so shared reporting tendency is not separable from shared child ability — the model contains no term for it, and it loads onto $\rho_{uq}$. That biases the correlation, and through it the child scales, **upward**, as it does for VG20 and VG23.
+
+**Comprehension above 18 months is measured differently.** Wordbank's Words & Sentences form records a production proxy rather than comprehension, which is why VG13 stops at 18 months and why that form is excluded from every comprehension model. What remains above 18 months is thinner, and the Oxford CDI's 418-item ceiling starts to bind towards 22. A correlation between a child's comprehension offset and their conversion offset is the quantity most exposed to a change in how comprehension is measured, so read this model's $\rho_{uq}$ beside VG23's 8–18-month value (see [the comparison below](#sec-window-comparison)), not in place of it.
+:::
+
+## How to read this report
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_glossary
+
+render_glossary([
+    "Bayesian inference",
+    "Prior distribution",
+    "Posterior distribution",
+    "Likelihood",
+    "Credible interval",
+    "Estimand",
+    "Reference inventory",
+    "Production ratio ($q$)",
+    "Beta-Binomial distribution",
+    "Concentration ($\\kappa$)",
+    "Random intercept",
+    "Between-child heterogeneity ($\\tau$)",
+    "Partial pooling",
+    "Population-level and subject-marginal",
+    "Gaussian process (GP)",
+    "HSGP (Hilbert-space Gaussian process)",
+    "Posterior predictive check",
+    "BFMI (Bayesian fraction of missing information)",
+])
+```
+
+## Priors {#sec-priors}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_priors_table
+
+render_priors_table()
+```
+
+Every prior is VG21's, unchanged. The one addition is the LKJ concentration on the child-effect correlation, $\eta = 2$ — a gentle pull toward independence, so that a correlation has to be evidenced rather than assumed.
+
+![Trajectories for words understood drawn from the priors.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
+
+![Trajectories for words spoken implied by those priors, as the product of the understood trajectory and the production ratio.](prior_samples_s.png){#fig-prior-samples-s .lightbox fig-align="left"}
+
+![Trajectories for the production ratio $q(a)$ drawn from the priors.](prior_samples_q.png){#fig-prior-samples-q .lightbox fig-align="left"}
+
+## Data {#sec-frame}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_frame_composition
+
+render_frame_composition()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_reference_child_calibration
+
+render_reference_child_calibration()
+```
+
+```{python}
+import pandas as pd
+
+descriptive_stats = pd.read_csv("descriptive_statistics.csv", index_col=0)
+descriptive_stats
+```
+
+::: {.callout-note}
+
+The normality tests in this table are reported for completeness. They are not a check on the model: the outcomes are bounded counts, which are not expected to be normally distributed, and the model does not assume that they are.
+
+:::
+
+## Convergence {#sec-diagnostics}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_convergence_caveats
+
+render_convergence_caveats()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_diagnostic_verdict
+
+render_diagnostic_verdict()
+```
+
+::: {.callout-note}
+VG21 carries a recorded energy-BFMI caveat, and VG26 is expected to inherit it. The measured position on the typically-developing models is that the energy pathology comes from the between-child / within-child split resting on the few children seen more than once, and that it is not repaired by reparameterising: VG23 added this same correlation to VG13 and its BFMI stayed below the threshold, and freezing the split at any value clears the diagnostic without adding information ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.6, [#229](https://github.com/dseinternational/vocabulary-growth/issues/229)).
+:::
+
+![Energy distribution of the sampler.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+
+![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
+
+![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+
+![Marginal posterior distributions for the fitted parameters, including $\rho_{uq}$, the study and child scales, the GP hyperparameters and the dispersion terms.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+
+### Prior to posterior {#sec-contraction}
+
+How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_prior_posterior_contraction
+
+render_prior_posterior_contraction()
+```
+
+## Findings {#sec-findings}
+
+### The correlation between child effects
+
+```{python}
+#| echo: false
+#| output: asis
+import pandas as _pd
+
+_diagnostics = _pd.read_csv("diagnostics.csv", index_col=0)
+if "rho_uq" in _diagnostics.index:
+    _row = _diagnostics.loc["rho_uq"]
+    print("| Quantity | Posterior mean | SD | 89% ETI | ESS (bulk) | R-hat |")
+    print("| --- | --- | --- | --- | --- | --- |")
+    print(
+        f"| Correlation between child effects $\\rho_{{uq}}$ (`rho_uq`) | "
+        f"{_row['mean']:.3f} | {_row['sd']:.3f} | {_row['eti89_lb']:.3f} to "
+        f"{_row['eti89_ub']:.3f} | {_row['ess_bulk']:,.0f} | {_row['r_hat']:.3f} |"
+    )
+    print()
+    if _row["eti89_lb"] > 0:
+        _verdict = (
+            "lies entirely **above** zero, so the data establish the direction: "
+            "the children who understand more than expected for their age also "
+            "tend to say a larger share of what they understand"
+        )
+    elif _row["eti89_ub"] < 0:
+        _verdict = (
+            "lies entirely **below** zero, the opposite direction to VG23's on the "
+            "shorter window — a result to investigate before reporting"
+        )
+    else:
+        _verdict = (
+            "**spans** zero, so this fit does not distinguish the correlation "
+            "from the independence VG21 assumes"
+        )
+    print(
+        f": Read at render time from this fit's own `diagnostics.csv`, so it "
+        f"cannot drift from the model it describes. The 89% equal-tailed "
+        f"interval {_verdict}."
+    )
+else:
+    print("_This fit's `diagnostics.csv` carries no `rho_uq` row._")
+```
+
+**This is the number the model exists to produce.** Under VG21 it is exactly zero by construction. Read it with the reporter confound stated at the top of this page.
+
+### Against the shorter window {#sec-window-comparison}
+
+```{python}
+#| echo: false
+#| output: asis
+import json
+from pathlib import Path
+
+import pandas as _pd
+
+from vocab_growth.models.definitions import MODEL_REGISTRY as _REGISTRY
+
+# VG23's model-of-record directory by its registered name, not a glob: a glob
+# on "VG23-*" also matches its sensitivity arms, which sit beside it.
+_vg23 = _REGISTRY["vg23"]
+_rows = []
+for _label, _window, _directory in (
+    ("VG23", "8–18 months", Path("..") / f"{_vg23.model_id}-{_vg23.config_name}"),
+    ("VG26 (this fit)", "8–22 months", Path(".")),
+):
+    _path = _directory / "diagnostics.csv"
+    if not _path.is_file():
+        _rows.append((_label, _window, None, None))
+        continue
+    _table = _pd.read_csv(_path, index_col=0)
+    _fitted = None
+    _manifest = _directory / "fit_manifest.json"
+    if _manifest.is_file():
+        try:
+            _fitted = str(json.loads(_manifest.read_text(encoding="utf-8")).get("created_at_utc", ""))[:10] or None
+        except ValueError:
+            _fitted = None
+    _rows.append((_label, _window, _table.loc["rho_uq"] if "rho_uq" in _table.index else None, _fitted))
+
+print("| Model | Window | Fitted | $\\rho_{uq}$ mean | 89% ETI |")
+print("| --- | --- | --- | --- | --- |")
+for _label, _window, _row, _fitted in _rows:
+    if _row is None:
+        print(f"| {_label} | {_window} | — | not available | — |")
+    else:
+        print(
+            f"| {_label} | {_window} | {_fitted or '—'} | {_row['mean']:.3f} | "
+            f"{_row['eti89_lb']:.3f} to {_row['eti89_ub']:.3f} |"
+        )
+print()
+print(
+    ": VG23's value is read from its model-of-record output beside this one, when "
+    "that output is present in the same output root; it is not synchronised into "
+    "this page otherwise, and it is **not validated** against VG23's current "
+    "definition or frame, so check its fit date against this one's. The two fits "
+    "share their prior on the correlation, and their frames overlap below 18 months."
+)
+```
+
+This is the first check recorded against the model on [#240](https://github.com/dseinternational/vocabulary-growth/issues/240). The two windows share every child seen before 18 months, so close agreement is expected if the correlation is stable in age and if comprehension is measured comparably either side of 18 months. **A material difference is a finding about the wider window**, not a reason to discard the correlation: it would say that the 19–22-month comprehension counts carry the child's standing differently, which bears on every typically developing comparison drawn at those ages.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_headline_quantities
+
+render_headline_quantities()
+```
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_variation_table
+
+render_variation_table()
+```
+
+Two further comparisons are worth making once there are numbers, and neither is automatic:
+
+- **Against VG21**, which is nested at $\rho_{uq} = 0$. The population trajectories should sit close, but agreement is an empirical stability check rather than a correctness invariant — correlation changes nonlinear subject-marginal expectations, and refitting can legitimately reallocate fixed effects and marginal scales.
+- **Against VG20**, which estimates the same parameter on the Down syndrome pool under the same prior. The reporter confound applies to both, so a difference between the populations is better founded than either value alone.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_family_notes
+
+render_family_notes()
+```
+
+## Trajectories {#sec-predictions}
+
+![Expected words understood and words spoken on the same axes, across the modelled window.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
+
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+
+![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+
+![The fitted production ratio against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
+
+![The expected difference, in words, between what a child understands and what they say.](comprehension_production_gap.png){#fig-comprehension-production-gap .lightbox fig-align="left"}
+
+![Expected spoken vocabulary against expected understood vocabulary. The curve stays below the diagonal by construction, since a child cannot say more words than they understand.](understood_vs_spoken.png){#fig-understood-vs-spoken .lightbox fig-align="left"}
+
+## Posterior predictions -- words understood
+
+![Median predicted understood vocabulary against the observed data. The band is **subject-marginal and predictive**: every draw samples a new child's effect and then one administration's count for them, so it approximates where one more child's counts would fall. It is not an uncertainty interval on the population trajectory, which is much narrower.](posterior_predictive_median_trend_u.png){#fig-trend-u .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_dispersion_scope
+
+render_dispersion_scope()
+```
+
+![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
+
+## Posterior predictions -- words spoken
+
+![Median predicted spoken vocabulary against the observed data. The band is **subject-marginal and predictive** in the same sense as the understood figure, and each draw's spoken count is drawn from that same draw's understood count, so it carries the understood spread as well as the production ratio's.](posterior_predictive_median_trend_s.png){#fig-trend-s .lightbox fig-align="left"}
+
+![How the spoken dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+
+## Posterior predictions -- words understood {#sec-predictions-understood}
+
+### Summary at selected ages
+
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Intervals are equal-tailed, an 89% outer and a 50% inner.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("u")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
+posterior_summary_u = pd.read_csv("posterior_summary_u.csv")
+posterior_summary_u
+```
+
+### Distribution of word counts by age
+
+![The probability of each exact understood-word count, at selected ages.](posterior_predictive_pmf_u.png){#fig-pmf-u .lightbox fig-align="left"}
+
+![The probability of a given understood-word count or fewer, at selected ages.](posterior_predictive_cdf_u.png){#fig-cdf-u .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.plotting import ppc_count_distribution_gallery
+
+ppc_count_distribution_gallery("posterior_predictive_count_distributions_u")
+```
+
+### Cross-sectional age derivative
+
+![Rate of change of expected understood vocabulary with age, in words per month.](expected_learning_rate_u.png){#fig-learning-rate-u .lightbox fig-align="left"}
+
+This is the slope of the fitted age trajectory: it describes how expected vocabulary differs between children of different ages. It is **not** a within-child learning rate.
+
+## Posterior predictions -- words spoken {#sec-predictions-spoken}
+
+### Summary at selected ages
+
+The same conventions apply as for words understood above. Spoken counts are not modelled directly: they are the understood trajectory scaled by the production ratio, so uncertainty in both propagates into this table.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_expectations_table
+
+render_expectations_table("s")
+```
+
+The full table behind it, with every interval and threshold column:
+
+```{python}
+posterior_summary_s = pd.read_csv("posterior_summary_s.csv")
+posterior_summary_s
+```
+
+### Distribution of word counts by age
+
+![The probability of each exact spoken-word count, at selected ages. At the youngest ages much of the mass sits at or near zero, which is the expected shape rather than a defect.](posterior_predictive_pmf_s.png){#fig-pmf-s .lightbox fig-align="left"}
+
+![The probability of a given spoken-word count or fewer, at selected ages.](posterior_predictive_cdf_s.png){#fig-cdf-s .lightbox fig-align="left"}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.plotting import ppc_count_distribution_gallery
+
+ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
+```
+
+### Cross-sectional age derivative
+
+![Rate of change of expected spoken vocabulary with age, in words per month.](expected_learning_rate_s.png){#fig-learning-rate-s .lightbox fig-align="left"}
+
+## Expected vocabulary by month {#sec-monthly}
+
+One row per whole month, with the expected count, the range a single child might fall in, and the probability of scoring below given thresholds. The `n_obs` column gives the number of observations near each age, which is the honest guide to where these expectations rest on data and where they rest on the model.
+
+![Expected understood vocabulary by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_u.png){#fig-expected-counts-by-month-u .lightbox fig-align="left"}
+
+```{python}
+monthly_u = pd.read_csv("posterior_summary_monthly_u.csv")
+monthly_u
+```
+
+![Expected spoken vocabulary by month, with both the mean-trajectory and single-child intervals.](expected_counts_by_month_s.png){#fig-expected-counts-by-month-s .lightbox fig-align="left"}
+
+```{python}
+monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
+monthly_s
+```
+
+## By sex {#sec-sex}
+
+This model carries sex as a covariate, so its predictions can be read for a girl or a boy of a given age as well as for a child of unrecorded sex ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)). Every other figure and table on this page is the sex-balanced reference child; the tables below put girls and boys either side of it.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sex_section
+
+render_sex_section()
+```
+
+## Predictive calibration {#sec-calibration}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.models.calibration import render_calibration_section
+
+render_calibration_section()
+```
+
+## Out-of-sample prediction {#sec-loo}
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_loo_section
+
+render_loo_section()
+```
+
+## Limits {#sec-limits}
+
+- **The reporter confound is the first limit, not a footnote.** The model has no same-administration or informant term, so shared reporting tendency has nowhere to go but $\rho_{uq}$.
+- **The window's top four months are where comprehension measurement changes.** Read $\rho_{uq}$ against VG23's 8–18-month value, above, before treating it as a property of the whole window.
+- **VG21 keeps its reference role until this model has one of its own.** Registering VG26 does not retire VG21 or VG13; that follows only from this fit and the checks on #240.
+- **Sensitivity debt transfers here.** VG13's `single-admin` and `window-22-vague-anchors` variants were never fitted, and no GP-amplitude variant was registered against it; if VG26 supersedes VG21, those questions become this model's.
+- **The reference scale is the 810-item inventory**, as elsewhere in this project, and the source forms are shorter. Counts near a short form's ceiling are effectively right-censored, which binds towards the top of this window.
+- **Nothing here establishes a causal reading.** A correlation between a child's two deviations says they move together, not that one produces the other.

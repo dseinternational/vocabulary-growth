@@ -34,7 +34,7 @@ definition and invalidate every VG24 fit on disk.
 
 import os
 import types
-from dataclasses import fields
+from dataclasses import fields, replace
 
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
@@ -109,6 +109,7 @@ def test_vg25_differs_from_vg24_only_in_naming_and_the_lag():
         "beta_sign_lag_sigma",
         "sign_lag_max_gap_months",
         "sign_lag_zero_handling",
+        "sign_lag_same_form_only",
     }
 
 
@@ -128,6 +129,7 @@ def test_vg24_does_not_gain_the_fields():
         "beta_sign_lag_sigma",
         "sign_lag_max_gap_months",
         "sign_lag_zero_handling",
+        "sign_lag_same_form_only",
     ):
         assert name not in parent_fields, name
     assert type(VG24) is JointCorrelatedSubjectREModelDefinition
@@ -745,6 +747,30 @@ def _moved_by_beta(model, factor, *, delta=1.0):
     point, moved = _perturbed(model, delta=delta)
     logp = model.compile_logp(vars=[rv])
     return abs(float(logp(moved)) - float(logp(point)))
+
+
+@pytest.mark.slow
+def test_same_form_restriction_removes_cross_form_likelihood_dependence(
+    tmp_path, monkeypatch
+):
+    frame = _mixed_joint_frame(VG25)
+    # Every child has two waves. Give each wave a different form so the
+    # restriction removes every lag, while retaining all likelihood rows.
+    frame["survey_vocab_max"] = np.tile([810, 416], len(frame) // 2)
+    monkeypatch.setattr(f"{__name__}._mixed_joint_frame", lambda _: frame.copy())
+    unrestricted = _build(VG25, output_dir=str(tmp_path), monkeypatch=monkeypatch)
+    restricted = _build(
+        replace(VG25, sign_lag_same_form_only=True),
+        output_dir=str(tmp_path),
+        monkeypatch=monkeypatch,
+    )
+    for factor in ("y_s_obs", "cells_obs"):
+        assert _moved_by_beta(unrestricted, factor) > 1e-8
+        assert _moved_by_beta(restricted, factor) == pytest.approx(0.0, abs=1e-10)
+        np.testing.assert_array_equal(
+            unrestricted[factor].tag.observations.data,
+            restricted[factor].tag.observations.data,
+        )
 
 
 @pytest.mark.slow

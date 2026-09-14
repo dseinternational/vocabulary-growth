@@ -36,7 +36,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-VG23 is VG13 plus one parameter. VG13 gives each typically-developing child two deviations — one on the comprehension trajectory, one on the production ratio $q$ — and draws them independently, which fixes at zero the relationship between how much a child understands relative to their age and how much of it they say. VG23 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer. VG13 is nested exactly at $\rho_{uq} = 0$.
+VG23 is VG13 plus one parameter — and, since 2026-09-13, plus the sex covariate the reporting models carry ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)), which VG13, superseded, does not. VG13 gives each typically-developing child two deviations — one on the comprehension trajectory, one on the production ratio $q$ — and draws them independently, which fixes at zero the relationship between how much a child understands relative to their age and how much of it they say. VG23 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer. VG13 with the sex covariate added is nested exactly at $\rho_{uq} = 0$.
 
 It is the same change VG20 makes to VG10 on the Down syndrome side, and the prior is matched deliberately ($\eta = 2$), so the two populations' correlations are estimated under the same prior and any comparison between them is not an artefact of how each was regularised.
 
@@ -56,7 +56,7 @@ from vocab_growth.report_cells import render_reading_routes
 render_reading_routes('reference', joint=True)
 ```
 
-![The model's structure. VG23 differs from VG13 by one node.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
+![The model's structure. VG23 differs from VG13 by the correlation node and by the sex covariate.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
 ## Why this model exists
 
@@ -404,6 +404,18 @@ monthly_s = pd.read_csv("posterior_summary_monthly_s.csv")
 monthly_s
 ```
 
+## By sex {#sec-sex}
+
+This model carries sex as a covariate, so its predictions can be read for a girl or a boy of a given age as well as for a child of unrecorded sex ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)). Every other figure and table on this page is the sex-balanced reference child; the tables below put girls and boys either side of it.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sex_section
+
+render_sex_section()
+```
+
 ## Predictive calibration {#sec-calibration}
 
 ```{python}
@@ -427,6 +439,6 @@ render_loo_section()
 ## Limits {#sec-limits}
 
 - **The reporter confound above is the first limit, not a footnote.** The model has no same-administration or informant term, so shared reporting tendency has nowhere to go but $\rho_{uq}$.
-- **The window is VG13's**, 8–18 months. The study owner has adopted the 8–22-month specification as VG13's successor (VG21). VG23 is derived from VG13 rather than VG21 so that it differs from its parent in exactly one thing; carrying the correlation to the wider window is a separate step, and should be taken only once VG21 has a fit of its own.
+- **The window is VG13's**, 8–18 months. The study owner has adopted the 8–22-month specification as VG13's successor (VG21). VG23 is derived from VG13 rather than VG21 so that it differed from its parent in exactly one thing (it now also carries the sex covariate VG13 does not). Carrying the correlation to the wider window is VG26, registered on 2026-09-13.
 - **The reference scale is the 810-item inventory**, as elsewhere in this project, and the source forms are shorter. Counts near a short form's ceiling are effectively right-censored.
 - **Nothing here establishes a causal reading.** A correlation between a child's two deviations says they move together, not that one produces the other.

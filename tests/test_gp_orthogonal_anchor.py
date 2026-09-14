@@ -35,11 +35,11 @@ from vocab_growth.models.definitions import VG11
 
 
 @pytest.fixture
-def vg11_model(tmp_path, monkeypatch):
+def vg11_model(tmp_path):
     if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
         pytest.skip("prepared vocabulary DuckDB not available")
-    monkeypatch.setattr(cur, "render_model_graph", lambda *a, **k: None)
     context = ModelFitContext(
+        report_build=False,
         reporting=reporting.ReportingConfiguration(
             model_name=VG11.model_id,
             config_name=VG11.config_name,

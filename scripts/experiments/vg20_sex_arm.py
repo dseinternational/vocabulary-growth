@@ -9,9 +9,18 @@ before the loader's masking rules and with no child or study random effects --
 at about +0.2 logits on words understood and +0.35 on words spoken, girls ahead,
 and recommended one exploratory variant of VG20 rather than a change to the
 model of record. This harness is that variant. It fits three arms, every one
-derived from ``VG20`` through ``_as_definition_subclass`` onto
-``BivariateSexShiftModelDefinition`` and run through the engine's own pipeline
-into a **separate output root**, so nothing here can become a model of record:
+derived from ``VG20`` with ``dataclasses.replace`` and run through the engine's
+own pipeline into a **separate output root**, so nothing here can become a model
+of record:
+
+*Superseded as a design on 2026-09-13* (#324): the study owner decided on
+2026-09-08 that the reporting models carry sex, and VG20 now does, as a
+covariate on every row with unrecorded sex at contrast zero. The two sex fields
+moved from the unregistered ``BivariateSexShiftModelDefinition``, which no
+longer exists, onto ``BivariateModelDefinition``, so the arms below override
+VG20 directly. They still answer what they answered: ``control`` and ``sex``
+are the restricted pair, and ``full`` is VG20 **without** the covariate on every
+row, which is no longer the model of record.
 
 * ``control`` -- VG20 restricted to the administrations with a recorded sex
   (eight studies; 997 rows and 559 children on the 2026-09-04 database).
@@ -20,8 +29,8 @@ into a **separate output root**, so nothing here can become a model of record:
   the understood and production-ratio logits. Constant in age, for the reasons
   the note gives. ``beta_sex_*`` read directly as girl-minus-boy differences in
   logits, and the population curves stay the sex-balanced average.
-* ``full`` -- VG20 on every row, as the inert subclass, so what the restriction
-  costs (six studies, a quarter of the children) can be read at the same tier.
+* ``full`` -- VG20 on every row with no sex term, so what the restriction costs
+  (seven studies, two fifths of the children) can be read at the same tier.
   Not needed for the effect itself, and the slowest arm.
 
 ``compare`` reads the finished arms and writes, under
@@ -76,6 +85,7 @@ obtained, not a maintained tool.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 from multiprocessing import freeze_support
@@ -89,11 +99,12 @@ AGE_BANDS = [(8, 30), (30, 42), (42, 54), (54, 72), (72, 116)]
 MIN_CELL = 10
 CI = (0.055, 0.945)
 
-#: Overrides applied to VG20 for each arm.
+#: Overrides applied to VG20 for each arm. Every arm states `sex_effect_sigma`,
+#: because VG20 itself now carries the covariate (#324).
 ARMS: dict[str, dict] = {
-    "control": {"sex_known_only": True},
+    "control": {"sex_known_only": True, "sex_effect_sigma": None},
     "sex": {"sex_known_only": True, "sex_effect_sigma": 0.5},
-    "full": {},
+    "full": {"sex_effect_sigma": None},
 }
 
 def reference_table(output_root: str) -> pd.DataFrame:
@@ -141,11 +152,10 @@ def arm_definition(arm: str, sigma: float):
     from vocab_growth.models import definitions as D
 
     overrides = dict(ARMS[arm])
-    if "sex_effect_sigma" in overrides:
+    if overrides.get("sex_effect_sigma") is not None:
         overrides["sex_effect_sigma"] = sigma
-    definition = D._as_definition_subclass(
+    definition = dataclasses.replace(
         D.VG20,
-        D.BivariateSexShiftModelDefinition,
         config_name=f"{D.VG20.config_name}-sex-{arm}",
         banner=f"Fitting VG20 sex arm '{arm}' (exploratory, issue #295)",
         **overrides,

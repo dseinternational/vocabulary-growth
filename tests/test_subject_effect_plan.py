@@ -20,6 +20,8 @@ That the resolution did not change any model's graph is the separate claim, and
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from vocab_growth.models.definitions import (
@@ -73,6 +75,8 @@ EXPECTED = {
     "vg21": ({"u": "constant", "q": "constant"}, None, None, False),
     "vg22": ({"u": "factor", "q": "factor"}, None, 3, False),
     "vg23": ({"u": "constant", "q": "constant"}, 2.0, None, False),
+    # VG26 is VG21 plus the correlation, exactly as VG23 is VG13 plus it.
+    "vg26": ({"u": "constant", "q": "constant"}, 2.0, None, False),
     # VG24 is VG15 plus the correlation, so all three blocks stay constant and
     # the eta appears. The joint engine does not consume this plan -- `resolve`
     # is called only from `common_bivariate_re`, and the joint seam reads the
@@ -307,3 +311,11 @@ def test_the_child_slope_reference_age_comes_from_the_definition():
     assert resolve(VG19).slope_ref_age_months == VG19.subject_slope_ref_age_months
     # A definition with no such field falls back to the documented default.
     assert resolve(VG13).slope_ref_age_months == 36.0
+
+
+@pytest.mark.parametrize("age", [0.0, 24.0, 36.0])
+def test_an_explicit_slope_reference_age_is_preserved(age):
+    assert (
+        resolve(replace(VG19, subject_slope_ref_age_months=age)).slope_ref_age_months
+        == age
+    )

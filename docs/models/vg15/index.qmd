@@ -319,29 +319,38 @@ The marginal trajectories rest on the whole Down syndrome pool. The association 
 #| echo: false
 #| output: asis
 # Size, age span and cross-tabulation type of each source that identifies psi.
-# Read through the fit's own loaders rather than typed, and guarded so a report
-# rendered away from the data directory degrades to a note instead of failing.
+# Read through the fit's own loaders rather than typed. Imported from
+# `vocab_growth.cross_tab_sources`, where they live, not through the joint
+# engine's re-export: a rename on the engine side is what silently removed this
+# table from the page between 2026-09-01 and 2026-09-13.
+#
+# The guard is deliberately narrow. Only `OSError` -- the raw CSVs or the
+# manifest being absent, i.e. a report rendered away from the data directory --
+# degrades to a note. It used to catch `Exception`, so that rename's
+# `AttributeError` printed "it needs the repository's prepared data" on a page
+# whose prepared data were present, and nothing else said the table was gone.
+# A code error now fails the render, which is where it can be seen.
 import json
 
 try:
+    from vocab_growth import cross_tab_sources as _cts
     from vocab_growth.fit_artifacts import source_data_hash as _sdh
-    from vocab_growth.models import common_joint_modality as _cjm
     import vocab_growth.environment as _env
 
     _manifest = json.loads(open("fit_manifest.json", encoding="utf-8").read())
     _definition = (_manifest.get("model") or {}).get("definition") or {}
 
     _sources = []
-    _four_uk02, _ = _cjm._load_uk02_four_cell()
+    _four_uk02, _ = _cts.load_uk02_four_cell()
     if _definition.get("dse_native_only"):
-        _four_uk02 = _four_uk02[_four_uk02["form"].eq(_cjm.UK02_DSE_FORM)]
+        _four_uk02 = _four_uk02[_four_uk02["form"].eq(_cts.UK02_DSE_FORM)]
     _sources.append(("uk_02", _four_uk02, "four cells, within understood"))
     if _definition.get("include_uk07_cells"):
-        _sources.append(("uk_07", _cjm._load_uk07_four_cell()[0], "four cells, within understood"))
+        _sources.append(("uk_07", _cts.load_uk07_four_cell()[0], "four cells, within understood"))
     if _definition.get("include_es01_cells"):
-        _sources.append(("es_01", _cjm._load_es01_four_cell()[0], "four cells, within understood"))
+        _sources.append(("es_01", _cts.load_es01_four_cell()[0], "four cells, within understood"))
     if _definition.get("include_nz01_cells"):
-        _sources.append(("nz_01", _cjm._load_nz01_produced_cells(), "three cells, within produced"))
+        _sources.append(("nz_01", _cts.load_nz01_produced_cells(), "three cells, within produced"))
 
     _total_rows = sum(len(f) for _, f, _ in _sources)
     _total_children = sum(int(f["subject_id"].nunique()) for _, f, _ in _sources)
@@ -378,7 +387,7 @@ try:
             "_The raw data have changed since this fit, so the table above describes "
             "the current data rather than the fitted frame._"
         )
-except Exception as _exc:  # pragma: no cover - report robustness, not model logic
+except OSError as _exc:  # the data are absent, not the code wrong -- see above
     print(
         "_The association-support table could not be computed here "
         f"(`{type(_exc).__name__}`): it needs the repository's prepared data._"
@@ -882,6 +891,18 @@ else:
     wanted = ["replicate", "truth_source", "converged", "n_targets", "n_within_ci89",
               "coverage_ci89", "coverage_ci50", "max_abs_z", "verdict"]
     display(recovery[[c for c in wanted if c in recovery.columns]])
+```
+
+## By sex {#sec-sex}
+
+This model carries sex as a covariate on comprehension, the production ratio and the signed ratio, so its expected vocabularies can be read for a girl or a boy of a given age as well as for a child of unrecorded sex ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)). Unlike the child effects, the three coefficients also enter the cross-tab compositions that identify $\psi$, so the association is read conditional on the child's sex; the definition's `sex_effect_sigma` field records why. This engine draws no new-child counts at query ages, so the by-sex tables carry expected vocabulary only.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sex_section
+
+render_sex_section()
 ```
 
 ## Predictive calibration {#sec-calibration}

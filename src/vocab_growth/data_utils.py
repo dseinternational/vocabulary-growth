@@ -231,11 +231,12 @@ artefact — only the expressive columns completed at the later visit — but th
 a hypothesis about how the form was filled in, not something the aggregate counts
 can settle.
 
-Withheld here rather than left to the general rule. Since 2026-08-25 the ten
+Withheld here rather than left to the general rule. Since 2026-08-25 the
 comparable records in ``ie_01``, ``uk_01`` and ``it_01`` are masked by
 :func:`mask_comprehension_below_production` -- previously they were retained and
-flagged, and this docstring drew the contrast against that. The reason for
-keeping a separate mechanism is unchanged: those ten are a known, stable property
+flagged, and this docstring drew the contrast against that -- and since
+2026-09-13 one in ``uk_02`` as well, eleven in all. The reason for
+keeping a separate mechanism is unchanged: those are a known, stable property
 of closed sources, whereas this one is an open question with a reachable source
 team, so the row is held out of the prepared data entirely until the study owner
 has an explanation, rather than reaching ``vocab_combined`` and being masked with
@@ -552,16 +553,38 @@ def mask_duplicated_outcome_administrations(
     return out, dropped
 
 
-COMPREHENSION_BELOW_PRODUCTION_STUDIES: tuple[str, ...] = ("ie_01", "it_01", "uk_01")
+COMPREHENSION_BELOW_PRODUCTION_STUDIES: tuple[str, ...] = ("ie_01", "it_01", "uk_01", "uk_02")
 """Studies carrying a comprehension count below the child's own production count.
 
 An inclusive comprehension field cannot be exceeded by production: a word the
 child says is a word the child understands, so ``understood >= produced`` holds
-by construction on any form where comprehension is asked inclusively. Ten
+by construction on any form where comprehension is asked inclusively. Eleven
 administrations violate it -- seven in ``ie_01``, two in ``uk_01``, one in
-``it_01`` -- and the violations are not marginal: one ``ie_01`` child records 13
-words understood against 366 spoken, and two record 0 understood against 83
-spoken.
+``it_01`` and one in ``uk_02`` -- and the violations are not marginal: one
+``ie_01`` child records 13 words understood against 366 spoken, and two record 0
+understood against 83 spoken.
+
+**The comparison is against the greatest recorded lower bound on production**,
+``max(produced, spoken)``, with a missing value treated as absent. Until
+2026-09-13 it was against ``produced`` alone, and the guard required that column
+to be present, so a row whose union was never recorded could not be tested at
+all. One such row is the eleventh: a ``uk_02`` child at 48 months recording 347
+words understood against 387 spoken (and 254 signed) with no ``produced`` value.
+``spoken`` alone already exceeds ``understood`` there, and a child who says 387
+words produces at least 387, so the record is contradictory on its face and
+needed no question to the source (#236). The same child at 47 months reads 393
+understood, 351 spoken and 388 produced, which is consistent. No recorded
+``produced`` falls below ``spoken``, so the widened rule catches exactly the ten
+it caught before plus that one.
+
+``signed`` is **not** a term of the bound, although the proposal on #236 named
+it. ``produced`` is the modality union in some sources and the spoken count
+alone in others -- ``ie_02``, ``uk_04``, ``uk_05`` and ``uk_06`` record it equal
+to ``spoken``, and ``signed`` exceeds it on 132 of their rows -- so what a
+signed count bounds depends on the source's convention. No administration
+records ``understood < signed``, so including it would change nothing on the
+2026-09-13 pool; leaving it out keeps the rule's meaning the same in every
+source.
 
 **The comprehension count is what gets masked, not the production count.** The
 production figure is corroborated by two columns that agree (``spoken`` and
@@ -574,15 +597,18 @@ wave whose Checklist 1 comprehension field is already known to be unreliable
 rises). Masking the row wholesale would discard production counts that are not
 in question.
 
-``produced`` is the right denominator and ``spoken + signed`` is not. In the
+A maximum is the right bound and ``spoken + signed`` is not. In the
 signing studies the two columns overlap -- a child who both says and signs a word
 is counted in each -- so their sum overstates distinct words produced, badly:
 ``uk_07`` has ``produced < spoken + signed`` on 77 of 82 rows and ``nz_01`` on
 101 of 111. Reconstructing production as the sum would flag 87 administrations
-instead of 10, almost all of them bimodal children penalised for double counting.
+instead of 11, almost all of them bimodal children penalised for double counting.
+A maximum cannot overstate production, because each of its terms is contained in
+it.
 
-Equality is **kept**. ``understood == produced`` is a child who produces
-everything they understand, which is legitimate; 45 administrations meet it, of
+Equality is **kept**. ``understood`` equal to the bound is a child who produces
+everything they understand, which is legitimate; 45 administrations met it when
+the rule compared against ``produced`` alone, of
 which 18 are ``0 == 0`` and most of the rest sit at the 396-item Words &
 Gestures ceiling, where both counts are censored rather than equal. Those belong
 to the ceiling and administration rules, not to this one.
@@ -596,7 +622,7 @@ sees it. Its docstring previously contrasted itself with ``ie_01``'s seven
 "retained-and-flagged" records; as of 2026-08-25 those are masked here instead,
 on the study owner's ruling.
 
-Set ``include_comprehension_below_production=True`` to reinstate the ten
+Set ``include_comprehension_below_production=True`` to reinstate the eleven
 comprehension counts for sensitivity analysis.
 """
 
@@ -725,9 +751,13 @@ def mask_comprehension_below_production(
     masked; ``spoken``, ``signed`` and ``produced`` are left as recorded, and the
     row is retained so age coverage and provenance stay auditable.
 
-    Requires a ``produced`` column. Comparing against ``spoken + signed`` instead
-    is wrong wherever the two modalities overlap, so a frame without ``produced``
-    raises rather than silently substituting a different rule.
+    The comparison is against ``max(produced, spoken)``, skipping missing values,
+    so a row whose ``produced`` was not recorded is still tested against its
+    spoken count. ``signed`` is not a term; the constant's docstring says why.
+    Requires a ``produced`` column all the same: the canonical loader always
+    carries it, and a frame without it is a caller that has lost the union, not
+    one this rule should quietly run on. Comparing against ``spoken + signed`` is
+    wrong wherever the two modalities overlap, and is never substituted.
 
     The returned counts report how many comprehension values were masked per
     study, for the fit log. Pass ``include_below_production=True`` to reinstate
@@ -747,8 +777,18 @@ def mask_comprehension_below_production(
         return out, masked
 
     understood = pd.to_numeric(out["understood"], errors="coerce")
-    produced = pd.to_numeric(out["produced"], errors="coerce")
-    suspect = understood.notna() & produced.notna() & (understood < produced)
+    # The greatest recorded lower bound on words produced. `spoken` is contained
+    # in production in every source, so it bounds the count from below even
+    # where `produced` was not recorded. `signed` is deliberately not a term:
+    # four sources record `produced` as the spoken count alone, so `signed`
+    # exceeds it there and its relation to the column depends on the source.
+    # A maximum skips missing values and cannot overstate production, where the
+    # sum of the two modalities can and does.
+    bound_columns = [column for column in ("produced", "spoken") if column in out.columns]
+    production_bound = (
+        out[bound_columns].apply(pd.to_numeric, errors="coerce").max(axis=1, skipna=True)
+    )
+    suspect = understood.notna() & production_bound.notna() & (understood < production_bound)
     if not suspect.any():
         return out, masked
 
@@ -2156,9 +2196,10 @@ def load_data(
         Which population to load data for.
     columns : list[str]
         Columns to select (e.g. ["age", "spoken"] or ["age", "understood", "spoken"]).
-        For DS the ``study`` and ``subject_id`` columns are available.
+        For DS the ``study``, ``subject_id`` and ``sex`` columns are available.
         For TD the ``study`` column is aliased from ``dataset_name`` (the Wordbank
-        dataset/lab identifier), along with ``subject_id``, ``form`` and ``language``.
+        dataset/lab identifier), along with ``subject_id``, ``form``, ``language``
+        and ``sex``, recoded to the DS pool's ``'M'``/``'F'``.
     sample_fraction : float
         Fraction of **subjects** to subsample (TD only). 1.0 = no subsampling.
         Whole children are drawn and all their administrations kept, so
@@ -2268,7 +2309,16 @@ def load_data(
                 END                                as understood,
                 production                         as spoken,
                 typically_developing,
-                health_conditions
+                health_conditions,
+                -- Recoded to the 'M'/'F' the Down syndrome view uses, so the
+                -- sex covariate reads one coding in both populations (#324).
+                -- Selected last and returned only when a caller asks for it:
+                -- `_deterministic_row_order` sorts on every column in order, so
+                -- a trailing column can only break ties between rows identical
+                -- in every earlier one -- the same child at the same age on the
+                -- same form -- which carry the same sex. Every projection that
+                -- does not request it is unchanged row for row.
+                CASE sex WHEN 'Male' THEN 'M' WHEN 'Female' THEN 'F' END as sex
             FROM admissions
             """,
                 params,

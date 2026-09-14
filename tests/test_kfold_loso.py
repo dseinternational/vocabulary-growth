@@ -97,6 +97,11 @@ def test_fit_fold_runs_the_canonical_diagnostics_scan(monkeypatch, tmp_path):
     needed the same fold fit under a different holdout rule, so the stand-ins go
     on that module; ``KFOLD_TMP_DIR`` stays here, because where the fold writes
     is still this script's choice and is passed in.
+
+    The prior and build stages are no longer named on ``fold_fits``: they come
+    from the definition's own engine, so that a joint model's fold is built by
+    the joint builder. The stand-in is therefore an engine rather than two
+    functions.
     """
     from vocab_growth import fold_fits
 
@@ -104,14 +109,21 @@ def test_fit_fold_runs_the_canonical_diagnostics_scan(monkeypatch, tmp_path):
     calls = {}
 
     monkeypatch.setattr(_MODULE, "KFOLD_TMP_DIR", str(tmp_path))
-    monkeypatch.setattr(
-        fold_fits, "configure_bivariate_priors", lambda context, definition: None
-    )
 
     def fake_build(context, definition):
         context.set_model(object(), {})
 
-    monkeypatch.setattr(fold_fits, "build_model_re", fake_build)
+    class _StubEngine:
+        name = "stub"
+
+        def resolve(self, stage):
+            return {"priors": lambda context, definition: None, "build": fake_build}[
+                stage
+            ]
+
+    monkeypatch.setattr(
+        fold_fits, "engine_for_definition", lambda definition: _StubEngine()
+    )
 
     sentinel_trace = object()
 
@@ -219,3 +231,24 @@ def test_unconverged_folds_flag_rows_rather_than_dropping_them():
     assert pair.loc[0, "model_b"] == "VG08"
     # A comparison involving the unconverged model is flagged, not dropped.
     assert bool(pair.loc[0, "all_folds_converged"]) is False
+
+
+def test_the_fold_frame_carries_sex_for_the_models_that_read_it(require_prepared_data):
+    """VG20 carries the sex covariate from 2026-09-13; its build refuses a frame without it."""
+    from vocab_growth.models.definitions import VG20
+    from vocab_growth.models.observation_arrays import sex_contrast_codes
+    from vocab_growth.models.sex_covariate import sex_effect_sigma
+
+    frame = _MODULE.load_analysis_frame()
+    assert sex_effect_sigma(VG20) is not None
+    codes = sex_contrast_codes(frame, allow_unknown=True)
+    assert set(np.unique(codes)) == {-0.5, 0.0, 0.5}
+
+
+def test_a_comparison_across_the_sex_covariate_says_so():
+    from vocab_growth.models.definitions import VG10, VG20, VG22
+
+    assert _MODULE.sex_covariate_mismatch([("VG10", VG10), ("VG22", VG22)]) is None
+    message = _MODULE.sex_covariate_mismatch([("VG20", VG20), ("VG22", VG22)])
+    assert message is not None
+    assert "VG20 carry it; VG22 do not" in message

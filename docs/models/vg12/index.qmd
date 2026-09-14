@@ -494,6 +494,18 @@ else:
     display(recovery[[c for c in wanted if c in recovery.columns]])
 ```
 
+## By sex {#sec-sex}
+
+This model carries sex as a covariate, so its predictions can be read for a girl or a boy of a given age as well as for a child of unrecorded sex ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)). Every other figure and table on this page is the sex-balanced reference child; the tables below put girls and boys either side of it.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sex_section
+
+render_sex_section()
+```
+
 ## Predictive calibration {#sec-calibration}
 
 Quantitative counterpart to the posterior predictive checks above: how often each predictive interval contains the observation it predicts, and where the observations sit within their predictive distributions.

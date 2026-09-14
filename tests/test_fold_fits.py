@@ -94,3 +94,122 @@ def test_no_script_defines_its_own_copy_of_the_gate_reading():
         "These scripts define their own copy of a fold-fit helper instead of "
         f"importing vocab_growth.fold_fits: {', '.join(offenders)}."
     )
+
+
+# ==========================================================================
+# The engine a fold is built with, and what its trace must expose
+# ==========================================================================
+
+
+#: What a forward score reads off a fold trace, per engine. Both entries are the
+#: quantities `scripts/wave_forward_score.py` evaluates a held-out row's density
+#: from; the joint entry is longer because that engine carries a third marginal
+#: and two composition likelihoods.
+_ROW_QUANTITIES = {
+    "vg16": (
+        "p_u_obs",
+        "p_s_obs",
+        "q_obs",
+        "kappa_u_obs",
+        "kappa_s_obs",
+    ),
+    "vg25": (
+        "p_u_obs",
+        "q_obs",
+        "r_obs",
+        "kappa_u_obs",
+        "kappa_s_obs",
+        "kappa_sign_obs",
+        "pi_cells_obs",
+    ),
+}
+
+
+def test_a_fold_is_built_by_its_own_models_engine():
+    """It was hard-wired to the bivariate random-effect builder.
+
+    Nothing said so, and nothing would have: a joint definition passed in would
+    have been built by `build_model_re` and produced a graph that is not the
+    model, then fitted and scored without complaint.
+    """
+    from vocab_growth.models.catalogue import engine_for_definition
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    assert engine_for_definition(MODEL_REGISTRY["vg16"]).name == "bivariate_re"
+    assert engine_for_definition(MODEL_REGISTRY["vg25"]).name == "joint"
+
+
+def test_the_engine_is_found_for_a_control_arm_too():
+    """A fold arm is a `dataclasses.replace` with a different `config_name`.
+
+    The engine is a property of the model, so it has to be found by something a
+    variant copy does not change -- which the config name is not.
+    """
+    import dataclasses
+
+    from vocab_growth.models.catalogue import engine_for_definition
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    definition = MODEL_REGISTRY["vg25"]
+    control = dataclasses.replace(
+        definition,
+        use_sign_cross_lag=False,
+        config_name=f"{definition.config_name}-nolag",
+    )
+    assert engine_for_definition(control).name == "joint"
+
+
+def test_an_unregistered_definition_has_no_engine_rather_than_a_default():
+    import dataclasses
+
+    from vocab_growth.models.catalogue import engine_for_definition
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    stranger = dataclasses.replace(MODEL_REGISTRY["vg25"], model_id="VG99")
+    with pytest.raises(KeyError, match="VG99"):
+        engine_for_definition(stranger)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("model_key", sorted(_ROW_QUANTITIES))
+def test_the_quantities_a_forward_score_reads_are_named_and_never_stored(
+    model_key, tmp_path, monkeypatch
+):
+    """Two halves, and both matter.
+
+    **Named**, or the forward score cannot evaluate a held-out row's density at
+    all -- which is where the joint engine was: it named only `kappa_sign_obs`
+    and `z_obs`, so VG25's report could point the reader at a script that could
+    not run.
+
+    **Never stored**, or naming them would put an ``n_obs x draws`` array per
+    quantity into every trace, which is exactly what
+    `fit_artifacts.sampled_variable_names` exists to keep out. They carry
+    ``obs_id``, so the sampler skips them and only a caller that asks --
+    `fit_holdout_fold`, with ``store_observation_deterministics`` -- pays for
+    them.
+    """
+    from _pytest.monkeypatch import MonkeyPatch
+    from support.synthetic_graphs import build_registered_model
+
+    from vocab_growth.fit_artifacts import (
+        sampled_variable_names,
+        unsampled_deterministic_names,
+    )
+
+    patcher = MonkeyPatch()
+    try:
+        context = build_registered_model(
+            model_key, output_dir=str(tmp_path), monkeypatch=patcher
+        )
+    finally:
+        patcher.undo()
+
+    named = {d.name for d in context.model.deterministics}
+    unstored = set(unsampled_deterministic_names(context.model))
+    stored = set(sampled_variable_names(context.model))
+
+    for quantity in _ROW_QUANTITIES[model_key]:
+        assert quantity in named, f"{model_key} does not name {quantity}"
+        assert quantity in unstored, f"{model_key} would store {quantity} in every fit"
+        assert quantity not in stored

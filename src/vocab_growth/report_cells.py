@@ -29,14 +29,17 @@ import json
 import math
 import os
 from collections.abc import Mapping
+from typing import NamedTuple
 
 from dse_research_utils.report.readers import FileRead, nearest_row, read_csv, read_json
 from scipy import stats
 
 from vocab_growth.administration_loo import ADMINISTRATION_LABEL
 from vocab_growth.fit_artifacts import (
+    HardConvergenceStatus,
     diagnostics_assessable,
     diagnostics_scan_completed,
+    hard_tier_status,
 )
 from vocab_growth.glossary import render_glossary  # noqa: F401  (re-exported)
 from vocab_growth.models.diagnostics_utils import (  # noqa: F401  (re-exported)
@@ -232,6 +235,20 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ("tau_subj_q", "Between-child SD, production ratio $q$", "tau_subj_q_sigma", "odds"),
     ("tau_subj_sign", "Between-child SD, signing", "tau_subj_sign_sigma", "odds"),
     ("tau_psi", "Between-study SD of the sign–speech association", "tau_psi_sigma", "odds"),
+    # The per-study age-slope sensitivity (#240 item 5); present only in its arms.
+    ("tau_slope", "Between-study SD of age slopes", "study_age_slope_sigma", "study_slope"),
+    (
+        "tau_u_slope",
+        "Between-study SD of age slopes, understood",
+        "study_age_slope_sigma",
+        "study_slope",
+    ),
+    (
+        "tau_q_slope",
+        "Between-study SD of age slopes, production ratio $q$",
+        "study_age_slope_sigma",
+        "study_slope",
+    ),
     # VG20's correlation had no entry here at all, so its priors table omitted
     # the one prior the model exists to place (#233). It is a top-level scalar
     # field rather than part of a subject-scale block, so it needs its own kind
@@ -261,6 +278,12 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
         "subject_re_correlation_eta",
         "lkj",
     ),
+    # The sex covariate (#324). One row per coefficient, each reading its prior
+    # from the one shared field; a model shows only the ones it samples.
+    ("beta_sex", "Girl–boy difference", "sex_effect_sigma", "sex"),
+    ("beta_sex_u", "Girl–boy difference, understood", "sex_effect_sigma", "sex"),
+    ("beta_sex_q", "Girl–boy difference, production ratio $q$", "sex_effect_sigma", "sex"),
+    ("beta_sex_sign", "Girl–boy difference, signed ratio", "sex_effect_sigma", "sex"),
     ("log_psi", "Sign–speech association $\\psi$ (log scale)", "log_psi", "log_psi"),
     ("beta_lag", "Cross-lag coefficient $\\beta$", "beta_lag", "lag"),
     # VG25 (#297). Its own row rather than a shared one: the two lags read
@@ -502,6 +525,30 @@ def _prior_row(
             f"LKJ({eta:g}), i.e. $(\\rho_{{{symbol}}}+1)/2 \\sim$ "
             f"Beta({shape:g}, {shape:g})",
             f"centred on zero and {emphasis}; 5–95% {lo:+.2f} to {hi:+.2f}",
+        )
+
+    if kind == "study_slope":
+        sigma = definition.get(stem)
+        if sigma is None:
+            return None
+        median = float(stats.halfnorm.ppf(0.5, scale=sigma))
+        return (
+            description,
+            f"HalfNormal({sigma:g})",
+            f"median {median:.2f} logits per year of age, zero-sum over studies; "
+            "zero is the intercept-only model",
+        )
+
+    if kind == "sex":
+        sigma = definition.get(stem)
+        if sigma is None:
+            return None
+        hi = 1.598 * float(sigma)  # 89% equal-tailed, centred on zero
+        return (
+            description,
+            f"Normal(0, {sigma:g})",
+            f"logit scale, girls minus boys; centred on no difference, 89% "
+            f"{-hi:+.2f} to {hi:+.2f} (odds ×{math.exp(-hi):.2f} to ×{math.exp(hi):.2f})",
         )
 
     if kind == "log_multiplier":
@@ -905,6 +952,33 @@ def _prior_rows(
         name.startswith("rho_") for name in covered
     ):
         covered.append("subject_re_corr")
+
+    # Proposal A1 under the variance partition (VG11 and VG12's
+    # `a1-tau-age-varying`, #240 item 1). The partition makes the young-anchor
+    # child scale a function of the budget, so the `tau_subject` row is inert and
+    # the subject-scale block row never renders; the one prior the variant adds
+    # is the ratio, and it is stated here rather than left as a gap.
+    scale_spec = definition.get("tau_subject_sigma")
+    if (
+        definition.get("subject_variance_partition")
+        and isinstance(scale_spec, Mapping)
+        and "log_ratio_sigma" in scale_spec
+        and (not present or "log_tau_subject_ratio" in present)
+    ):
+        ratio_sigma = float(scale_spec["log_ratio_sigma"])
+        ages = scale_spec.get("anchor_ages") or ()
+        span = f" between {ages[0]:g} and {ages[1]:g} months" if len(ages) == 2 else ""
+        rows.append(
+            (
+                "Between-child SD — age-varying ratio",
+                f"$\\log(\\tau_{{old}}/\\tau_{{young}}) \\sim$ Normal(0, {ratio_sigma:g})",
+                f"the young-anchor scale is the variance partition's{span}; zero "
+                "widening is the prior centre, and dispersion is held flat in age",
+            )
+        )
+        covered.extend(
+            name for name in ("log_tau_subject_ratio", "tau_subject_old") if name in present
+        )
 
     rows.extend(factor_rows)
     covered.extend(factor_covered)
@@ -1542,6 +1616,110 @@ def render_variation_table(directory: str = ".") -> None:
     )
 
 
+class HeldOutCheck(NamedTuple):
+    """One of the project's held-out checks, and the registered models it scores."""
+
+    script: str
+    models: frozenset[str]
+    description: str
+
+
+#: The project's held-out checks, and the registered models each can score. The
+#: leave-one-out section names only the ones that cover the model on its page.
+#:
+#: Until 2026-09-13 that section named ``kfold_loso.py`` and ``loso_compare.py``
+#: on every page whose fit samples a per-child scale, as checks "which hold out
+#: whole studies or whole children". Neither accepted a typically-developing or a
+#: joint model, and neither holds out a study for any model -- LOSO in both means
+#: leave-one-*subject*-out -- so VG11, VG12, VG21 and VG23, whose PSIS-LOO is
+#: unusable on 37% to 59% of rows, sent their readers to checks that could not run
+#: on them (``notes/202609131214-held-out-validation-for-the-td-models.md``).
+#:
+#: Each entry is pinned against the script's own model list in
+#: ``tests/test_report_cells.py``, so extending a script without updating this
+#: fails a test rather than leaving a page silent about the check.
+HELD_OUT_CHECKS: tuple[HeldOutCheck, ...] = (
+    HeldOutCheck(
+        "scripts/kfold_loso.py",
+        frozenset({"vg07", "vg08", "vg09", "vg10", "vg19", "vg20", "vg22"}),
+        "refits the model with each fold's children removed from the likelihood, "
+        "so that their effects are drawn from the prior, and scores their counts",
+    ),
+    HeldOutCheck(
+        "scripts/loso_compare.py",
+        frozenset({"vg07", "vg08", "vg09"}),
+        "approximates leave-one-child-out from the fitted model's draws by "
+        "importance sampling, without refitting, and so carries Pareto "
+        "diagnostics of its own",
+    ),
+    HeldOutCheck(
+        "scripts/wave_forward_score.py",
+        frozenset({"vg16", "vg25"}),
+        "refits the model with each fold's children's later waves held out and "
+        "scores them, against the same model with its cross-lag removed "
+        "(`--holdout-unit child` holds out the whole child instead)",
+    ),
+)
+
+
+_NUMBER_WORDS = {2: "two", 3: "three"}
+
+
+def held_out_checks_for(model_id: str) -> tuple[HeldOutCheck, ...]:
+    """The held-out checks that can score registered model ``model_id``."""
+    key = model_id.lower()
+    return tuple(check for check in HELD_OUT_CHECKS if key in check.models)
+
+
+def _held_out_check_sentence(manifest: dict) -> str:
+    """Which held-out checks cover the fit on this page, read from its manifest.
+
+    Every check scores a *registered* model, so a sensitivity arm -- the same
+    ``model_id`` under a different ``config_name`` -- is told that rather than
+    being credited with a check that never fits it.
+    """
+    recorded = manifest.get("model") or {}
+    model_id = str(recorded.get("model_id") or "").lower()
+    if not model_id:
+        return (
+            "Which of the project's held-out checks covers this model cannot be "
+            "read without the fit manifest."
+        )
+    checks = held_out_checks_for(model_id)
+    if not checks:
+        return (
+            "**None of the project's held-out checks covers this model yet**, so "
+            "nothing in the project scores how well it predicts a child it has "
+            "not seen."
+        )
+    described = [f"`{check.script}`, which {check.description}" for check in checks]
+    if len(described) == 1:
+        sentence = f"For this model that check is {described[0]}."
+    else:
+        sentence = (
+            f"For this model there are {_NUMBER_WORDS.get(len(described), len(described))}: "
+            + "; ".join(described[:-1])
+            + f"; and {described[-1]}."
+        )
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    registered = MODEL_REGISTRY.get(model_id)
+    config_name = recorded.get("config_name")
+    if registered is not None and config_name and config_name != registered.config_name:
+        sentence += (
+            " They score the registered model, not this sensitivity arm, so their "
+            "results do not describe this fit."
+            if len(described) > 1
+            else " It scores the registered model, not this sensitivity arm, so its "
+            "results do not describe this fit."
+        )
+    return (
+        sentence
+        + " Results, where a check has been run, are written to the comparisons "
+        "output rather than to this page."
+    )
+
+
 def render_loo_section(directory: str = ".") -> None:
     """Print the leave-one-out cross-validation result for a report cell.
 
@@ -1752,11 +1930,11 @@ def render_loo_section(directory: str = ".") -> None:
                 "the posterior substantially, which is precisely the situation "
                 "importance sampling approximates poorly. Leave-one-observation-out "
                 "is the wrong unit of prediction for a model with per-child "
-                "parameters. The question it half-answers — how well does this "
-                "generalise beyond the data it saw — is better put to the "
-                "project's leave-one-study-out and k-fold checks "
-                "(`scripts/kfold_loso.py`, `scripts/loso_compare.py`), which hold "
-                "out whole studies or whole children rather than single rows."
+                "parameters. The question it half-answers — how well this "
+                "generalises beyond the data it saw — is better put to a grouped "
+                "check, which holds a child's rows out together rather than one "
+                "row at a time. "
+                + _held_out_check_sentence(read_manifest(directory))
             )
 
     dropped = int(
@@ -2124,7 +2302,9 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     # manifest is deliberately *not* read this way -- see `read_manifest`.
     read = read_json(os.path.join(directory, "diagnostics_summary.json"))
     if read.status == "missing":
-        print("_No `diagnostics_summary.json` for this fit, so the gate verdict cannot be shown._")
+        print(
+            "_No `diagnostics_summary.json` for this fit, so the gate verdict cannot be shown._"
+        )
         return
     if read.status == "invalid" or not isinstance(read.value, dict):
         print(
@@ -2172,12 +2352,14 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
                     best_ess_name = str(stacked.stack().idxmin()[0])
                 else:
                     best_ess_name = unlisted
-        except (OSError, ValueError, TypeError, IndexError):
+        except OSError, ValueError, TypeError, IndexError:
             pass
 
     divergences = summary.get("divergences")
     bfmi = summary.get("bfmi_per_chain") or []
-    finite_bfmi = [value for value in bfmi if value is not None and math.isfinite(value)]
+    finite_bfmi = [
+        value for value in bfmi if value is not None and math.isfinite(value)
+    ]
     min_bfmi = min(finite_bfmi) if len(finite_bfmi) == len(bfmi) and bfmi else None
 
     def mark(ok):
@@ -2187,26 +2369,34 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     print("| --- | --- | --- | --- | --- |")
     if max_rhat is not None:
         where = (
-            f" ({worst_rhat_name})" if worst_rhat_name == unlisted
-            else f" (`{worst_rhat_name}`)" if worst_rhat_name else ""
+            f" ({worst_rhat_name})"
+            if worst_rhat_name == unlisted
+            else f" (`{worst_rhat_name}`)"
+            if worst_rhat_name
+            else ""
         )
         print(
             f"| Largest R-hat | {max_rhat:.6f}{where} | ≤ {rhat_max:g} | hard | "
-            f"{mark(checks.get('rhat', max_rhat <= rhat_max))} |"
+            f"{mark(checks.get('rhat', True) and max_rhat <= rhat_max)} |"
         )
     else:
-        print(f"| Largest R-hat | unavailable | ≤ {rhat_max:g} | hard | **fail** |")
+        print(f"| Largest R-hat | unavailable | ≤ {rhat_max:g} | hard | unknown |")
     if min_ess is not None:
         where = (
-            f" ({best_ess_name})" if best_ess_name == unlisted
-            else f" (`{best_ess_name}`)" if best_ess_name else ""
+            f" ({best_ess_name})"
+            if best_ess_name == unlisted
+            else f" (`{best_ess_name}`)"
+            if best_ess_name
+            else ""
         )
         print(
             f"| Smallest effective sample size | {min_ess:,.0f}{where} | ≥ {ess_min:,} | hard | "
-            f"{mark(checks.get('ess', min_ess >= ess_min))} |"
+            f"{mark(checks.get('ess', True) and min_ess >= ess_min)} |"
         )
     else:
-        print(f"| Smallest effective sample size | unavailable | ≥ {ess_min:,} | hard | **fail** |")
+        print(
+            f"| Smallest effective sample size | unavailable | ≥ {ess_min:,} | hard | unknown |"
+        )
     if divergences is not None:
         print(
             f"| Divergent transitions | {divergences:,} | 0 | soft | "
@@ -2218,13 +2408,28 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             f"{mark(checks.get('bfmi', min_bfmi >= bfmi_min))} |"
         )
     else:
-        print(f"| Smallest energy BFMI across chains | unavailable | ≥ {bfmi_min:g} | soft | **fail** |")
+        print(
+            f"| Smallest energy BFMI across chains | unavailable | ≥ {bfmi_min:g} | soft | **fail** |"
+        )
     unassessable = summary.get("unassessable_parameters") or []
     if not diagnostics_scan_completed(summary):
-        print("| R-hat/ESS scan | did not complete | completed | hard | **fail** |")
+        scan = (
+            "did not complete"
+            if summary.get("scan_completed") is False
+            else "unavailable"
+        )
+        result = "**fail**" if summary.get("scan_completed") is False else "unknown"
+        print(f"| R-hat/ESS scan | {scan} | completed | hard | {result} |")
     if not diagnostics_assessable(summary):
         detail = ", ".join(unassessable) if unassessable else "unavailable diagnostics"
-        print(f"| Parameters the gate could not assess | {detail} | none | hard | **fail** |")
+        result = (
+            "**fail**"
+            if unassessable or checks.get("diagnostics_assessable") is False
+            else "unknown"
+        )
+        print(
+            f"| Parameters the gate could not assess | {detail} | none | hard | {result} |"
+        )
     print()
 
     manifest = read_manifest(directory)
@@ -2236,16 +2441,15 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
         effort.append(f"after {params['tune']:,} tuning draws")
     if params.get("target_accept"):
         effort.append(f"at target acceptance {params['target_accept']:g}")
-    hard = (
-        diagnostics_scan_completed(summary)
-        and diagnostics_assessable(summary)
-        and bool(checks.get("rhat", max_rhat is not None and max_rhat <= rhat_max))
-        and bool(checks.get("ess", min_ess is not None and min_ess >= ess_min))
-    )
+    hard_status = hard_tier_status(summary)
+    hard = hard_status is HardConvergenceStatus.PASSED
     soft = (
-        divergences is not None and divergences == 0
-        and min_bfmi is not None and min_bfmi >= bfmi_min
-        and bool(checks.get("divergences", True)) and bool(checks.get("bfmi", True))
+        divergences is not None
+        and divergences == 0
+        and min_bfmi is not None
+        and min_bfmi >= bfmi_min
+        and bool(checks.get("divergences", True))
+        and bool(checks.get("bfmi", True))
     )
     if hard and soft:
         verdict = "This fit clears both tiers of the convergence gate."
@@ -2254,6 +2458,12 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
             "This fit clears the **hard** tier (R-hat and effective sample size) but not the "
             "**soft** tier; the caveat block above says what was recorded and the reported "
             "intervals should be read with that in mind."
+        )
+    elif hard_status is HardConvergenceStatus.UNKNOWN:
+        verdict = (
+            "The hard convergence tier **cannot be assessed** from the recorded "
+            "diagnostics. These results are provisional and must not be published "
+            "as a completed fit."
         )
     else:
         verdict = "This fit **does not clear the hard tier**."
@@ -2264,7 +2474,9 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     sentence = verdict
     if effort:
         sentence += " Sampled with " + ", ".join(effort) + "."
-    print(": " + sentence + " Read from `diagnostics_summary.json` and the fit manifest.")
+    print(
+        ": " + sentence + " Read from `diagnostics_summary.json` and the fit manifest."
+    )
 
 
 def render_prior_posterior_contraction(directory: str = ".") -> None:
@@ -3087,3 +3299,245 @@ def render_reference_child_calibration(directory: str = ".") -> None:
         "what remains is not study coverage. Read every milestone age on this page as the "
         "reference child's, and the study fans figure for where each study sits."
     )
+
+
+# ---------------------------------------------------------------------------
+# Sex (issue #324)
+# ---------------------------------------------------------------------------
+
+_SEX_COEFFICIENT_LABELS = {
+    "beta_sex": "Girl–boy difference",
+    "beta_sex_u": "Girl–boy difference, understood",
+    "beta_sex_q": "Girl–boy difference, production ratio $q$",
+    "beta_sex_sign": "Girl–boy difference, signed ratio",
+}
+
+
+def render_sex_section(
+    directory: str = ".", *, ages: tuple[int, ...] | None = None
+) -> None:
+    """Print the sex covariate's coefficients, the girl–boy gap and by-sex ranges.
+
+    Reads ``posterior_summary_sex_effect.csv``, ``posterior_summary_sex_difference.csv``
+    and the ``posterior_summary*_by_sex.csv`` tables the engines write at fit time,
+    so it describes this fit only. ``ages`` restricts the gap and range tables to
+    those query ages; ``None`` shows every reported one. A fit without the covariate
+    says so rather than printing an empty section.
+    """
+    effects = _read(directory, "posterior_summary_sex_effect")
+    if effects is None:
+        print(
+            "_This fit carries no sex covariate (`posterior_summary_sex_effect.csv` is "
+            "absent), so there are no by-sex predictions to show._"
+        )
+        return
+
+    print("| Coefficient | Median (logit) | 89% interval | Odds ratio, girls to boys | P(girls ahead) |")
+    print("| --- | ---: | ---: | ---: | ---: |")
+    for _, row in effects.iterrows():
+        label = _SEX_COEFFICIENT_LABELS.get(row["parameter"], row["parameter"])
+        print(
+            f"| {label} (`{row['parameter']}`) | {row['median']:+.2f} | "
+            f"{row['ci_lo']:+.2f} to {row['ci_hi']:+.2f} | ×{row['odds_ratio_median']:.2f} | "
+            f"{row['P_positive']:.2f} |"
+        )
+    print()
+    differences = _read(directory, "posterior_summary_sex_difference")
+    # A single-outcome engine names its one outcome in the difference table; that
+    # is the only record of whether its coefficient is on words understood or said.
+    single_outcome = (
+        str(differences["outcome"].iloc[0])
+        if differences is not None and differences["outcome"].nunique() == 1
+        else None
+    )
+    parameters = set(effects["parameter"])
+    meanings = []
+    if "beta_sex" in parameters:
+        verb = {"understood": "understood", "spoken": "said", "signed": "signed"}.get(
+            single_outcome or "", "known"
+        )
+        meanings.append(f"the odds that a given word is {verb}")
+    if "beta_sex_u" in parameters:
+        meanings.append("for comprehension, the odds that a given word is understood")
+    if parameters & {"beta_sex_q", "beta_sex_sign"}:
+        meanings.append("for a ratio, the odds that a word understood is also said or signed")
+    print(
+        ": Each coefficient is the difference between girls and boys on the logit scale, "
+        "constant in age, estimated from the children whose sex is recorded. The odds "
+        "ratio is its exponential"
+        + (": " + "; ".join(meanings) if meanings else "")
+        + "."
+    )
+    print()
+
+    if differences is not None:
+        wanted = differences
+        if ages is not None:
+            wanted = differences[differences["age_months"].round().isin(ages)]
+        print("| Outcome | Age (months) | Girls | Boys | Difference | 89% interval | P(girls ahead) |")
+        print("| --- | ---: | ---: | ---: | ---: | ---: | ---: |")
+        for _, row in wanted.iterrows():
+            # One precision per row, so a gap of a fraction of a word at the youngest
+            # ages does not print as "+0 to +0" beside a probability near one.
+            digits = _word_digits(
+                row["Ey_girls_median"], row["Ey_boys_median"],
+                row["Ey_difference_ci_lo"], row["Ey_difference_ci_hi"],
+            )
+            print(
+                f"| {row['outcome']} | {row['age_months']:.0f} | "
+                f"{row['Ey_girls_median']:.{digits}f} | {row['Ey_boys_median']:.{digits}f} | "
+                f"{_signed_words(row['Ey_difference_median'], digits)} | "
+                f"{_signed_words(row['Ey_difference_ci_lo'], digits)} to "
+                f"{_signed_words(row['Ey_difference_ci_hi'], digits)} | "
+                f"{row['P_girls_gt_boys']:.2f} |"
+            )
+        print()
+        print(
+            ": Expected words for the reference child — zero study and child effects — as a "
+            "girl and as a boy, and the difference between them, computed draw by draw. A "
+            "constant logit difference opens up in words as vocabulary grows, which is why "
+            "the gap widens with age without any age-by-sex term in the model."
+        )
+        print()
+
+    # One row per outcome and age, girls and boys side by side: the comparison the
+    # table exists for, which a block per sex made a reader scroll to make.
+    paired: dict[tuple[str, int], dict[str, object]] = {}
+    for suffix, label in (("", None), ("_u", "understood"), ("_s", "spoken"), ("_sign", "signed")):
+        table = _read(directory, f"posterior_summary{suffix}_by_sex")
+        if table is None or not {"Y_median", "Y_ci_lo", "Y_ci_hi"} <= set(table.columns):
+            continue
+        for _, row in table.iterrows():
+            age = int(round(float(row["age_months"])))
+            if ages is not None and age not in ages:
+                continue
+            paired.setdefault((label or single_outcome or "words", age), {})[str(row["sex"])] = row
+    if paired:
+        levels = [level for level, _ in _sex_levels()]
+
+        def child(row) -> list[str]:
+            if row is None:
+                return ["—", "—"]
+            return [f"{row['Y_median']:.0f}", f"{row['Y_ci_lo']:.0f}–{row['Y_ci_hi']:.0f}"]
+
+        header = ["Outcome", "Age (months)"]
+        for level in levels:
+            singular = level.removesuffix("s")
+            header += [f"A new {singular}", f"Nine in ten {level}"]
+        print("| " + " | ".join(header) + " |")
+        print("| --- | ---: |" + " ---: | ---: |" * len(levels))
+        for (label, age), by_level in paired.items():
+            cells = [label, f"{age}"]
+            for level in levels:
+                cells += child(by_level.get(level))
+            print("| " + " | ".join(cells) + " |")
+        print()
+        print(
+            ": Where one more child of that age would fall, as a girl and as a boy: the median "
+            "and the range nine in ten such children are expected to fall in. Each draw "
+            "samples one new child's own effect and gives that child both sexes, then draws "
+            "an administration's count for each, so the two columns differ by the sex "
+            "coefficient and by the count's own administration-to-administration noise — "
+            "not by being different children."
+        )
+        print()
+
+    print(
+        "::: {.callout-note title=\"How sex enters this model\"}\n\n"
+        "Sex is a covariate, not a restriction: no administration is dropped. A child "
+        "whose sex is not recorded sits at the midpoint between girls and boys on the "
+        "logit scale, which is also where every population figure on this page is "
+        "drawn, so those figures describe a sex-balanced child rather than this pool's "
+        "own mix of girls and boys. "
+        + _sex_coverage_sentences(directory)
+        + " The difference is also assumed constant on the logit scale across age.\n:::"
+    )
+
+
+def _sex_levels() -> tuple[tuple[str, float], ...]:
+    from vocab_growth.models.sex_covariate import SEX_LEVELS
+
+    return SEX_LEVELS
+
+
+def _word_digits(*values) -> int:
+    """Decimals for a row of word counts: one while every value is under ten words."""
+    return 1 if all(abs(round(float(value), 1)) < 10 for value in values) else 0
+
+
+def _signed_words(value, digits: int) -> str:
+    """A signed word difference at ``digits`` decimals, a rounded zero printing as ``0``.
+
+    Without the zero case a lower bound of -0.3 words printed as ``-0``.
+    """
+    rounded = round(float(value), digits)
+    return "0" if rounded == 0 else f"{rounded:+.{digits}f}"
+
+
+def _sex_coverage_sentences(directory: str) -> str:
+    """Where this fit's frame records sex, for the section's closing callout.
+
+    Read from the frame rather than written into the callout, because the carrying
+    models span both pools and record sex differently: the Down syndrome pool by
+    whole studies, VG11's typically developing frame by one study that records none
+    and two that miss a handful of children. The frame is used only if it still
+    hashes to the one the fit recorded.
+    """
+    frame, reason = _verified_frame(read_manifest(directory))
+    if frame is None:
+        return f"Where this fit's frame records sex is not shown because {reason}."
+    return sex_coverage_sentences(frame)
+
+
+def sex_coverage_sentences(frame) -> str:
+    """Describe sex coverage by child and by study in an analysis frame.
+
+    Children are counted once per study and child code. A study that records no sex
+    leans on its study effect to absorb its mix of girls and boys; a study that
+    misses some children places those children at the midpoint beside coded ones,
+    which is only sound if whether sex was recorded is unrelated to sex. The two
+    are said separately because they rest on different assumptions.
+    """
+    if not {"study", "subject_id", "sex"} <= set(frame.columns):
+        return "This fit's frame carries no per-child sex column, so its coverage is not shown."
+    children = frame.drop_duplicates(["study", "subject_id"])
+    recorded = children["sex"].notna()
+    total = len(children)
+    girls = int((children["sex"] == "F").sum())
+    boys = int((children["sex"] == "M").sum())
+    if bool(recorded.all()):
+        return (
+            f"Every child in this fit's frame has sex recorded ({girls:,} girls, {boys:,} "
+            f"boys), so the coefficients rest on all {total:,} children."
+        )
+    by_study = recorded.groupby(children["study"]).agg(["sum", "size"])
+    none = by_study[by_study["sum"] == 0]
+    partial = by_study[(by_study["sum"] > 0) & (by_study["sum"] < by_study["size"])]
+    recording = int((by_study["sum"] > 0).sum())
+    sentences = [
+        f"Sex is recorded for {int(recorded.sum()):,} of this fit's {total:,} children "
+        f"({girls:,} girls, {boys:,} boys), from {recording} of its {len(by_study)} studies."
+    ]
+    if len(none):
+        names = ", ".join(f"`{study}`" for study in none.index)
+        count = int(none["size"].sum())
+        if len(none) == 1:
+            which, lean = "The study that records", "leans on its study effect to absorb its"
+        else:
+            which, lean = f"The {len(none)} studies that record", "lean on their study effects to absorb their"
+        sentences.append(
+            f"{which} none ({names}; {count:,} children) {lean} mix of girls and boys, and "
+            "the coefficients assume the difference there is the one the recording studies show."
+        )
+    if len(partial):
+        listed = [
+            f"`{study}` ({int(row['size'] - row['sum']):,} of {int(row['size']):,})"
+            for study, row in partial.iterrows()
+        ]
+        names = listed[0] if len(listed) == 1 else ", ".join(listed[:-1]) + " and " + listed[-1]
+        sentences.append(
+            f"Sex is missing for some children only in {names}; those children sit at the "
+            "midpoint beside coded children of the same study, which is sound only if whether "
+            "sex was recorded is unrelated to sex."
+        )
+    return " ".join(sentences)

@@ -525,6 +525,64 @@ def diagnostics_assessable(summary: dict) -> bool:
     )
 
 
+class HardConvergenceStatus(StrEnum):
+    """What the recorded diagnostics establish about R-hat and sample size."""
+
+    PASSED = "passed"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
+def hard_tier_status(summary: dict | None) -> HardConvergenceStatus:
+    """Assess recorded failures, numerical results and missing evidence.
+
+    A failure flag or failing numerical result takes precedence over a pass.
+    Older summaries need not contain Boolean checks: their finite extrema can
+    establish the result using the recorded thresholds, or the usual defaults.
+    Missing results cannot establish success. An accepted exception does not
+    change the assessment; report callers disclose that decision separately.
+    """
+    if not summary:
+        return HardConvergenceStatus.UNKNOWN
+    checks = summary.get("checks") or {}
+    if (
+        checks.get("rhat") is False
+        or checks.get("ess") is False
+        or summary.get("rhat_failing")
+        or summary.get("ess_failing")
+        or summary.get("scan_completed") is False
+        or checks.get("diagnostics_assessable") is False
+        or summary.get("unassessable_parameters")
+    ):
+        return HardConvergenceStatus.FAILED
+
+    thresholds = summary.get("thresholds") or {}
+    assessed = 0
+    for field, threshold, default, upper_bound in (
+        ("max_rhat", "rhat_max", 1.01, True),
+        ("min_ess", "ess_threshold", 400, False),
+    ):
+        try:
+            value = float(summary[field])
+            limit = float(thresholds.get(threshold, default))
+        except KeyError, TypeError, ValueError:
+            continue
+        if not math.isfinite(value) or not math.isfinite(limit):
+            continue
+        within_limit = value <= limit if upper_bound else value >= limit
+        if not within_limit:
+            return HardConvergenceStatus.FAILED
+        assessed += 1
+    return (
+        HardConvergenceStatus.PASSED if assessed == 2 else HardConvergenceStatus.UNKNOWN
+    )
+
+
+def hard_tier_failed(summary: dict | None) -> bool:
+    """Whether the recorded evidence establishes a hard-tier failure."""
+    return hard_tier_status(summary) is HardConvergenceStatus.FAILED
+
+
 def accepted_rhat_exception(
     model_id: str | None, gate_summary: dict | None
 ) -> ConvergenceException | None:

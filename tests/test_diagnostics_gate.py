@@ -398,3 +398,77 @@ def test_publication_policy_requires_clean_convergence_provisional_does_not():
     assert "require_clean_convergence" not in fit_validation_kwargs(
         "provisional-sync", **shared
     )
+
+
+# --------------------------------------------------------------------------
+# What a report may claim about the hard tier
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        {"checks": {"rhat": False}},
+        {"checks": {"ess": False}},
+        {"rhat_failing": ["peak_unit_sign"]},
+        {"ess_failing": ["z_subj_u[3]"]},
+        {"scan_completed": False},
+        {"checks": {"diagnostics_assessable": False}},
+        {"unassessable_parameters": ["g_unit_hsgp_coeffs[0]"]},
+    ],
+)
+def test_every_recorded_hard_failure_is_read_as_one(summary):
+    from vocab_growth.fit_artifacts import hard_tier_failed
+
+    assert hard_tier_failed(summary) is True
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        None,
+        {},
+        {"checks": {"rhat": True, "ess": True}},
+        # Soft-tier fields alone, as payloads written before the hard checks
+        # were recorded carry: nothing here says the hard tier failed.
+        {"checks": {"divergences": False, "bfmi": False}, "divergences": 4},
+        # And no finite extrema, which `diagnostics_assessable` would reject:
+        # a missing value is not a recorded failure.
+        {"checks": {"rhat": True, "ess": True}, "max_rhat": None, "min_ess": None},
+    ],
+)
+def test_a_payload_that_records_no_hard_failure_is_not_read_as_one(summary):
+    from vocab_growth.fit_artifacts import hard_tier_failed
+
+    assert hard_tier_failed(summary) is False
+
+
+@pytest.mark.parametrize(
+    "summary, expected",
+    [
+        ({"max_rhat": 1.005, "min_ess": 800}, "passed"),
+        ({"max_rhat": 1.21, "min_ess": 10}, "failed"),
+        ({"max_rhat": 1.005}, "unknown"),
+        ({"max_rhat": None, "min_ess": 800}, "unknown"),
+        ({"max_rhat": float("nan"), "min_ess": 800}, "unknown"),
+        ({"checks": {"rhat": True, "ess": True}}, "unknown"),
+        (
+            {"checks": {"rhat": True, "ess": True}, "max_rhat": 1.21, "min_ess": 800},
+            "failed",
+        ),
+        (
+            {
+                "max_rhat": 1.02,
+                "min_ess": 300,
+                "thresholds": {"rhat_max": 1.03, "ess_threshold": 200},
+            },
+            "passed",
+        ),
+    ],
+)
+def test_report_status_uses_numerical_evidence_and_recorded_thresholds(
+    summary, expected
+):
+    from vocab_growth.fit_artifacts import hard_tier_status
+
+    assert hard_tier_status(summary) == expected

@@ -187,10 +187,11 @@ def test_dse_native_restriction_on_the_real_pool():
     assert dropped == len(pool) - 277
     assert sorted(native["study"].unique()) == ["ie_01", "ie_02", "uk_02", "uk_06"]
     assert native["subject_id"].nunique() == 194
-    # 251, not 259: seven of the ten counts mask_comprehension_below_production
-    # masks are ie_01 rows inside this subset, and the withheld ie_02 t2
-    # administration (IE02_WITHHELD_ADMINISTRATIONS) took one more.
-    assert int(native["understood"].notna().sum()) == 251
+    # 250, not 259: seven of the eleven counts mask_comprehension_below_production
+    # masks are ie_01 rows inside this subset, the uk_02 record with no
+    # `produced` (#236) is an 810-item row inside it too, and the withheld ie_02
+    # t2 administration (IE02_WITHHELD_ADMINISTRATIONS) took one more.
+    assert int(native["understood"].notna().sum()) == 250
     assert int(native["spoken"].notna().sum()) == 263
     assert int(native["signed"].notna().sum()) == 217
 
@@ -1875,6 +1876,30 @@ def test_comprehension_rule_uses_produced_not_the_modality_sum():
     assert masked == {}
 
 
+def test_comprehension_rule_tests_a_row_whose_union_was_not_recorded():
+    # The uk_02 record #236 found in the gap: no `produced` value, so the rule as
+    # first written could not test it, although `spoken` alone exceeds
+    # `understood`. A child who says 387 words produces at least 387.
+    frame = _cbp_frame([("uk_02", 48.0, 347.0, 387.0, 254.0, float("nan"))])
+    out, masked = data_utils.mask_comprehension_below_production(frame)
+    assert pd.isna(out.loc[0, "understood"])
+    assert out.loc[0, "spoken"] == 387.0
+    assert masked == {"uk_02": 1}
+
+
+def test_comprehension_rule_does_not_bound_by_the_signed_count():
+    # Four sources record `produced` as the spoken count alone, so `signed`
+    # exceeds it on 132 rows and is not a lower bound on that column. A row
+    # whose only excess is signed is left alone.
+    frame = _cbp_frame([
+        ("ie_02", 30.0, 60.0, 13.0, 66.0, 13.0),
+        ("uk_02", 40.0, 60.0, 13.0, 66.0, float("nan")),
+    ])
+    out, masked = data_utils.mask_comprehension_below_production(frame)
+    assert out["understood"].tolist() == [60.0, 60.0]
+    assert masked == {}
+
+
 def test_comprehension_rule_requires_produced():
     frame = _cbp_frame([("ie_01", 61.0, 13.0, 366.0, 0.0, 366.0)])
     with pytest.raises(KeyError, match="produced"):
@@ -1894,9 +1919,11 @@ def test_comprehension_rule_counts_per_study():
 
 
 @requires_real_db
-def test_load_combined_data_masks_the_ten_impossible_comprehension_counts():
-    # End-to-end against the real database. Ten administrations across three
-    # studies record a comprehension count below the child's own production.
+def test_load_combined_data_masks_the_eleven_impossible_comprehension_counts():
+    # End-to-end against the real database. Eleven administrations across four
+    # studies record a comprehension count below the child's own production:
+    # ten against `produced`, and the uk_02 row with no `produced` against its
+    # spoken count (#236).
     masked = data_utils.load_combined_data()
     reinstated = data_utils.load_combined_data(
         include_comprehension_below_production=True
@@ -1904,12 +1931,63 @@ def test_load_combined_data_masks_the_ten_impossible_comprehension_counts():
     difference = int(
         reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
     )
-    assert difference == 10
+    assert difference == 11
+    newly = reinstated["understood"].notna() & masked["understood"].isna()
+    assert reinstated.loc[newly, "study"].value_counts().to_dict() == {
+        "ie_01": 7, "uk_01": 2, "it_01": 1, "uk_02": 1,
+    }
     # The flag reinstates comprehension only; nothing else moves, and `produced`
     # never reaches a caller.
     assert "produced" not in masked.columns
     assert len(masked) == len(reinstated)
     assert masked["spoken"].notna().sum() == reinstated["spoken"].notna().sum()
+
+
+def test_the_cross_tab_marginals_get_the_same_rule():
+    # The joint engine reads uk_02, uk_07 and es_01 from their own CSVs, so the
+    # loader's rules never reach those rows; the frame builder applies this one
+    # itself. A source file without a union column is an unrecorded union.
+    from vocab_growth.models.common_joint_modality import (
+        _mask_crosstab_comprehension_below_production,
+    )
+
+    marginal = pd.DataFrame(
+        {
+            "study": ["uk_02", "uk_02"],
+            "age": [48.0, 47.0],
+            "understood": [347.0, 393.0],
+            "spoken": [387.0, 351.0],
+            "signed": [254.0, 200.0],
+        }
+    )
+    out = _mask_crosstab_comprehension_below_production(marginal, None)
+    assert pd.isna(out.loc[0, "understood"])
+    assert out.loc[1, "understood"] == 393.0
+    assert list(out.columns) == list(marginal.columns)
+
+    union = pd.Series([400.0, 388.0])
+    clean = marginal.assign(spoken=[300.0, 351.0])
+    out = _mask_crosstab_comprehension_below_production(clean, union)
+    assert pd.isna(out.loc[0, "understood"])  # 347 < the recorded union of 400
+    pd.testing.assert_frame_equal(
+        _mask_crosstab_comprehension_below_production(clean.iloc[[1]], union.iloc[[1]]),
+        clean.iloc[[1]],
+    )
+
+
+@requires_real_db
+def test_the_joint_frame_masks_the_uk02_record_its_own_loader_reads():
+    from vocab_growth.models.common_joint_modality import build_joint_analysis_frame
+    from vocab_growth.models.definitions import VG15
+
+    frame, _ = build_joint_analysis_frame(VG15)
+    both = frame["understood"].notna() & frame["spoken"].notna()
+    assert int((both & (frame["understood"] < frame["spoken"])).sum()) == 0
+    record = frame[
+        frame["study"].eq("uk_02") & frame["age"].eq(48.0) & frame["spoken"].eq(387.0)
+    ]
+    assert len(record) == 1
+    assert record["understood"].isna().all()
 
 
 def test_the_comprehension_reinstatement_reaches_the_supported_fit_interface():
@@ -1931,7 +2009,7 @@ def test_the_comprehension_reinstatement_reaches_the_supported_fit_interface():
     difference = int(
         reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
     )
-    assert difference == 10
+    assert difference == 11
 
     # It is a Down-syndrome-pool defect class, so asking for it on the
     # typically-developing pool is a caller error rather than a silent no-op.

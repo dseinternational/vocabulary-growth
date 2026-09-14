@@ -30,10 +30,21 @@ A1_VARIANT = ("vg10", "a1-tau-age-varying")
 SUBJECT_SCALE_FIELDS = ("tau_subject_sigma", "tau_subj_u_sigma", "tau_subj_q_sigma")
 
 
-def test_a1_is_registered_on_vg10_alone():
-    """A1 is a diagnostic on one model. A second registration is a decision."""
+def test_a1_is_registered_where_a_decision_put_it():
+    """A1 is a diagnostic, and every registration beyond VG10 is a decision.
+
+    The second was #240 item 1 (2026-09-13): the review measured the age-varying
+    child loading on VG11, VG12 and VG13's understood outcome, so the arm went on
+    VG11, VG12 and VG21, VG13's successor. Not VG23 or VG26, whose correlated
+    child blocks the resolver refuses to combine with it.
+    """
     registered = [key for key in VARIANTS if key[1] == "a1-tau-age-varying"]
-    assert registered == [A1_VARIANT]
+    assert registered == [
+        A1_VARIANT,
+        ("vg11", "a1-tau-age-varying"),
+        ("vg12", "a1-tau-age-varying"),
+        ("vg21", "a1-tau-age-varying"),
+    ]
 
 
 def test_no_model_of_record_carries_an_age_varying_scale():

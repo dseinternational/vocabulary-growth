@@ -43,6 +43,8 @@ import pymc as pm
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.reporting_ages as reporting_ages
 from vocab_growth.fit_artifacts import save_trace
+from vocab_growth.models import sex_covariate, subject_effects
+from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -61,8 +63,8 @@ from vocab_growth.models.common import (
     kappa_anchor_derived_rows,
     posterior_summary,
     prior_predictive_checks,
-    render_model_graph,
     report,
+    report_model_build,
     run_fit_pipeline,
     run_standard_plots,
     sample,
@@ -73,14 +75,23 @@ from vocab_growth.models.common import (
 from vocab_growth.models.definitions import UnivariateModelDefinition
 from vocab_growth.models.gp_utils import (
     GPGrid,
+    build_subject_scale_of_z,
     build_variance_partition,
     trend_and_gp,
 )
+from vocab_growth.models.observation_arrays import sex_contrast_codes
+from vocab_growth.models.study_effects import zero_sum_study_offsets
+from vocab_growth.models.subject_effects import UNIVARIATE_OUTCOME
 from vocab_growth.models.subject_marginal import (
     partition_subject_rows,
     singleton_first_order,
     subject_marginal_betabinomial,
     zero_padded_subject_shift,
+)
+from vocab_growth.posterior_analysis import (
+    extract_posterior,
+    extract_posterior_predictive,
+    extract_posterior_predictive_float,
 )
 from vocab_growth.reporting import (
     dataframe_table,
@@ -114,6 +125,10 @@ def build_univariate_re_analysis_frame(
     columns = ["age", y_col, "study"]
     if use_subject_codes:
         columns.append("subject_id")
+    # Sex (#324): carried only when the definition asks for a sex term, so every
+    # other univariate frame is untouched. Rows of unrecorded sex are kept.
+    if sex_covariate.sex_effect_sigma(definition) is not None:
+        columns.append("sex")
 
     df = vocab_data_utils.load_data(
         population=definition.population,
@@ -239,6 +254,15 @@ def prepare_univariate_re_data(
                 ", ".join(dropped_studies) if dropped_studies else "none",
             )
         )
+    if "sex" in analysis_df.columns and "subject_id" in analysis_df.columns:
+        children = analysis_df.drop_duplicates(["study", "subject_id"])["sex"]
+        data_rows.append(
+            (
+                "Children by sex (girls / boys / unrecorded)",
+                f"{int((children == 'F').sum())} / {int((children == 'M').sum())} / "
+                f"{int(children.isna().sum())}",
+            )
+        )
     key_value_table("Data", data_rows)
     dataframe_table(study_counts, title="Observations per study")
     dataframe_table(desc, title="Descriptive statistics")
@@ -280,9 +304,17 @@ def prepare_univariate_re_data(
 
 
 def build_univariate_re_model(
+    context: UnivariateREContext, definition: UnivariateModelDefinition
+):
+    """Pipeline stage: construct the model, then write its build report."""
+    details = build_model_graph(context, definition)
+    report_model_build(context, details)
+
+
+def build_model_graph(
     context: UnivariateREContext,
     definition: UnivariateModelDefinition,
-) -> None:
+) -> BuildReport:
     """Build the univariate PyMC model with study-level random intercepts.
 
     The study intercept ``delta[s]`` shifts the population-level linear
@@ -295,6 +327,7 @@ def build_univariate_re_model(
     per-draw ridge between the global intercept and a constant GP component,
     which is especially important when study intercepts are also present.
     """
+    build_report = BuildReport()
     config = context.model_config
     analysis_df = context.analysis_df
 
@@ -325,6 +358,14 @@ def build_univariate_re_model(
         subject_codes = None
         n_subjects = 0
 
+    # Sex (#324): girls +1/2, boys -1/2, unrecorded 0, resolved per child.
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
+    x_sex = (
+        sex_contrast_codes(analysis_df, allow_unknown=True)
+        if sex_sigma is not None
+        else None
+    )
+
     # A child seen once contributes its effect to one likelihood term, so that
     # effect can be integrated out exactly instead of sampled. `partition` is
     # None unless the definition asks for it, and every branch below reads that
@@ -339,6 +380,33 @@ def build_univariate_re_model(
         partition_subject_rows(subject_codes) if marginalisation is not None else None
     )
 
+    # Proposal A1 (#240 item 1): the child-effect scale varies log-linearly in age
+    # between the dispersion block's anchors, with dispersion held flat in age, so
+    # the age variation the constant loading routes into `kappa` is given to the
+    # child scale instead. Resolved through the shared plan, which already reads
+    # an `AgeVaryingSubjectScale` on `tau_subject_sigma`. Under the variance
+    # partition the young-anchor scale is the partition's own `tau_subject`, so
+    # the variant moves one thing: the ratio.
+    age_varying = (
+        subject_effects.resolve(definition)[UNIVARIATE_OUTCOME].age_varying
+        if use_subject_re
+        else None
+    )
+    if age_varying is not None and marginalisation is not None:
+        raise ValueError(
+            "An age-varying subject scale cannot be combined with singleton "
+            "marginalisation: the quadrature integrates a constant child scale."
+        )
+
+    # Per-study age slopes (#240 item 5), measured in years from the GP anchor
+    # age, or from the slope anchors' midpoint where the GP is not anchored.
+    study_slope_sigma = getattr(definition, "study_age_slope_sigma", None)
+    study_slope_reference = (
+        float(definition.gp_anchor_age_months)
+        if definition.gp_anchor_age_months is not None
+        else float(np.mean(config.slope_anchors))
+    )
+
     # Range validation happens before the integer cast, above, and in the prepare
     # stage -- never after it, where the cast has already truncated. Until
     # 2026-08-31 this engine used the weaker `require_integral_counts` and carried a
@@ -350,16 +418,16 @@ def build_univariate_re_model(
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
 
     build_rows: list[tuple[str, object]] = [
-            ("Number of observations", n),
-            ("Number of trials (n_trials)", n_trials),
-            ("Number of studies", n_studies),
-            ("Slope anchors (months)", config.slope_anchors),
-            ("Length-scale range (months)", config.ell_months_range),
-            ("Number of plot points", config.n_plot),
-            ("Query ages (months)", config.ages_query),
-            ("Age median (months)", float(np.median(X_obs))),
-            ("Age mean (months)", X_obs_mean),
-            ("Age std (months)", X_obs_std),
+        ("Number of observations", n),
+        ("Number of trials (n_trials)", n_trials),
+        ("Number of studies", n_studies),
+        ("Slope anchors (months)", config.slope_anchors),
+        ("Length-scale range (months)", config.ell_months_range),
+        ("Number of plot points", config.n_plot),
+        ("Query ages (months)", config.ages_query),
+        ("Age median (months)", float(np.median(X_obs))),
+        ("Age mean (months)", X_obs_mean),
+        ("Age std (months)", X_obs_std),
     ]
     if use_subject_re:
         build_rows.extend(
@@ -371,7 +439,26 @@ def build_univariate_re_model(
     if partition is not None:
         build_rows.extend(partition.summary_rows())
         build_rows.append(("Quadrature nodes", marginalisation.n_nodes))
-    key_value_table("Build configuration", build_rows)
+    if x_sex is not None:
+        build_rows.append(
+            (
+                "Sex contrast rows (girls / boys / unrecorded)",
+                f"{int((x_sex > 0).sum())} / {int((x_sex < 0).sum())} / "
+                f"{int((x_sex == 0).sum())}",
+            )
+        )
+    if age_varying is not None:
+        build_rows.append(
+            ("Age-varying subject scale anchors (months)", age_varying.anchor_ages)
+        )
+    if study_slope_sigma is not None:
+        build_rows.append(
+            (
+                "Study age slopes (per year, from months)",
+                f"HalfNormal({study_slope_sigma:g}), from {study_slope_reference:g}",
+            )
+        )
+    build_report.add_table("Build configuration", build_rows)
 
     # Plot / query grids (standardised), with the optional reference-age anchor
     # row — see models.build_utils.construct_age_grids.
@@ -415,18 +502,16 @@ def build_univariate_re_model(
         ("HSGP boundary factor (L)", L),
         ("Slope anchors (z-score)", (slope_age_a_z, slope_age_b_z)),
         ("Length-scale range (z-score)", (ell_low_z, ell_high_z)),
-        *kappa_anchor_derived_rows(
-            config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
-        ),
+        *kappa_anchor_derived_rows(config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std),
     ]
     if anchor_g:
         derived_rows.append(("GP anchor age (months)", f"{anchor_age_months:g}"))
-    key_value_table("Derived quantities", derived_rows)
+    build_report.add_table("Derived quantities", derived_rows)
 
     # Slice indices
-    i_obs0, i_obs1 = 0, n
-    i_plot0, i_plot1 = i_obs1, i_obs1 + n_plot
-    i_query0, i_query1 = i_plot1, i_plot1 + n_query
+    i_obs0, i_obs1 = grids.i_obs
+    i_plot0, i_plot1 = grids.i_plot
+    i_query0, i_query1 = grids.i_query
 
     coords = {
         "all_id": np.arange(n_all),
@@ -446,7 +531,6 @@ def build_univariate_re_model(
             coords["subject_id"] = np.arange(n_subjects)
 
     with pm.Model(coords=coords) as model_pm:
-
         # ---- Data ----
 
         X_all_z_data = pm.Data("X_all_z", X_all_z, dims=("all_id", "x_dim"))
@@ -457,9 +541,7 @@ def build_univariate_re_model(
 
         study_obs = pm.Data("study_obs", study_codes, dims=("obs_id",))
         if use_subject_re:
-            subject_obs = pm.Data(
-                "subject_obs", subject_codes, dims=("obs_id",)
-            )
+            subject_obs = pm.Data("subject_obs", subject_codes, dims=("obs_id",))
 
         # ============================================================
         # Mean developmental trajectory + HSGP deviation
@@ -499,32 +581,13 @@ def build_univariate_re_model(
         # Study-level random intercepts (non-centred, sum-to-zero)
         # ============================================================
 
-        # Sum-to-zero on the unit offsets (delta_raw) removes the intercept vs
-        # study-RE-mean ridge: with few studies an unconstrained mean trades off
-        # against the global intercept/slope (R-hat failure at rep-hightune). This is
-        # an intentional identifiability constraint, NOT a prior-preserving
-        # reparameterisation: it removes the group-mean degree of freedom (that is
-        # the ridge) and imposes a -1/(K-1) correlation. ZeroSumNormal(sigma=1) would
-        # also shrink each marginal to Var = tau^2 * (K-1)/K; we rescale sigma by
-        # sqrt(K/(K-1)) so the marginal per-study prior variance stays tau^2 (its
-        # value before this change), leaving only the mean DOF removed. The tau * raw
-        # scaling keeps the funnel-avoiding non-centring of issue #65 -- unless
-        # `centred_study_re` selects the centred branch below.
         tau = pm.HalfNormal("tau", sigma=definition.tau_study_sigma)
-        zsn_sigma = float(np.sqrt(n_studies / (n_studies - 1)))
-        # getattr: VG17 derives its definition from VG01, a plain
-        # UnivariateModelDefinition without the random-effect geometry fields.
-        if getattr(definition, "centred_study_re", False):
-            # Centred: sample `delta` directly with a tau-scaled sigma. Identical in
-            # distribution to the non-centred branch -- scaling a zero-sum Gaussian's
-            # sigma is the same as scaling its variate -- so this is a pure change of
-            # sampling coordinates, not of the prior. Preferred once each study
-            # carries thousands of observations, where the funnel that the
-            # non-centring exists to avoid does not form.
-            delta = pm.ZeroSumNormal("delta", sigma=tau * zsn_sigma, dims="study_id")
-        else:
-            delta_raw = pm.ZeroSumNormal("delta_raw", sigma=zsn_sigma, dims="study_id")
-            delta = pm.Deterministic("delta", tau * delta_raw, dims="study_id")
+        delta = zero_sum_study_offsets(
+            "delta",
+            scale=tau,
+            n_studies=n_studies,
+            centred=getattr(definition, "centred_study_re", False),
+        )
 
         # The variance partition, when enabled, produces the subject scale here and
         # the young dispersion anchor further down, from one shared budget. It is
@@ -543,7 +606,29 @@ def build_univariate_re_model(
                 "there is no subject scale for the budget to allocate."
             )
 
-        if use_subject_re:
+        tau_subject_of_z = None
+        if use_subject_re and age_varying is not None:
+            tau_subject_of_z, tau_subject = build_subject_scale_of_z(
+                age_varying,
+                anchor_z=standardize_anchor_ages(
+                    age_varying.anchor_ages, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
+                ),
+                name="tau_subject",
+                tau_young=tau_subject if partition_excess_young is not None else None,
+            )
+            delta_subject_raw = pm.Normal(
+                "delta_subject_raw", mu=0.0, sigma=1.0, dims="subject_id"
+            )
+            # Stored at the young anchor, as the bivariate engine stores its A1
+            # offsets, so `delta_subject` keeps its name and dims.
+            _ = pm.Deterministic(
+                "delta_subject", tau_subject * delta_subject_raw, dims="subject_id"
+            )
+            subject_shift = (
+                tau_subject_of_z(X_all_z_data[i_obs0:i_obs1, 0])
+                * delta_subject_raw[subject_obs]
+            )
+        elif use_subject_re:
             if partition_excess_young is None:
                 tau_subject = pm.HalfNormal(
                     "tau_subject", sigma=definition.tau_subject_sigma
@@ -573,6 +658,23 @@ def build_univariate_re_model(
 
         # Add study shift to obs-level predictor only
         f_obs_re = f_all[i_obs0:i_obs1] + delta[study_obs] + subject_shift
+        # Per-study age slopes (#240 item 5), emitted only when the definition
+        # sets the field so every other graph is unchanged. Zero-sum, like the
+        # intercepts, so the population slope keeps its meaning.
+        if study_slope_sigma is not None:
+            tau_slope = pm.HalfNormal("tau_slope", sigma=study_slope_sigma)
+            delta_slope = zero_sum_study_offsets(
+                "delta_slope", scale=tau_slope, n_studies=n_studies
+            )
+            years_from_reference = (X_obs.flatten() - study_slope_reference) / 12.0
+            f_obs_re = f_obs_re + delta_slope[study_obs] * years_from_reference
+        # Sex covariate (#324), emitted only when the definition sets it so every
+        # other graph is unchanged. Added before `f_obs` is stored, so the
+        # marginalised likelihood's `mu` carries it as the explicit one does.
+        if x_sex is not None:
+            x_sex_data = pm.Data("x_sex", x_sex, dims=("obs_id",))
+            beta_sex = pm.Normal("beta_sex", mu=0.0, sigma=sex_sigma)
+            f_obs_re = f_obs_re + beta_sex * x_sex_data
 
         f_obs = pm.Deterministic("f_obs", f_obs_re, dims=("obs_id",))
         p_obs = pm.Deterministic("p_obs", pm.math.sigmoid(f_obs), dims=("obs_id",))
@@ -590,15 +692,26 @@ def build_univariate_re_model(
         _ = pm.Deterministic("p_query", pm.math.sigmoid(f_query), dims=("query_id",))
 
         # Standardised ages (needed by extract_model_samples)
-        _ = pm.Deterministic(
-            "z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims=("obs_id",)
-        )
+        _ = pm.Deterministic("z_obs", X_all_z_data[i_obs0:i_obs1, 0], dims=("obs_id",))
         _ = pm.Deterministic(
             "z_plot", X_all_z_data[i_plot0:i_plot1, 0], dims=("plot_id",)
         )
         _ = pm.Deterministic(
             "z_query", X_all_z_data[i_query0:i_query1, 0], dims=("query_id",)
         )
+        # A1's scale on the reporting grids, read by the new-child predictive and
+        # beside `kappa` in the report, as the bivariate engine writes it.
+        if tau_subject_of_z is not None:
+            _ = pm.Deterministic(
+                "tau_subject_plot",
+                tau_subject_of_z(X_all_z_data[i_plot0:i_plot1, 0]),
+                dims="plot_id",
+            )
+            _ = pm.Deterministic(
+                "tau_subject_query",
+                tau_subject_of_z(X_all_z_data[i_query0:i_query1, 0]),
+                dims="query_id",
+            )
 
         # ============================================================
         # Dispersion / overdispersion
@@ -609,6 +722,7 @@ def build_univariate_re_model(
             X_obs_mean=X_obs_mean,
             X_obs_std=X_obs_std,
             excess_young_value=partition_excess_young,
+            hold_constant=age_varying is not None and age_varying.hold_kappa_constant,
         )
 
         kappa_obs = pm.Deterministic(
@@ -618,7 +732,9 @@ def build_univariate_re_model(
             "kappa_plot", kappa_of_z(X_all_z_data[i_plot0:i_plot1, 0]), dims="plot_id"
         )
         _ = pm.Deterministic(
-            "kappa_query", kappa_of_z(X_all_z_data[i_query0:i_query1, 0]), dims="query_id"
+            "kappa_query",
+            kappa_of_z(X_all_z_data[i_query0:i_query1, 0]),
+            dims="query_id",
         )
 
         # ============================================================
@@ -660,11 +776,8 @@ def build_univariate_re_model(
 
     variables = pymc_utils.get_variables_dict(model_pm)
 
-    pymc_utils.report_model_summary(model_pm)
-
-    render_model_graph(model_pm, context.reporting.output_dir)
-
     context.set_model(model_pm, variables)
+    return build_report
 
 
 # ============================================================
@@ -678,6 +791,9 @@ def sample_posterior_predictive_re(
 ) -> None:
     """Sample a coherent trajectory for one new child when subject REs are used."""
     if not definition.use_subject_re:
+        # No child to draw, so no new-child counts by sex either; the summary
+        # stage writes the by-sex population tables from the coefficient alone.
+        # This is the `single-admin` sensitivity's path on a model with sex.
         _base_sample_posterior_predictive(context, definition)
         return
 
@@ -686,12 +802,23 @@ def sample_posterior_predictive_re(
     kappa_plot = context.model_variables["kappa_plot"]
     kappa_query = context.model_variables["kappa_query"]
     tau_subject = context.model_variables["tau_subject"]
+    beta_sex = context.model_variables.get("beta_sex")
 
     with context.model:
-        new_subject_shift = pm.Normal(
-            "_delta_subject_marg", mu=0.0, sigma=tau_subject
-        )
-        p_plot = pm.math.sigmoid(f_plot + new_subject_shift)
+        if "tau_subject_query" in context.model_variables:
+            # A1: one standard deviate per new child, scaled by the child scale at
+            # each age, which is what the fitted children were given.
+            new_subject_deviate = pm.Normal("_z_subject_marg", mu=0.0, sigma=1.0)
+            plot_shift = new_subject_deviate * context.model_variables["tau_subject_plot"]
+            new_subject_shift = (
+                new_subject_deviate * context.model_variables["tau_subject_query"]
+            )
+        else:
+            new_subject_shift = pm.Normal(
+                "_delta_subject_marg", mu=0.0, sigma=tau_subject
+            )
+            plot_shift = new_subject_shift
+        p_plot = pm.math.sigmoid(f_plot + plot_shift)
         p_query = pm.math.sigmoid(f_query + new_subject_shift)
 
         p_plot = pm.math.clip(p_plot, EPSILON, 1 - EPSILON)
@@ -710,9 +837,31 @@ def sample_posterior_predictive_re(
             beta=(1 - p_query) * kappa_query,
             dims=("query_id",),
         )
+        # By sex (#324): the same new child, drawn once above, as a girl and as a
+        # boy. `y_query` is that child at contrast zero -- a child of unrecorded
+        # sex, which is how the model treats every such row it was fitted to.
+        # Reusing the one child-effect draw makes the two levels paired draw for
+        # draw, so their difference carries no between-child noise.
+        by_sex_names: list[str] = []
+        if beta_sex is not None:
+            for level, contrast in sex_covariate.SEX_LEVELS:
+                p_level = pm.Deterministic(
+                    f"p_query_subject_marginal_{level}",
+                    pm.math.sigmoid(f_query + new_subject_shift + contrast * beta_sex),
+                    dims=("query_id",),
+                )
+                p_level = pm.math.clip(p_level, EPSILON, 1 - EPSILON)
+                pm.BetaBinomial(
+                    f"y_query_{level}",
+                    n=context.model_data.n_trials,
+                    alpha=p_level * kappa_query,
+                    beta=(1 - p_level) * kappa_query,
+                    dims=("query_id",),
+                )
+                by_sex_names += [f"p_query_subject_marginal_{level}", f"y_query_{level}"]
         trace = pm.sample_posterior_predictive(
             context.trace,
-            var_names=["y_plot", "y_query", "y_obs"],
+            var_names=["y_plot", "y_query", "y_obs", *by_sex_names],
             extend_inferencedata=True,
             progressbar=sys.stdout.isatty(),
             random_seed=context.sampling.random_seed,
@@ -728,6 +877,76 @@ def sample_posterior_predictive_re(
     context.dataframes["posterior_predictive_calibration"] = calibration_df
     save_trace(trace, context.reporting.output_dir)
     context.set_model_samples(extract_model_samples(trace))
+
+
+def posterior_summary_re(
+    context: UnivariateREContext, definition: UnivariateModelDefinition
+) -> None:
+    """The shared query-age summary, then the by-sex tables where the model has sex.
+
+    Written at fit time because the report reads them from the fit's output and
+    ``--render-only`` does not rebuild summary tables, so a table added later would
+    need a refit to appear.
+    """
+    posterior_summary(context)
+    trace = context.trace
+    beta_sex = sex_covariate.coefficient_draws(trace, "beta_sex")
+    if beta_sex is None:
+        return
+    samples = context.model_samples
+    n_trials = context.model_data.n_trials
+    ci_prob = context.reporting.ci_prob
+    max_age = getattr(context.model_config, "report_max_age_understood", None)
+    f_query = extract_posterior(trace, "f_query", "query_id")
+    population = {
+        level: sex_covariate.shifted(f_query, beta_sex, contrast)
+        for level, contrast in sex_covariate.SEX_LEVELS
+    }
+    output_dir = context.reporting.output_dir
+    # A model without child effects -- a `single-admin` sensitivity -- draws no
+    # new child, so its by-sex table carries the population columns only.
+    drew_children = "y_query_girls" in trace.posterior_predictive
+    context.dataframes["posterior_summary_by_sex"] = (
+        sex_covariate.write_probability_by_sex(
+            output_dir,
+            "",
+            samples.X_query,
+            population,
+            n_trials=n_trials,
+            ci_prob=ci_prob,
+            interval_kind=context.reporting.interval_kind,
+            predictive={
+                level: extract_posterior_predictive(trace, f"y_query_{level}", "query_id")
+                for level, _ in sex_covariate.SEX_LEVELS
+            }
+            if drew_children
+            else None,
+            subject_marginal={
+                level: extract_posterior_predictive_float(
+                    trace, f"p_query_subject_marginal_{level}", "query_id"
+                )
+                for level, _ in sex_covariate.SEX_LEVELS
+            }
+            if drew_children
+            else None,
+            max_age_months=max_age,
+        )
+    )
+    sex_covariate.write_differences(
+        output_dir,
+        [
+            sex_covariate.difference_rows(
+                samples.X_query,
+                definition.outcome.value,
+                population["girls"],
+                population["boys"],
+                n_trials=n_trials,
+                ci_prob=ci_prob,
+                max_age_months=max_age,
+            )
+        ],
+    )
+    sex_covariate.write_coefficients(output_dir, {"beta_sex": beta_sex}, ci_prob=ci_prob)
 
 
 # ============================================================
@@ -774,7 +993,7 @@ def univariate_re_stages(
             "Posterior predictions",
             lambda ctx: sample_posterior_predictive_re(ctx, definition),
         ),
-        ("Posterior summary", posterior_summary),
+        ("Posterior summary", lambda ctx: posterior_summary_re(ctx, definition)),
         (
             "Plots",
             lambda ctx: run_standard_plots(

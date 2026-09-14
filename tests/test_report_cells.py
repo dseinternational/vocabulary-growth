@@ -467,6 +467,8 @@ def test_soft_tier_only_keeps_the_cleared_framing(tmp_path, capsys):
     gate = {
         "checks": {"rhat": True, "ess": True, "divergences": False, "bfmi": True},
         "divergences": 16,
+        "max_rhat": 1.005,
+        "min_ess": 900,
     }
     render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
     out = capsys.readouterr().out
@@ -475,9 +477,173 @@ def test_soft_tier_only_keeps_the_cleared_framing(tmp_path, capsys):
 
 
 def test_clean_fit_prints_nothing(tmp_path, capsys):
-    gate = {"checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True}}
+    gate = {
+        "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.005,
+        "min_ess": 900,
+    }
     render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
     assert capsys.readouterr().out == ""
+
+
+def test_a_hard_failure_below_reporting_quality_is_not_called_reportable(
+    tmp_path, capsys
+):
+    """The contradiction a `dev` render of VG25 printed, pinned.
+
+    The gate does not stop a fit below reporting quality, so this payload --
+    R-hat 1.21, an effective sample size of 10, two divergences, no exception --
+    reached a report page. The caveat box called it "cleared the hard
+    convergence tier" and "reportable" directly above a verdict saying it "does
+    not clear the hard tier" and "must not be published".
+    """
+    gate = {
+        "checks": {"rhat": False, "ess": False, "divergences": False, "bfmi": True},
+        "max_rhat": 1.2104,
+        "min_ess": 10.0,
+        "divergences": 2,
+        "scan_completed": True,
+    }
+    render_convergence_caveats(str(_fit(tmp_path, config="dev", gate=gate)))
+    out = capsys.readouterr().out
+    assert "did not clear" in out
+    assert "no exception is recorded" in out
+    assert "must not be published" in out
+    assert "2 divergent" in out
+    assert "cleared the hard convergence tier" not in out
+    assert "remains reportable" not in out
+
+
+def test_a_hard_failure_with_no_sampling_caveat_is_still_disclosed(tmp_path, capsys):
+    """Silence was reserved for a clean fit, and this is not one.
+
+    Before the fix a hard-tier failure with no divergences and a healthy BFMI
+    produced an empty caveat list, so the box printed nothing at all -- the one
+    case where saying nothing was merely incomplete rather than wrong.
+    """
+    gate = {
+        "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.08,
+        "min_ess": 900.0,
+        "divergences": 0,
+    }
+    render_convergence_caveats(str(_fit(tmp_path, config="test", gate=gate)))
+    out = capsys.readouterr().out
+    assert "did not clear" in out
+    assert "sampling caveats" not in out
+    assert "must not be published" in out
+
+
+def test_a_payload_that_records_no_hard_check_is_not_called_a_failure(tmp_path, capsys):
+    """Missing evidence establishes neither success nor a measured failure."""
+    gate = {"checks": {"divergences": False}, "divergences": 3}
+    render_convergence_caveats(str(_fit(tmp_path, gate=gate)))
+    out = capsys.readouterr().out
+    assert "cannot be assessed" in out
+    assert "cleared the hard convergence tier" not in out
+    assert "did not clear" not in out
+    assert "remains reportable" not in out
+    assert "must not be published" in out
+
+
+_VERDICT_PAYLOADS = {
+    "hard evidence missing": {
+        "checks": {"divergences": False},
+        "divergences": 3,
+    },
+    "legacy numerical failure": {
+        "checks": {"divergences": False},
+        "divergences": 3,
+        "max_rhat": 1.21,
+        "min_ess": 10.0,
+    },
+    "legacy numerical success": {
+        "checks": {"divergences": False},
+        "divergences": 3,
+        "max_rhat": 1.004,
+        "min_ess": 900.0,
+    },
+    "clean": {
+        "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.002,
+        "min_ess": 1800.0,
+        "divergences": 0,
+        "bfmi_per_chain": [0.9, 0.85],
+        "scan_completed": True,
+    },
+    "soft only": {
+        "checks": {"rhat": True, "ess": True, "divergences": False, "bfmi": True},
+        "max_rhat": 1.004,
+        "min_ess": 900.0,
+        "divergences": 3,
+        "bfmi_per_chain": [0.7, 0.8],
+        "scan_completed": True,
+    },
+    "hard failure": {
+        "checks": {"rhat": False, "ess": False, "divergences": True, "bfmi": True},
+        "max_rhat": 1.21,
+        "min_ess": 10.0,
+        "divergences": 0,
+        "bfmi_per_chain": [0.6, 0.58],
+        "scan_completed": True,
+    },
+    "hard and soft failure": {
+        "checks": {"rhat": False, "ess": False, "divergences": False, "bfmi": True},
+        "max_rhat": 1.21,
+        "min_ess": 10.0,
+        "divergences": 2,
+        "bfmi_per_chain": [0.6, 0.58],
+        "scan_completed": True,
+    },
+    "scan did not complete": {
+        "checks": {"divergences": True, "bfmi": True},
+        "max_rhat": None,
+        "min_ess": None,
+        "divergences": 0,
+        "bfmi_per_chain": [0.6, 0.6],
+        "scan_completed": False,
+    },
+    "accepted exception": {
+        "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
+        "max_rhat": 1.0125,
+        "min_ess": 700.0,
+        "divergences": 0,
+        "bfmi_per_chain": [0.7, 0.7],
+        "scan_completed": True,
+        "accepted_rhat_exception": {
+            "parameters": ["g_unit_hsgp_coeffs[4]"],
+            "observed_max_rhat": 1.0125,
+            "decided": "2026-08-15, study owner",
+        },
+    },
+}
+
+
+@pytest.mark.parametrize("case", sorted(_VERDICT_PAYLOADS))
+def test_the_caveat_box_never_contradicts_the_verdict(tmp_path, capsys, case):
+    """Two cells on one page read the same payload and must say the same thing.
+
+    `render_diagnostic_verdict` judged the hard tier correctly all along; the
+    caveat box assumed it. This holds them to one another on every framing
+    either can produce, so a fix to one of them cannot quietly reopen the gap.
+    """
+    fit = _fit(tmp_path, gate=_VERDICT_PAYLOADS[case])
+    render_convergence_caveats(str(fit))
+    box = capsys.readouterr().out
+    report_cells.render_diagnostic_verdict(str(fit))
+    verdict = capsys.readouterr().out
+
+    verdict_fails_hard = "does not clear the hard tier" in verdict
+    if "cleared the hard convergence tier" in box:
+        assert not verdict_fails_hard, case
+    if "did not clear" in box:
+        assert verdict_fails_hard, case
+    if verdict_fails_hard:
+        assert "did not clear" in box, case
+    assert ("cannot be assessed" in box) == ("cannot be assessed" in verdict), case
+    if "cannot be assessed" in verdict:
+        assert "cleared the hard convergence tier" not in box
+        assert "remains reportable" not in box
 
 
 # --------------------------------------------------------------------------
@@ -620,11 +786,15 @@ def test_plain_child_scale_prior_survives_without_a_partition(tmp_path, capsys):
 # --------------------------------------------------------------------------
 
 
-def _loo_fit(tmp_path, rows, parameters=("eta",)):
+def _loo_fit(tmp_path, rows, parameters=("eta",), model=None):
     pd.DataFrame(rows).to_csv(tmp_path / "loo_summary.csv", index=False)
     pd.DataFrame(index=list(parameters), data={"r_hat": [1.0] * len(parameters)}).to_csv(
         tmp_path / "diagnostics.csv"
     )
+    if model is not None:
+        (tmp_path / report_cells.MANIFEST_FILENAME).write_text(
+            json.dumps({"model": model}), encoding="utf-8"
+        )
     return tmp_path
 
 
@@ -677,7 +847,120 @@ def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
     report_cells.render_loo_section(str(fit))
     out = capsys.readouterr().out
     assert "wrong unit of prediction" in out
-    assert "kfold_loso.py" in out
+    # With no manifest the page cannot say which check covers it, and says so
+    # rather than naming one.
+    assert "cannot be read without the fit manifest" in out
+    assert "scripts/" not in out
+
+
+_UNRELIABLE_ROW = {
+    **_CLEAN_ROW, "pareto_k_good": 1233, "pareto_k_bad": 258, "pareto_k_very_bad": 30,
+}
+
+
+@pytest.mark.parametrize(
+    ("model_id", "named"),
+    [
+        # The typically-developing references: PSIS-LOO unusable on 37% to 59%
+        # of rows, and no held-out check accepts them.
+        ("VG11", set()),
+        ("VG21", set()),
+        # A joint model with a per-child sign scale and no cross-lag.
+        ("VG24", set()),
+        ("VG20", {"scripts/kfold_loso.py"}),
+        ("VG07", {"scripts/kfold_loso.py", "scripts/loso_compare.py"}),
+        ("VG25", {"scripts/wave_forward_score.py"}),
+    ],
+)
+def test_the_wrong_unit_explanation_names_only_checks_that_cover_the_model(
+    tmp_path, capsys, model_id, named
+):
+    """A page must not send its reader to a check that cannot run on it.
+
+    Until 2026-09-13 every page with a per-child scale named ``kfold_loso.py``
+    and ``loso_compare.py`` as checks that "hold out whole studies or whole
+    children" -- on the typically-developing and joint pages, which neither
+    script accepts, and about studies, which neither holds out for any model.
+    """
+    fit = _loo_fit(
+        tmp_path, [_UNRELIABLE_ROW], parameters=("eta_u", "tau_subj_u"),
+        model={"model_id": model_id},
+    )
+    report_cells.render_loo_section(str(fit))
+    out = capsys.readouterr().out
+    scripts = {check.script for check in report_cells.HELD_OUT_CHECKS}
+    assert {script for script in scripts if script in out} == named
+    assert "whole studies" not in out
+    if named:
+        assert "None of the project's held-out checks" not in out
+    else:
+        assert "None of the project's held-out checks covers this model yet" in out
+
+
+def test_a_sensitivity_arm_is_not_credited_with_the_registered_models_check(
+    tmp_path, capsys
+):
+    """Every check fits the registered definition, never an arm of it."""
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    registered = MODEL_REGISTRY["vg20"].config_name
+    (tmp_path / "arm").mkdir()
+    arm = _loo_fit(
+        tmp_path / "arm", [_UNRELIABLE_ROW], parameters=("tau_subj_u",),
+        model={"model_id": "VG20", "config_name": f"{registered}-free-scales"},
+    )
+    report_cells.render_loo_section(str(arm))
+    assert "not this sensitivity arm" in capsys.readouterr().out
+
+    (tmp_path / "record").mkdir()
+    record = _loo_fit(
+        tmp_path / "record", [_UNRELIABLE_ROW], parameters=("tau_subj_u",),
+        model={"model_id": "VG20", "config_name": registered},
+    )
+    report_cells.render_loo_section(str(record))
+    out = capsys.readouterr().out
+    assert "scripts/kfold_loso.py" in out
+    assert "sensitivity arm" not in out
+
+
+def _load_script(name):
+    import importlib.util
+    import sys
+
+    path = Path(__file__).parents[1] / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"{name}_coverage_pin", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # Some scripts declare dataclasses, which resolve their module by name.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_held_out_check_coverage_matches_each_scripts_own_model_list():
+    """The page's claim about a check is pinned to what the script accepts.
+
+    Extending a script to a new model without updating ``HELD_OUT_CHECKS``
+    fails here, rather than leaving that model's page saying no check exists.
+    """
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    accepted = {
+        "scripts/kfold_loso.py": {
+            key.lower() for key in _load_script("kfold_loso").AVAILABLE
+        },
+        "scripts/loso_compare.py": {
+            spec.short.lower() for spec in _load_script("loso_compare").SPECS
+        },
+        "scripts/wave_forward_score.py": set(
+            _load_script("wave_forward_score").CROSS_LAG_MODELS
+        ),
+    }
+    declared = {check.script: set(check.models) for check in report_cells.HELD_OUT_CHECKS}
+    assert declared == accepted
+    for check in report_cells.HELD_OUT_CHECKS:
+        assert (Path(__file__).parents[1] / check.script).is_file()
+        assert check.models <= set(MODEL_REGISTRY)
 
 
 def test_non_hierarchical_fits_do_not_get_that_explanation(tmp_path, capsys):

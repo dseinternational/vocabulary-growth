@@ -897,6 +897,11 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # lag does not drop the row.
     ("vg25", "sign-lag-gap-12"): {"suffix": "sign-lag-gap-12", "scalar": {
         "sign_lag_max_gap_months": 12.0}},
+    # Isolate the seven DSE-to-Oxford lags in the 13 September 2026 frame.
+    ("vg25", "sign-lag-same-form"): {
+        "suffix": "sign-lag-same-form",
+        "scalar": {"sign_lag_same_form_only": True},
+    },
     #
     # uk_07 supplies 52 of the 191 supporting observations, 27% of the evidence,
     # and it is the study the headline scope decision brings in -- so a
@@ -908,29 +913,28 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # coefficient does not depend on which likelihood carries uk_07.
     #
     # It is NOT a leave-one-study-out check, and is not labelled as one.
-    # #297 check 5 asks for those; the joint definitions carry no
-    # `exclude_studies` field (it is a `BivariateModelDefinition` field), so no
-    # such arm can be registered until one exists.
+    # #297 check 5 asks for those, and since 2026-09-13 `JointModelDefinition`
+    # carries `exclude_studies`, so two are registered just below: `no-uk07` and
+    # `no-ie02`.
     #
-    # An earlier version of this comment put that cost at "restales every VG15
-    # and VG24 fit ... with the refit it costs". Both halves overstate it.
+    # The field landed without refitting anything, as the paragraphs below
+    # argued it could. An earlier version of this comment had put that cost at
+    # "restales every VG15 and VG24 fit ... with the refit it costs", and both
+    # halves overstated it.
     #
     # The definition restale is the avoidable kind. `BACKFILL_DEFAULTS` excuses
     # a field whose *absence* from an older manifest is equivalent to a stated
     # value, and `lag_same_form_only` (#242) is the same shape: a scope field
     # added to an already-fitted family, read through one `getattr` default that
     # reproduces the pre-field behaviour, with the claim checked off the call
-    # site in `tests/test_fit_identity.py` rather than asserted. An
-    # `exclude_studies` entry would claim that every joint fit made before the
-    # field existed filtered no studies, which is what a frame builder with no
-    # filter in it did. `FIELD_ROLES` already classifies the name, so the entry
-    # and its check are the new part. One thing it would have to carry rather
-    # than inherit: the registry is keyed by bare field name, so the entry also
-    # covers the bivariate class's own field. That claim holds there too --
-    # 2697dc8 added the filter in the same commit as the field, so no earlier
-    # bivariate fit could have dropped a study -- but the bivariate engine reads
-    # it as a plain attribute rather than through a default, so that half is
-    # checked by history and has to be stated rather than inherited.
+    # site in `tests/test_fit_identity.py` rather than asserted. The
+    # `exclude_studies` entry claims that every joint fit made before the field
+    # existed filtered no studies, which is what a frame builder with no filter
+    # in it did -- and it held when measured: the VG15 and VG24 fits of record
+    # validate with the entry and fail without it, and the shared joint frame
+    # hash did not move. The entry is keyed by bare field name and so also
+    # covers the bivariate class's own field, which is stated in
+    # `fit_identity.py` rather than inherited.
     #
     # Nor is the refit this field's cost. The executable-code signature covers
     # the whole package, so any code change makes an existing fit unverifiable
@@ -942,6 +946,29 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg25", "sign-lag-uk07-marginal"): {"suffix": "sign-lag-uk07-marginal", "scalar": {
         "include_uk07_cells": False}},
     #
+    # The leave-one-study-out pair (#297 check 5), for the two studies the lag's
+    # support rests on most. Five studies supply its 191 supporting observations
+    # -- uk_07 52, ie_02 43, uk_02 41, uk_05 30, uk_04 25 -- and these two carry
+    # half of it between them. On the 2026-09-13 frame `no-uk07` takes the
+    # support to 139 and `no-ie02` to 148, which is exactly their own
+    # contributions; a full sweep over the other three is one registry line each.
+    #
+    # They are not the same kind of check, and should not be read as one.
+    # `no-uk07` removes a **cross-tabulation** source: all 82 of uk_07's rows are
+    # four-cell rows, so the arm takes a quarter of the lag's evidence and one of
+    # the four sources that identify `psi` at once. Read `beta_sign_lag` from it;
+    # a move in `psi` or the trajectories is expected and is not a lag result.
+    # Beside `sign-lag-uk07-marginal`, which keeps uk_07's children and moves
+    # their rows to the marginal likelihood, it separates "the coefficient needs
+    # uk_07's children" from "it needs where their rows enter". `no-ie02` removes
+    # a **merged-view** source with no cross-tabulation, so the composition
+    # likelihood is untouched and a moved coefficient is a statement about ie_02's
+    # children alone.
+    ("vg25", "no-uk07"): {"suffix": "no-uk07", "scalar": {
+        "exclude_studies": ("uk_07",)}},
+    ("vg25", "no-ie02"): {"suffix": "no-ie02", "scalar": {
+        "exclude_studies": ("ie_02",)}},
+    #
     # The coefficient-prior pair, matching VG16's `beta-tight` / `beta-wide` and
     # for the same reason: a symmetric prior is not a calibrated one, and
     # "posterior exclusion of zero is not purely a data result merely because the
@@ -952,6 +979,129 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "beta_sign_lag_sigma": 0.25}},
     ("vg25", "beta-sign-wide"): {"suffix": "beta-sign-wide", "scalar": {
         "beta_sign_lag_sigma": 1.0}},
+
+    # -- #240: the typically developing variants its review asked for --
+    #
+    # Registered on the typically developing models whose numbers are reported
+    # -- VG11 and VG12, VG21 and VG23 -- and on VG26, VG21's registered
+    # successor, so the evidence exists for whichever of VG21 and VG26 holds the
+    # reference role after the refit. VG13 is superseded and gets none. None has
+    # been fitted. Each is a one-factor change against its base, including the
+    # sex covariate every one of these bases now carries.
+    #
+    # ITEM 5, THE 200-ROW STUDY THRESHOLD. `min_study_observations = 200` removes
+    # a third of the study units for under 2% of the rows (VG11 15 -> 10 studies
+    # for 315 rows; VG12, VG13 9 -> 6 for 136), which changes which population of
+    # studies "the average study" averages over. A hierarchical model can carry a
+    # small study through partial pooling, so the threshold is a choice to test,
+    # not a necessity. `no-study-threshold` keeps every study.
+    ("vg11", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg12", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg21", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg23", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    ("vg26", "no-study-threshold"): {"suffix": "no-study-threshold", "scalar": {
+        "min_study_observations": None}},
+    #
+    # ITEM 5, THE ADEQUACY OF INTERCEPT-ONLY STUDY EFFECTS. Studies cover very
+    # different age ranges -- VG12 rests on two studies above 18 months and one at
+    # 25 -- and a constant study offset cannot represent a study whose children
+    # rise faster or slower than the pool's, so an older-age shape can be partly a
+    # study, a language or a form. `study-age-slopes` gives each study a zero-sum
+    # age slope, `HalfNormal(0.5)` logits per year: over these one-to-two-year
+    # windows that lets a study's trajectory diverge by up to about a logit at the
+    # window's ends without asserting that it does. Nested at `tau_slope = 0`,
+    # whose posterior interval is the answer.
+    ("vg11", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg12", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg21", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg23", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    ("vg26", "study-age-slopes"): {"suffix": "study-age-slopes", "scalar": {
+        "study_age_slope_sigma": 0.5}},
+    #
+    # ITEM 1, THE FORM-SCALE COMPRESSION. Every count is scored against the
+    # 810-item reference, and as children work up a shorter form the logit-scale
+    # spread between them compresses; a child scale constant in age cannot follow
+    # that, so `kappa(age)` absorbs it. The review measured it in-sample: one
+    # age-varying child loading gains 237 log-likelihood units on VG11, 162 on
+    # VG12 and 111 on VG13's understood outcome, and rescoring on native forms
+    # removes 84-96% of the loading drift (notes/202608231537 §3). This is
+    # Proposal A1, as VG10 registers it: the child scale varies log-linearly in
+    # age between the dispersion anchors and dispersion is held flat, so the age
+    # variation is moved rather than duplicated. The young anchor keeps the
+    # record's prior, so `log_tau_*_ratio = 0` is a constant child scale -- but
+    # with dispersion still flat, so it is the base model only where the base's
+    # dispersion is already flat in age, which on these three it is not; read a
+    # ratio interval covering zero accordingly. On VG11 and
+    # VG12 the young-anchor scale is the variance partition's own, and
+    # `young_sigma` is recorded at the inert value the definitions carry.
+    #
+    # Not on VG23 or VG26: the resolver refuses an age-varying scale with a
+    # correlated child block, because scaling one deviate by tau(age) and
+    # correlating it with a constant one is not a structure either model defines.
+    # And NOT a candidate model of record, for the reason on VG10's entry: one
+    # deviate scaled by age makes children's ranks identical at every age. It is a
+    # measurement of where the age variation belongs, which is what item 1 asks.
+    ("vg11", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subject_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg11"].kappa.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
+    ("vg12", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subject_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg12"].kappa.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
+    ("vg21", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
+        "tau_subj_u_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg21"].kappa_u.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        ),
+        "tau_subj_q_sigma": AgeVaryingSubjectScale(
+            anchor_ages=MODEL_REGISTRY["vg21"].kappa_s.anchor_ages,
+            young_sigma=1.5,
+            log_ratio_sigma=0.5,
+        )}},
+    #
+    # ITEM 6, THE GP AMPLITUDE. VG21's own page says its `q` amplitude presses
+    # its prior (the 76th percentile, contraction 0.13) and that widening
+    # `eta_q_sigma` is the sensitivity worth running; none was registered, and
+    # none was ever registered against VG13 either. `eta-q-wide` doubles it on
+    # the 8-22-month models, where the wider window brings in curvature, and moves
+    # VG23 from VG13's 0.2 to VG21's 0.5 over its 8-18-month window, where the
+    # amplitude was uninformed (contraction 0.004) rather than content.
+    ("vg21", "eta-q-wide"): {"suffix": "eta-q-wide", "scalar": {"eta_q_sigma": 1.0}},
+    ("vg26", "eta-q-wide"): {"suffix": "eta-q-wide", "scalar": {"eta_q_sigma": 1.0}},
+    ("vg23", "eta-q-wide"): {"suffix": "eta-q-wide", "scalar": {"eta_q_sigma": 0.5}},
+    #
+    # ITEM 6, VG13's DEBT, CARRIED TO ITS SUCCESSORS. VG13's `single-admin` and
+    # `window-22-vague-anchors` were registered and never fitted, and VG21's page
+    # names `single-admin` as the variant most worth carrying across: repeated
+    # administrations are the mechanism behind both the child scales and the
+    # energy caveat. One administration per child, child effects removed. On
+    # VG26 the correlation goes with them, since it correlates the two child
+    # blocks the variant removes. VG26's `vague-anchors` is VG21's entry
+    # unchanged, so the two stay comparable.
+    ("vg21", "single-admin"): {"suffix": "single-admin", "scalar": {
+        "one_observation_per_subject": True,
+        "use_subject_re_u": False, "use_subject_re_q": False}},
+    ("vg26", "single-admin"): {"suffix": "single-admin", "scalar": {
+        "one_observation_per_subject": True,
+        "use_subject_re_u": False, "use_subject_re_q": False,
+        "subject_re_correlation_eta": None}},
+    ("vg26", "vague-anchors"): {"suffix": "vague-anchors", "scalar": {
+        "p_slope_hi_u_alpha": 1.2, "p_slope_hi_u_beta": 2.0,   # median 0.346
+        "p_slope_hi_q_alpha": 1.3, "p_slope_hi_q_beta": 1.3}},  # median 0.500
 }
 
 

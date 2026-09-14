@@ -10,6 +10,11 @@ validate the counts, build the model on a frame carrying a ``holdout`` column,
 sample it with the observation-level deterministics stored, and run the canonical
 diagnostics scan over every free variable element-wise.
 
+The **engine** is resolved from the definition rather than hard-coded. It was
+hard-coded to the bivariate random-effect builder until VG25 needed a forward
+score, and nothing said so: a joint definition passed in would have been built
+by the wrong engine and produced a graph that is not the model.
+
 It lives here rather than in either script because the second copy was made by
 hand and was wrong within an hour: ``fold_gate_fields`` reads the energy verdict
 from ``gate["checks"]["bfmi"]``, and the copy read ``gate["bfmi_ok"]``, which is
@@ -37,9 +42,8 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth.models.build_utils import require_valid_counts
-from vocab_growth.models.common import ModelFitContext, diagnostics_var_names
-from vocab_growth.models.common_bivariate import configure_bivariate_priors, sample
-from vocab_growth.models.common_bivariate_re import build_model_re
+from vocab_growth.models.catalogue import engine_for_definition
+from vocab_growth.models.common import ModelFitContext, diagnostics_var_names, sample
 
 
 def fold_gate_fields(gate: dict) -> dict:
@@ -84,7 +88,15 @@ def fit_holdout_fold(
     the reporting tier, and a cross-validation run wants a failed fold recorded
     and flagged rather than the run aborted -- but that is the *caller's* choice,
     and both callers make it explicitly.
+
+    The prior and build stages come from the definition's own engine
+    (:func:`~vocab_growth.models.catalogue.engine_for_definition`), so a fold of
+    a joint model is built by the joint builder. The rest is engine-independent:
+    ``BinomialModelData`` is assembled the same way by every engine's prepare
+    stage, ``sample`` is one shared function, and the diagnostics scan reads the
+    model it is given.
     """
+    engine = engine_for_definition(definition)
     has_u = analysis_df_with_holdout["understood"].notna().to_numpy()
     # The engines' own prepare stage validates before the cast, because NumPy
     # truncates toward zero silently and a fold path builds its
@@ -117,12 +129,16 @@ def fit_holdout_fold(
         reporting=reporting_cfg, sampling=sampling_cfg
     )
     context.set_model_data(bmd, analysis_df_with_holdout)
-    configure_bivariate_priors(context, definition)
-    build_model_re(context, definition)
-    # Both callers read `p_u_obs` / `p_s_obs` / `q_obs` / `kappa_*_obs` at every
-    # draw to score held-out rows, and the sampler otherwise no longer stores
-    # them (`fit_artifacts.sampled_variable_names`). Storing them costs the same
-    # memory as recomputing them afterwards and saves the second pass.
+    engine.resolve("priors")(context, definition)
+    engine.resolve("build")(context, definition)
+    # Both callers read the per-row probabilities and dispersions at every draw
+    # to score held-out rows, and the sampler otherwise no longer stores them
+    # (`fit_artifacts.sampled_variable_names`). Storing them costs the same
+    # memory as recomputing them afterwards and saves the second pass. Which
+    # names those are is the engine's business: the bivariate random-effect
+    # engine exposes `p_u_obs` / `p_s_obs` / `q_obs` / `kappa_*_obs`, and the
+    # joint engine adds `r_obs`, its third kappa and `pi_cells_obs` for the cell
+    # compositions.
     sample(context, store_observation_deterministics=True)
 
     # The scan's var_names are built exactly as the fit pipeline's diagnostics

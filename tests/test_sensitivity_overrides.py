@@ -255,21 +255,61 @@ def test_registry_counts_and_models():
     # the headline scope decision moved `psi`. The rest are checks:
     # `sign-lag-population` (VG16's baseline, which here doubles as the arm in
     # which no estimated per-child quantity reaches the cells),
-    # `sign-lag-uk07-marginal`, `sign-lag-gap-12` and the prior-scale pair.
-    assert len(VARIANTS) == 92
-    assert len(variants_for("vg25")) == 7
+    # `sign-lag-uk07-marginal`, `sign-lag-gap-12`, the same-form restriction,
+    # and the prior-scale pair.
+    #
+    # +2 on 2026-09-13 (#297 check 5): `no-uk07` and `no-ie02`, VG25's
+    # leave-one-study-out pair, once `JointModelDefinition` gained the
+    # `exclude_studies` field they need. The two studies the lag's support rests
+    # on most: 52 and 43 of its 191 supporting observations.
+    #
+    # +19 on 2026-09-13 (#240): the typically developing variants its review
+    # asked for, on VG11, VG12, VG21, VG23 and VG26. `no-study-threshold` and
+    # `study-age-slopes` on all five (item 5), `a1-tau-age-varying` on the three
+    # without a correlated child block (item 1), `eta-q-wide` on the three joint
+    # ones (item 6), and VG13's never-fitted `single-admin` and `vague-anchors`
+    # carried to VG21 and VG26 (item 6).
+    assert len(VARIANTS) == 114
+    assert len(variants_for("vg25")) == 10
     assert len(variants_for("vg14")) == 3
     assert len(variants_for("vg16")) == 8
-    assert len(variants_for("vg21")) == 1
-    assert len(variants_for("vg23")) == 1
+    assert len(variants_for("vg21")) == 6
+    assert len(variants_for("vg23")) == 4
+    assert len(variants_for("vg26")) == 5
     assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
     assert len(variants_for("vg10")) == 18
-    assert len(variants_for("vg11")) == 5
-    assert len(variants_for("vg12")) == 5
+    assert len(variants_for("vg11")) == 8
+    assert len(variants_for("vg12")) == 8
     assert len(variants_for("vg13")) == 4
     assert len(variants_for("vg15")) == 31
     assert len(variants_for("vg20")) == 6
+
+
+def test_vg25s_leave_one_study_out_arms_remove_one_study_and_nothing_else():
+    """The exclusion tuple is the whole of what each arm claims to test.
+
+    A second study in the tuple, or any other field moving with it, would turn a
+    leave-one-study-out check into something that cannot be read as one.
+    """
+    import dataclasses
+
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    base = MODEL_REGISTRY["vg25"]
+    for variant, study in (("no-uk07", "uk_07"), ("no-ie02", "ie_02")):
+        (arm,) = build_variant("vg25", variant)
+        assert arm.exclude_studies == (study,)
+        assert arm.config_name == f"{base.config_name}-{variant}"
+        changed = {
+            item.name
+            for item in dataclasses.fields(base)
+            if getattr(base, item.name) != getattr(arm, item.name)
+        }
+        # `config_name` and `banner` are the variant's identity, rewritten for
+        # every registered arm; `exclude_studies` is the only substantive field.
+        assert changed == {"exclude_studies", "config_name", "banner"}
+        assert arm.banner.endswith(f"[sensitivity: {variant}]")
 
 
 def test_td_models_account_for_repeated_children_by_default():

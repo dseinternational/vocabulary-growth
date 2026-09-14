@@ -52,7 +52,7 @@ from vocab_growth.report_cells import render_reading_routes
 render_reading_routes('record', joint=True, robustness=True, recovery=True)
 ```
 
-![The model graph. VG20 differs from VG10 by one node.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
+![The model graph. VG20 differs from VG10 by the correlation node and, since 2026-09-13, by the sex covariate ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)), which VG10 does not carry.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
 
 ## How to read this report
 
@@ -470,6 +470,18 @@ else:
     wanted = ["replicate", "truth_source", "converged", "n_targets", "n_within_ci89",
               "coverage_ci89", "coverage_ci50", "max_abs_z", "verdict"]
     display(recovery[[c for c in wanted if c in recovery.columns]])
+```
+
+## By sex {#sec-sex}
+
+This model carries sex as a covariate, so its predictions can be read for a girl or a boy of a given age as well as for a child of unrecorded sex ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)). Every other figure and table on this page is the sex-balanced reference child; the tables below put girls and boys either side of it.
+
+```{python}
+#| echo: false
+#| output: asis
+from vocab_growth.report_cells import render_sex_section
+
+render_sex_section()
 ```
 
 ## Predictive calibration {#sec-calibration}

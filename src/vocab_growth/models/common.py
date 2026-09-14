@@ -91,7 +91,8 @@ from vocab_growth.fit_artifacts import (
     write_json_atomic,
 )
 from vocab_growth.loo_reff import sampled_parameter_reff
-from vocab_growth.models import fit_identity
+from vocab_growth.models import fit_identity, sex_covariate
+from vocab_growth.models.build_reporting import BuildReport
 from vocab_growth.models.build_utils import (
     construct_age_grids,
     require_valid_counts,
@@ -460,6 +461,7 @@ class ModelFitContext(Generic[C, S]):
     reporting: reporting.ReportingConfiguration
     sampling: sampling.SamplingConfiguration
     sampling_config_name: str = "unknown"
+    report_build: bool = field(default=True, kw_only=True)
     execution_context: str = field(default_factory=env_info.get_execution_context)
     plots: dict[str, Figure] = field(default_factory=dict)
     dataframes: dict[str, pd.DataFrame] = field(default_factory=dict)
@@ -702,6 +704,45 @@ def render_model_graph(model: pm.Model, output_dir: str) -> None:
         )
 
 
+def report_model_build(context: AnyModelFitContext, details: BuildReport) -> None:
+    """Write settings, lag audits and the diagram after a successful build.
+
+    Set ``context.report_build=False`` for model exploration without reports.
+    The graph builders themselves return these details without writing files.
+    """
+    if not context.report_build:
+        return
+    from vocab_growth.models.cross_lag import (
+        report_cross_lag_support,
+        report_sign_cross_lag_support,
+    )
+
+    for message in details.messages:
+        print(message, flush=True)
+    for table in details.tables:
+        key_value_table(
+            table.title,
+            table.rows,
+            key_header=table.key_header,
+            value_header=table.value_header,
+        )
+    if details.understood_lag_audit is not None:
+        report_cross_lag_support(
+            context.reporting.output_dir,
+            details.understood_lag_audit,
+            n_obs=len(context.analysis_df),
+        )
+    if details.signed_lag_audit is not None:
+        report_sign_cross_lag_support(
+            context.reporting.output_dir,
+            details.signed_lag_audit,
+            n_obs=len(context.analysis_df),
+            in_cells=details.sign_lag_in_cells,
+        )
+    pymc_utils.report_model_summary(context.model)
+    render_model_graph(context.model, context.reporting.output_dir)
+
+
 def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
     """Everything the univariate plots and summaries read, out of one trace.
 
@@ -730,24 +771,28 @@ def extract_model_samples(trace: xr.DataTree) -> ModelSamples:
     )
 
 
-def build_model(
+def build_model(context: ModelFitContext, definition: UnivariateModelDefinition):
+    """Pipeline stage: construct the model, then write its build report."""
+    details = build_model_graph(context, definition)
+    report_model_build(context, details)
+
+
+def build_model_graph(
     context: ModelFitContext,
     definition: UnivariateModelDefinition,
-):
+) -> BuildReport:
     """
     Builds vocabulary growth model.
     """
+    build_report = BuildReport()
     n = len(context.model_data.y_obs)
 
     if context.model_data.X_obs.shape[0] != n:
         raise ValueError("X_obs and y_obs have inconsistent lengths.")
-    # Range validation happens ONCE, before the integer cast, in the prepare stage's
-    # `require_valid_counts` -- not here, where the cast has already truncated.
-
     X_obs_median = float(np.median(context.model_data.X_obs))
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(context.model_data.X_obs)
 
-    key_value_table(
+    build_report.add_table(
         "Build configuration",
         [
             ("Number of observations", n),
@@ -762,7 +807,7 @@ def build_model(
         ],
     )
 
-    key_value_table(
+    build_report.add_table(
         "Priors",
         [
             ("p_slope_low", context.model_config.p_slope_low_dist),
@@ -788,9 +833,7 @@ def build_model(
         gp_domain_months=definition.gp_domain_months,
     )
     X_plot = grids.X_plot
-    X_plot_z = grids.X_plot_z
     X_query = grids.X_query
-    X_query_z = grids.X_query_z
     X_all_z = grids.X_all_z
     n_plot = grids.n_plot
     n_query = grids.n_query
@@ -814,7 +857,7 @@ def build_model(
         X_obs_std=X_obs_std,
     )
 
-    key_value_table(
+    build_report.add_table(
         "Derived quantities",
         [
             ("HSGP basis size (m)", M),
@@ -827,9 +870,9 @@ def build_model(
         ],
     )
 
-    i_obs0, i_obs1 = 0, X_obs_z.shape[0]
-    i_plot0, i_plot1 = i_obs1, i_obs1 + X_plot_z.shape[0]
-    i_query0, i_query1 = i_plot1, i_plot1 + X_query_z.shape[0]
+    i_obs0, i_obs1 = grids.i_obs
+    i_plot0, i_plot1 = grids.i_plot
+    i_query0, i_query1 = grids.i_query
 
     coords = {
         "all_id": np.arange(n_all),
@@ -840,7 +883,6 @@ def build_model(
     }
 
     with pm.Model(coords=coords) as model:
-
         # ---- Data ----
 
         # Age data (standardised) for all points (obs + plot + query)
@@ -913,10 +955,8 @@ def build_model(
             context.model_config, X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
         )
 
-        # compute kappa for the observed data points, and use that in the likelihood
         kappa_obs = pm.Deterministic("kappa_obs", kappa_of_z(z_obs), dims="obs_id")
 
-        # compute kappa for the plot and query points (for reporting, not used in likelihood)
         _ = pm.Deterministic("kappa_plot", kappa_of_z(z_plot), dims="plot_id")
         _ = pm.Deterministic("kappa_query", kappa_of_z(z_query), dims="query_id")
 
@@ -925,7 +965,7 @@ def build_model(
             p_obs, math_constants.EPSILON, 1 - math_constants.EPSILON
         )
 
-        # compute alpha and beta parameters for the Beta-Binomial likelihood based on p_obs and kappa_obs
+        # Mean proportion p and concentration kappa give alpha=p*kappa, beta=(1-p)*kappa.
         alpha_obs = p_obs_clip * kappa_obs
         beta_obs = (1 - p_obs_clip) * kappa_obs
 
@@ -941,11 +981,8 @@ def build_model(
 
     variables = pymc_utils.get_variables_dict(model)
 
-    pymc_utils.report_model_summary(model)
-
-    render_model_graph(model, context.reporting.output_dir)
-
     context.set_model(model, variables)
+    return build_report
 
 
 def prior_predictive_checks(
@@ -1839,6 +1876,8 @@ def report(context: AnyModelFitContext):
 
 def plot_and_print_dist(context, dist, name):
     """Plot a prior distribution and print its summary."""
+    if not context.report_build:
+        return
     context.plots[name] = plot_dist.plot_distribution(
         dist, context.reporting.output_dir, name
     )
@@ -2113,6 +2152,12 @@ def configure_univariate_priors(
     partition_fields = _configure_variance_partition_priors(
         context, getattr(definition, "subject_variance_partition", None)
     )
+    # Sex covariate (#324), on `UnivariateREModelDefinition` only; the plain
+    # univariate engine's definitions do not carry the field.
+    sex_sigma = sex_covariate.sex_effect_sigma(definition)
+    if sex_sigma is not None:
+        beta_sex_dist = pz.Normal(mu=0.0, sigma=sex_sigma)
+        plot_and_print_dist(context, beta_sex_dist, "beta_sex_dist")
 
     config = ModelConfiguration(
         slope_anchors=definition.slope_anchors,
