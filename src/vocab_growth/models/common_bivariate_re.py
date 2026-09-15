@@ -177,6 +177,9 @@ def build_bivariate_re_analysis_frame(
         max_age_months=definition.max_age_months,
         include_implausible_production=definition.include_implausible_production,
         include_same_day_disagreements=definition.include_same_day_disagreements,
+        mask_dse_short_form_comprehension=(
+            definition.mask_dse_short_form_comprehension
+        ),
     )
     ceiling_rows_excluded = 0
     if definition.exclude_us01_spoken_ceiling:
@@ -221,7 +224,7 @@ def build_bivariate_re_analysis_frame(
         if sex_unknown_rows_excluded == 0:
             raise ValueError(
                 "sex_known_only removed no rows. Seven of the Down syndrome pool's "
-                "fifteen studies record no sex (711 of VG20's 1,708 rows, 41% of its "
+                "fifteen studies record no sex (711 of VG20's 1,707 rows, 41% of its "
                 "children), so a restriction that removes nothing is reading the "
                 "wrong column or the wrong database."
             )
@@ -382,6 +385,21 @@ def prepare_bivariate_re_data(
             "us_01 same-day production disagreements reinstated",
             vocab_data_utils.count_reinstated_same_day_disagreements(
                 definition.max_age_months
+            ),
+        ))
+    if definition.mask_dse_short_form_comprehension:
+        # A zero here means the arm has stopped biting and is fitting the model
+        # of record's data -- a failure that looks exactly like a pass.
+        counts.append((
+            "DSE short-form comprehension counts masked",
+            vocab_data_utils.count_masked_dse_short_form_comprehension(
+                definition.max_age_months,
+                include_implausible_production=(
+                    definition.include_implausible_production
+                ),
+                include_same_day_disagreements=(
+                    definition.include_same_day_disagreements
+                ),
             ),
         ))
     if sex_covariate.sex_known_only(definition):

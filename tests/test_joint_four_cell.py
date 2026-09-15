@@ -526,8 +526,9 @@ def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02(tmp_path):
     cjm.prepare_joint_data(context, native)
     df = context.analysis_df
 
-    # Only the four sources whose form IS the 810-item reference.
-    assert set(df["study"]) == {"ie_01", "ie_02", "uk_02", "uk_06"}
+    # Only the three sources whose form IS the 810-item reference. ie_02 left on
+    # 2026-09-15, when its Checklists 1 + 2 ceiling of 476 was recorded.
+    assert set(df["study"]) == {"ie_01", "uk_02", "uk_06"}
 
     # The cross-tab side door: uk_07 and es_01 are on 674- and 651-item forms, so
     # their cells must be absent even though both inclusion flags are still True.

@@ -141,6 +141,7 @@ FIELD_ROLES: dict[str, FieldRole] = {
     "exclude_us01_spoken_ceiling": FieldRole.DATA,
     "include_implausible_production": FieldRole.DATA,
     "include_same_day_disagreements": FieldRole.DATA,
+    "mask_dse_short_form_comprehension": FieldRole.DATA,
     "include_uk01_signed": FieldRole.DATA,
     "include_es01_cells": FieldRole.DATA,
     "include_nz01_cells": FieldRole.DATA,
@@ -264,6 +265,12 @@ BACKFILL_DEFAULTS: dict[str, Any] = {
     # `getattr(definition, "study_age_slope_sigma", None)`, which
     # `tests/test_fit_identity.py` reads off their source.
     "study_age_slope_sigma": None,
+    # The ie_02 short-form comprehension sensitivity (2026-09-15). The third
+    # entry's kind of claim, checked its way: a loader switch the same three
+    # engines forward, which no fit before the field passed, so the entry must
+    # equal `load_data`'s own default -- read off the signature in
+    # `tests/test_fit_identity.py`.
+    "mask_dse_short_form_comprehension": False,
 }
 
 

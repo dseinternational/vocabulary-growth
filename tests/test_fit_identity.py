@@ -228,6 +228,35 @@ def test_the_same_day_backfill_entry_is_the_loaders_own_default():
         assert difference.role is FieldRole.DATA
 
 
+def test_the_short_form_backfill_entry_is_the_loaders_own_default():
+    """The short-form sensitivity's entry, checked the third entry's way.
+
+    ``mask_dse_short_form_comprehension`` is a loader switch the three engines
+    forward, and no fit before 2026-09-15 passed it, so absence means the
+    loader's declared default. Read off both signatures, then checked on each
+    class that carries the field: a record without it validates, and the arm's
+    value does not.
+    """
+    import inspect
+
+    from vocab_growth.data_utils import load_combined_data, load_data
+    from vocab_growth.models.definitions import VG15
+
+    field = "mask_dse_short_form_comprehension"
+    for loader in (load_data, load_combined_data):
+        assert inspect.signature(loader).parameters[field].default is BACKFILL_DEFAULTS[field]
+    assert role_of(field) is FieldRole.DATA
+
+    for definition in (VG10, VG15, VG20):
+        recorded = normalise_for_json(definition)
+        recorded.pop(field)
+        assert definition_differences(recorded, definition) == []
+        altered = dataclasses.replace(definition, **{field: True})
+        (difference,) = definition_differences(recorded, altered)
+        assert difference.field == field
+        assert difference.role is FieldRole.DATA
+
+
 def test_the_same_form_backfill_entry_is_the_call_sites_own_default():
     """The fourth entry's claim, checked rather than asserted (#242).
 

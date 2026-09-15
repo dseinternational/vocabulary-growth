@@ -32,6 +32,9 @@ def joint_inventory_sizes(frame: pd.DataFrame, definition) -> np.ndarray:
         columns=["study", "subject_id", "age", "survey_vocab_max"],
         include_implausible_production=definition.include_implausible_production,
         include_same_day_disagreements=definition.include_same_day_disagreements,
+        mask_dse_short_form_comprehension=(
+            definition.mask_dse_short_form_comprehension
+        ),
     )
     keys = ["study", "subject_id", "age"]
     metadata["subject_id"] = metadata["subject_id"].astype(str)

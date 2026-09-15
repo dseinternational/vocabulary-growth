@@ -269,7 +269,13 @@ def test_registry_counts_and_models():
     # without a correlated child block (item 1), `eta-q-wide` on the three joint
     # ones (item 6), and VG13's never-fitted `single-admin` and `vague-anchors`
     # carried to VG21 and VG26 (item 6).
-    assert len(VARIANTS) == 114
+    #
+    # +3 on 2026-09-15: `ie02-comprehension-masked` on VG10, VG15 and VG20. The
+    # study owner kept ie_02's Checklists 1 + 2 administrations on the 810 scale
+    # as a short form rather than masking them as partial, as ie_01's baseline
+    # is; this arm masks their comprehension counts, where the omitted
+    # checklist's harder words matter, to show what that judgement carries.
+    assert len(VARIANTS) == 117
     assert len(variants_for("vg25")) == 10
     assert len(variants_for("vg14")) == 3
     assert len(variants_for("vg16")) == 8
@@ -278,12 +284,12 @@ def test_registry_counts_and_models():
     assert len(variants_for("vg26")) == 5
     assert len(variants_for("vg22")) == 2
     assert len(variants_for("vg19")) == 1
-    assert len(variants_for("vg10")) == 18
+    assert len(variants_for("vg10")) == 19
     assert len(variants_for("vg11")) == 8
     assert len(variants_for("vg12")) == 8
     assert len(variants_for("vg13")) == 4
-    assert len(variants_for("vg15")) == 31
-    assert len(variants_for("vg20")) == 6
+    assert len(variants_for("vg15")) == 32
+    assert len(variants_for("vg20")) == 7
 
 
 def test_vg25s_leave_one_study_out_arms_remove_one_study_and_nothing_else():
@@ -326,9 +332,9 @@ def test_td_models_account_for_repeated_children_by_default():
 
 def test_build_variant_all_and_named():
     all_vg15 = build_variant("vg15", "all")
-    assert len(all_vg15) == 31
+    assert len(all_vg15) == 32
     # All distinct config_names, all still VG15.
-    assert len({d.config_name for d in all_vg15}) == 31
+    assert len({d.config_name for d in all_vg15}) == 32
     assert all(d.model_id == "VG15" for d in all_vg15)
     # psi-neutral applies both hyperparameters.
     (psi,) = build_variant("vg15", "psi-neutral")
@@ -366,6 +372,28 @@ def test_implausible_production_reinstatement_is_registered_and_bites():
     # The baselines must not carry the flag, or the variant would be a no-op.
     assert VG10.include_implausible_production is False
     assert VG15.include_implausible_production is False
+
+
+def test_ie02_comprehension_masked_arm_sets_its_flag_and_nothing_else():
+    """The short-form arm (2026-09-15) changes one substantive field.
+
+    It exists to show what keeping ie_02 on the 810 scale carries, so anything
+    else moving with the flag would make it unreadable as that check.
+    """
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    for model in ("vg10", "vg15", "vg20"):
+        base = MODEL_REGISTRY[model]
+        assert base.mask_dse_short_form_comprehension is False
+        (arm,) = build_variant(model, "ie02-comprehension-masked")
+        changed = {
+            item.name
+            for item in dataclasses.fields(base)
+            if getattr(base, item.name) != getattr(arm, item.name)
+        }
+        assert changed == {"mask_dse_short_form_comprehension", "config_name", "banner"}
+        assert arm.mask_dse_short_form_comprehension is True
+        assert arm.config_name == f"{base.config_name}-ie02-comprehension-masked"
 
 
 def test_masked_production_reinstatement_lifts_both_rules():
