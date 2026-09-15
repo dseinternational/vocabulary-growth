@@ -722,8 +722,10 @@ comprehension counts for sensitivity analysis.
 #: :data:`CEILING_ONLY_CHILD_STUDIES` is.
 #:
 #: ``us_03``: four children (workbook ``id`` 1-5, one of which carries no CDI
-#: data) sit at 62-80 months against 17-35 for all 286 other administrations --
-#: a 27-month gap with nothing in it. They have no second visit, sit near the
+#: data) sit at 61-80 months against 17-35 for all 286 other administrations --
+#: a 26-month gap with nothing in it. (62-80 and 27 before 2026-09-15, when ages
+#: were rounded rather than floored to complete months; the bound below separates
+#: both.) They have no second visit, sit near the
 #: form's ceiling at 286-376 produced of 396, and their ages are the only ones in
 #: the file not recorded as a whole hundredth of a year. The source's own
 #: documentation concludes they came from a different file, plausibly the second
@@ -1753,8 +1755,8 @@ def vocab_combined_view_sql() -> str:
     -- us_03 (Fidler): Project CAPEabilities / Project EXPO, 396-word English
     -- Words and Gestures. `understood` is the inclusive comprehension total
     -- (the source's two mutually exclusive cells, already summed upstream), and
-    -- `age` is the whole-month rounding of `age_months`, matching every other
-    -- source. No sex was shared.
+    -- `age` is `age_months` floored to complete months, as every source's `age`
+    -- is since 2026-09-15. No sex was shared.
     --
     -- **The expressive cell is a produced union, not spoken.** The study
     -- authors state: "Understands and Says is inclusive of expressive language through spoken word and sign."
