@@ -42,7 +42,7 @@ For each word the parent reports whether the child understands it, says it, and/
 | `pair_id`            | Matched-pair key, 1–186; one DS and one TD child share each value                                |
 | `group`              | `DS` (Down syndrome) or `TD` (typically developing)                                             |
 | `sex`                | `M` or `F`                                                                                      |
-| `age`                | Chronological age in months, rounded (11–71 DS, 6–33 TD)                                        |
+| `age`                | Chronological age in complete months (11–71 DS, 5–33 TD)                                        |
 | `age_days`           | Chronological age in days, on the source's 30-day month                                         |
 | `mental_age`         | Brunet-Lézine Psychomotor Development Scale-Revised total developmental age, months (8.00–29.40) |
 | `mental_age_level`   | CDI-Down age band used for matching, 1–7 (1 = 8–10 months … 7 = 26–28 months)                    |
