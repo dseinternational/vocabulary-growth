@@ -48,7 +48,7 @@ MODEL_N_TRIALS = 810
 SIM_SEED = 20260726
 # The fit §3.3 and §4 read. VG10 until 2026-09-14, when the study owner re-based
 # both sections on VG20, the Down syndrome model of record (note §15 item 12).
-# VG20's point values are reported, not pinned, until the VM refit produces a fit
+# VG20's point values are reported, not pinned, until the next refit produces a fit
 # current on its definition and frame: the 2026-09-07 fit predates the sex
 # covariate and the uk_01 comprehension correction, so its digits will move.
 # What is checked meanwhile is the argument each section makes -- a refit could

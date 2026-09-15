@@ -101,8 +101,8 @@ def _umask_file_mode() -> int:
     Every manifest, state file and comparison manifest this repository has
     written was created by a plain ``open`` instead, so it carries
     ``0o666 & ~umask`` -- readable by the group and by others under the usual
-    022. Those artefacts are read back by other accounts on the shared fitting
-    VM and by the uploader, so narrowing them to 0600 is a behaviour change,
+    022. Those artefacts are read back by other accounts on a shared host and
+    by the uploader, so narrowing them to 0600 is a behaviour change,
     not a hardening: this restores the historical mode explicitly rather than
     inheriting whichever one the helper happens to use.
 
@@ -206,8 +206,8 @@ def write_fit_state(
 #: Seconds allowed for the one Git query behind :func:`git_metadata`.
 #:
 #: The shared helper defaults to 5.0; this repository has always allowed 10,
-#: and a status scan on the fitting VM's scratch volume is slower than on a
-#: laptop. Preserved rather than inherited so a timeout does not start
+#: and a status scan of a large checkout on a busy or slower volume is slower
+#: than on a laptop. Preserved rather than inherited so a timeout does not start
 #: recording ``dirty: None`` -- which fails ``require_clean_fit`` -- on a
 #: checkout that is in fact clean.
 GIT_QUERY_TIMEOUT_SECONDS = 10.0
@@ -934,10 +934,10 @@ def promotion_path(path: str) -> Path:
     """``path`` with its parents resolved and its own name left alone.
 
     :func:`dse_research_utils.storage.directories.promote_directory` refuses a
-    symlinked ancestor, and on the fitting VM ``<repo>/output`` *is* a symlink
-    to a scratch volume (see :mod:`vocab_growth.environment`), as is ``/tmp``
-    on macOS. Resolving the parent chain deliberately -- these are directories
-    this repository created itself -- is what the shared helper documents for
+    symlinked ancestor, and ``<repo>/output`` may be a symlink to another
+    volume (see :mod:`vocab_growth.environment`), as ``/tmp`` is on macOS.
+    Resolving the parent chain deliberately -- these are directories this
+    repository created itself -- is what the shared helper documents for
     that case. The final component is **not** resolved: a destination that is
     itself a symlink must still be rejected rather than silently followed.
 
@@ -1108,7 +1108,7 @@ def configured_nutpie_backend() -> str:
 
     This exists for one documented case (#289 task 4.1). nutpie assembles the
     gradient of the log-density by concatenating one array per free random
-    variable in a single call, and on the linux-aarch64 refit VM numba's
+    variable in a single call, and on linux-aarch64 numba's
     ``np_concatenate`` over VG15 ``fallback-dispersion``'s 44 free variables
     failed in LLVM register allocation ("ran out of registers during register
     allocation"); the model of record's 42 compiled, and the same 44 compile

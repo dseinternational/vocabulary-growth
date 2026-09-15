@@ -12,7 +12,7 @@ queued, and nothing downstream notices — `validate_models` checks only the
 models the run was given, so the run ends `SUCCESS` having fitted a subset.
 
 That is exactly what happened between VG21/VG22/VG23 being registered and the
-2026-08 VM run: all three were absent from both lists. The same class of defect
+2026-08 refit: all three were absent from both lists. The same class of defect
 had already been found twice — the three agent-instruction files listing the
 old model set, and the sensitivity suite's hand-maintained base-model map that
 failed as a bare `KeyError: 'vg16'` — so this is the third time a hand-copied
@@ -34,7 +34,7 @@ RUNBOOK = Path(__file__).resolve().parents[1] / "docs" / "runbooks" / "full-refi
 
 #: The heading whose bullets carry the split. Anchored so an unrelated
 #: `-Models` example elsewhere in the runbook cannot be picked up by mistake.
-SECTION = "### Parallel fitting on a large VM"
+SECTION = "### Parallel fitting"
 
 
 def _parallel_section() -> str:

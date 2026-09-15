@@ -32,10 +32,11 @@
       * Full logging: a run log, per-model stdout/stderr files, and a status TSV,
         with a "latest" pointer to the current run's log directory.
 
-    Blob credential note: DefaultAzureCredential picks a VM managed identity
-    (which lacks the blob data role) before the az CLI login, giving
-    AuthorizationPermissionMismatch. AZURE_TOKEN_CREDENTIALS=dev makes it use the
-    interactive az login instead. Requires a valid `az login`.
+    Blob credential note: DefaultAzureCredential can resolve an identity other
+    than your az CLI login (one that lacks the blob data role), giving
+    AuthorizationPermissionMismatch. The driver sets AZURE_TOKEN_CREDENTIALS=dev
+    unless it is already set, so the interactive az login is used. Requires a
+    valid `az login`.
 
 .EXAMPLE
     ./scripts/run_replication.ps1 -Config rep

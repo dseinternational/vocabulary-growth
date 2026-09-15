@@ -625,7 +625,7 @@ if not _rr:
     # of the fit-and-publish tail, so its matrices can be absent for two quite
     # different reasons: the run was never made, or it was made and its scored
     # output did not travel with the fits (2026-09-05 -- the 09-03 run's truths
-    # and matrices stayed on the fitting VM's scratch disk). Either way the book
+    # and matrices stayed on another volume). Either way the book
     # must say so rather than fail here, and must never quote a PREVIOUS cycle's
     # recovery against this cycle's fits. Citing a run made against these same
     # fits of record is not that, provided it is named as quoted rather than

@@ -672,8 +672,8 @@ def test_write_json_atomic_keeps_the_stored_format_and_creates_parents(tmp_path)
 def test_write_json_atomic_keeps_the_historical_file_mode(tmp_path):
     """The shared temporary file is 0600; these artefacts are not.
 
-    Fit output is read back by other accounts on the shared fitting VM and by
-    the uploader, and every file this repository has written carried
+    Fit output is read back by other accounts on a shared host and by the
+    uploader, and every file this repository has written carried
     ``0o666 & ~umask``. Restoring that explicitly is the migration's decision,
     so it is checked rather than left to whichever mode the helper uses.
     """
@@ -726,11 +726,12 @@ def test_promote_staged_fit_retains_no_backup_after_success(tmp_path):
 
 
 def test_promote_staged_fit_works_through_a_symlinked_output_root(tmp_path):
-    """``<repo>/output`` is a symlink to a scratch volume on the fitting VM.
+    """``<repo>/output`` may be a symlink to another volume.
 
     The shared helper refuses a symlinked ancestor, so this repository resolves
     the parent chain deliberately before calling it. Without that, promotion
-    would fail on every VM fit while passing in every local checkout.
+    would fail on every fit into a symlinked output root while passing in every
+    plain local checkout.
     """
     scratch = tmp_path / "scratch"
     (scratch / "models").mkdir(parents=True)

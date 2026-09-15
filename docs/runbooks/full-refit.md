@@ -1,12 +1,21 @@
 # Runbook: full reporting-config refit of all models
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section, the PowerShell driver and dirty-checkout material, and the run-archive section, by Claude Code/Opus 5).
+> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section, the PowerShell driver and dirty-checkout material, the run-archive section, and the workstation revision, by Claude Code/Opus 5).
 
-How to refit the whole `VG01`–`VG16` family at reporting quality (`rep`) on a
-large VM, render every report, and produce comparisons — with the pitfalls that a
-naive run hits. Distilled from the 2026-07-12 run
-(`notes/202607121753-reporting-config-fit-run-and-findings.md`).
+How to refit the registered models at reporting quality (`rep`) on the project's
+fitting workstation, render every report, and produce comparisons — with the
+pitfalls that a naive run hits. Distilled from the 2026-07-12 run
+(`notes/202607121753-reporting-config-fit-run-and-findings.md`) and the runs
+since.
+
+**Where fits run.** On the study owner's decision of 2026-09-15, model fits run
+on the fitting workstation: native Windows, 32 cores, about 137 GB of RAM,
+PowerShell 7 (`pwsh`), with the output root at `D:\output\vocabulary-growth`
+through a machine-wide `DSE_VOCAB_GROWTH_OUTPUT_DIR` and run archives under
+`F:\projects\vocabulary-growth\<commit>\output`. The 2026-09-07/08 full refit
+ran there. Earlier runs, and some of the incidents recorded below, were on Linux
+hosts; the commands that only apply on Linux are marked as such.
 
 ## TL;DR
 
@@ -16,37 +25,36 @@ naive run hits. Distilled from the 2026-07-12 run
   (the default) covers the models whose catalogue role requires a
   publication-valid fit; `-Scope all` restores the full registry. See
   [Which models a run covers](#which-models-a-run-covers).
-- On a many-core VM, fit the **DS models concurrently** and the **TD models one at
-  a time** (see [Parallel fitting](#parallel-fitting-on-a-large-vm)) — pass
+- On the 32-core workstation, fit the **DS models concurrently** and the **TD
+  models one at a time** (see [Parallel fitting](#parallel-fitting)) — pass
   `-MaxParallel` rather than driving a pool by hand.
 - Three things bite every time: the **DuckDB lock** on concurrent fits, the
   **R-hat gate rounding** (need `dse-research-utils >= v0.6.0`), and the
   **understood-GP R-hat ridge** in the DS joint/hierarchical models.
-- **Before the TD phase**, do the two-minute setup in
+- **Before the TD phase**, read
   [Surviving an OOM](#surviving-an-oom-precautions-before-launching-the-memory-heavy-models):
-  add swap (the box has none), and launch each phase in its own systemd scope. In
-  the 2026-08-13 run a single overrun killed a seven-hour fit plus three unrelated
-  ones, because they shared a scope and there was nothing to swap to.
+  keep each memory-heavy TD fit the only significant tenant, and make sure the
+  driver outlives whatever launched it. In the 2026-08-13 run a single overrun
+  killed a seven-hour fit plus three unrelated ones, because they shared a
+  process scope and there was nothing to swap to.
 
 ## 0. Prerequisites
 
-- Locked project environment installed and active: `uv sync --locked`, then `source .venv/bin/activate`. The commands below assume it is on `PATH`; without activation, prefix each with `uv run`. Activation matters for **rendering**, not only fitting — read [Rendering without an activated environment](#rendering-without-an-activated-environment) first if you drive the scripts by absolute interpreter path instead.
+- Locked project environment installed and active: `uv sync --locked`, then `.venv\Scripts\Activate.ps1` in `pwsh` (or `source .venv/bin/activate` on Linux and macOS). On Windows also set `PYTHONUTF8=1`. The commands below assume it is on `PATH`; without activation, prefix each with `uv run`. Activation matters for **rendering**, not only fitting — read [Rendering without an activated environment](#rendering-without-an-activated-environment) first if you drive the scripts by absolute interpreter path instead.
 - **`dse-research-utils >= v0.6.0`** — earlier versions' convergence gate rounds
   R-hat/ESS to 2 significant figures and can certify a fit that truly fails the
   ≤1.01 gate (research#65). A banner reading exactly `max R-hat = 1.0` is the
   tell-tale of the old rounding.
 - Data current: `python scripts/prepare_data.py` (confirm the 810 reference scale;
   see `docs/report/methods-data.qmd`).
-- **On the DSE data-science fleet, most of this list is already on the image.**
-  The stack's cloud-init installs `uv`, the newest stable CPython, Node.js active
-  LTS, Quarto with a per-user TinyTeX (so `quarto render --to pdf` works without
-  a separate LaTeX install), Pandoc, plotting fonts, `gh`, Graphviz, and — on the
-  ARM64 CPU bootstrap — pinned **PowerShell 7.6 LTS exposed as `pwsh`**, which is
-  what `run_replication.ps1` needs. Do not install competing versions by hand.
-  The one thing worth checking rather than assuming is the report book's fonts:
-  the image provides "plotting fonts", which is not the same claim as Source
-  Sans 3 and Monaspace Neon, and those are needed only for the `pdf` format.
-- **Graphviz `dot` on `PATH`.** Present on the DSE VM images since 2026-08-25. It
+- **Workstation tools outside `uv sync`.** `uv` itself (which provisions Python
+  from `.python-version`), **PowerShell 7 as `pwsh`** — what
+  `run_replication.ps1` needs; Windows PowerShell 5.1 is not enough — Quarto,
+  Node.js (`npm install` for spellcheck and formatting), `gh`, and `az` for
+  uploads. `quarto check` reports what Quarto resolved. The report book's `pdf`
+  format additionally needs TinyTeX (`quarto install tinytex`) and the Source
+  Sans 3 and Monaspace Neon fonts; nothing else does.
+- **Graphviz `dot` on `PATH`.** It
   is the one tool a _fit_ tolerates missing — `render_model_graph` catches the
   failure and prints a warning rather than aborting — but every model report
   references `gp_model_graph.svg`, so without it all twenty render with a broken
@@ -67,10 +75,10 @@ naive run hits. Distilled from the 2026-07-12 run
   `compact` is byte-identical for reporting but blocks recovery scoring,
   `regenerate_plots.py` and `loso_compare.py` on those fits without a refit, so
   it is a saving worth making only when the space is genuinely tight. Either way,
-  redirect output off the checkout with `--output-dir <scratch>` or
-  `DSE_VOCAB_GROWTH_OUTPUT_DIR` — and point it at the **attached** disk rather
-  than at a local temp disk, for the reasons in
-  [Fit straight to the attached disk](#fit-straight-to-the-attached-disk-not-to-local-scratch). The report figure cache
+  redirect output off the checkout with `--output-dir <output-root>` or
+  `DSE_VOCAB_GROWTH_OUTPUT_DIR` — on the workstation the variable is already set
+  machine-wide to `D:\output\vocabulary-growth` — and keep the whole root on one
+  volume, for the reason in [The output root](#the-output-root). The report figure cache
   (`docs/report/figures/`) always stays in the checkout. Sizing and the
   exceptions are in [Surviving a full disk](#surviving-a-full-disk) — read it
   before the first fit, not after. The old advice here ("~20 GB × n_models") was
@@ -78,34 +86,7 @@ naive run hits. Distilled from the 2026-07-12 run
   models.
 - **Run `prepare_data.py` in any fresh checkout, worktree or clone before `pytest`.** `data/vocabulary.duckdb` and `data/vocab_data_merged.csv` are generated and gitignored, and the tests that read the real pool (the `dse_native_only` ones in `test_data_utils.py` and `test_joint_four_cell.py`) fail without them — with an error about the pool, not about a missing file, so it reads as a code regression. Hit while validating a merge in a `git worktree` on 2026-08-14.
 - `rep` config = 6 chains / 6000 tune / 6000 draws / `target_accept` 0.95. The number of parallel cores is chosen for the host and does not affect fit compatibility.
-- Publishing needs `DSERESEARCH_BLOB_CONTAINER_URL` **and** the right identity — see below.
-
-### Uploading from an Azure VM: `DefaultAzureCredential` picks the wrong identity
-
-`upload.py` authenticates with `DefaultAzureCredential`, which prefers the **VM's managed identity** over your `az login` session. On a DSE research VM that managed identity has no write role on the container, so the upload fails on the first model with:
-
-```
-ErrorCode:AuthorizationPermissionMismatch
-This request is not authorized to perform this operation using this permission.
-```
-
-`az account show` reporting the right user is **not** evidence the upload will authenticate as that user. Check what the credential actually resolves to:
-
-```bash
-python -c "
-from azure.identity import DefaultAzureCredential; import base64, json
-t = DefaultAzureCredential().get_token('https://storage.azure.com/.default')
-p = t.token.split('.')[1]; p += '='*(-len(p)%4)
-c = json.loads(base64.urlsafe_b64decode(p)); print(c.get('upn') or c.get('appid'))"
-```
-
-An `appid` GUID rather than a `upn` means it chose the managed identity. Force the developer credential for the upload (azure-identity ≥ 1.23):
-
-```bash
-export AZURE_TOKEN_CREDENTIALS=dev
-```
-
-The failure is at least safe: validation runs for all models first, and the first blob write fails before anything is written, so a rejected upload cannot leave the published set half-replaced.
+- Publishing needs `DSERESEARCH_BLOB_CONTAINER_URL` and a valid `az login`. `run_replication.ps1` sets `AZURE_TOKEN_CREDENTIALS=dev` (unless it is already set) so `DefaultAzureCredential` authenticates as that login; set it yourself when calling `upload.py` directly. A rejected upload is safe: validation runs for all models first, and the first blob write fails before anything is written, so the published set cannot be left half-replaced.
 
 ## 1. Fit
 
@@ -170,20 +151,20 @@ Four further VG15 variants exist for the 2026-08-12 changes and cost a fit each.
 
 ### `vg15 fallback-dispersion` and nutpie's numba backend
 
-In the 2026-09-01 cycle this arm was the one fit that could not run: on the linux-aarch64 refit VM the sampler compile died with numba/LLVM's "ran out of registers during register allocation" in `np_concatenate` over 44 arrays, while VG14's same arm compiled ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.1). The 44 arrays are nutpie's gradient assembly: it concatenates one gradient array per free random variable in a single call (still so in nutpie 0.16.11, the latest release, and on `main`), and the arm adds two free scalars (`log_kappa_s_fallback`, `log_kappa_sign_fallback`) to VG15's 42. On win-amd64 with the locked numba and llvmlite the arm compiles and draws under both backends, so the failure is the AArch64 backend's, not the graph's.
+In the 2026-09-01 cycle this arm was the one fit that could not run: on a linux-aarch64 host the sampler compile died with numba/LLVM's "ran out of registers during register allocation" in `np_concatenate` over 44 arrays, while VG14's same arm compiled ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.1). The 44 arrays are nutpie's gradient assembly: it concatenates one gradient array per free random variable in a single call (still so in nutpie 0.16.11, the latest release, and on `main`), and the arm adds two free scalars (`log_kappa_s_fallback`, `log_kappa_sign_fallback`) to VG15's 42. On win-amd64 with the locked numba and llvmlite the arm compiles and draws under both backends, so the failure is the AArch64 backend's, not the graph's — and on the fitting workstation the arm completed a full `rep` fit under numba on 2026-09-06 without the escape hatch.
 
-The escape hatch is the other compiler:
+The escape hatch, needed only on a linux-aarch64 host, is the other compiler:
 
 ```bash
 python scripts/fit_sensitivity.py vg15 fallback-dispersion --config rep --nutpie-backend jax
 ```
 
-`--nutpie-backend` (or `DSE_VOCAB_GROWTH_NUTPIE_BACKEND`) changes which compiler evaluates the log-density and nothing else: the posterior is the same, the fit validates as any other, and the choice is recorded in the manifest's `runtime.nutpie_backend` so the run record can say which arm was made with which. Try the default first on the VM; reach for `jax` only when numba fails, and note it in the run record.
+`--nutpie-backend` (or `DSE_VOCAB_GROWTH_NUTPIE_BACKEND`) changes which compiler evaluates the log-density and nothing else: the posterior is the same, the fit validates as any other, and the choice is recorded in the manifest's `runtime.nutpie_backend` so the run record can say which arm was made with which. Use the default; reach for `jax` only when numba fails, and note it in the run record.
 
 ### Default (sequential, resumable)
 
 ```powershell
-./scripts/run_replication.ps1 -Config rep -OutputDir <scratch>
+./scripts/run_replication.ps1 -Config rep -OutputDir <output-root>
 ```
 
 Idempotent: a model is skipped only when its state is `complete` and its model definition, requested sampling tier and minimum statistical effort, raw-data fingerprint, and Git commit match the current run (`--fresh` forces a refit). Host-dependent `cores` is ignored; a documented high-tuning refit is compatible when its draws, tuning iterations, chains and target acceptance meet or exceed the tier. A trace file by itself is never treated as complete. The script refuses to start from a dirty checkout, fits models, validates the set once, retries per-model rendering without resampling, runs comparisons, atomically synchronises figures, renders the report and comparison book, and optionally uploads. Development/test runs use provisional figure sync and do not upload. Any required-step failure stops all downstream comparison and publication phases and leaves a `FAILED` marker in the run log directory; an entirely successful run leaves `SUCCESS`. Estimate approximately 15–25 hours sequentially.
@@ -228,10 +209,10 @@ comparing a development step against a model of record has to be regenerated
 from consistent fits. The parallel recipe below passes explicit `-Models` lists
 covering the whole registry and is unaffected by the default.
 
-### Parallel fitting on a large VM
+### Parallel fitting
 
 The DS datasets are small; the full-data TD models (`vg11`, `vg12`) are
-memory-heavy. So:
+memory-heavy. So, on the 32-core workstation:
 
 > [!WARNING]
 > **The two lists below must together cover every key in `MODEL_REGISTRY`.** They are an explicit `-Models` split, so the driver's registry-derived default does not apply and a model missing from both is never queued, never validated, and never reported as absent — the run ends `SUCCESS` having fitted a subset. `tests/test_runbook_model_lists.py` checks the split against the registry; if it fails, correct the lists here rather than the test.
@@ -240,7 +221,7 @@ memory-heavy. So:
   a pool, `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores):
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24,vg25
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24,vg25
   ```
 
   `-MaxParallel` above 1 pins `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
@@ -261,7 +242,7 @@ memory-heavy. So:
   `-MaxParallel 1` pass; a single pool with a mixed model list cannot express this.
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <scratch> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23,vg26
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23,vg26
   ```
 
   `vg21`, `vg23` and `vg26` join this pass because each is VG13-class and none is
@@ -312,72 +293,38 @@ memory-heavy. So:
   > box; §4 of that note is explicit that relaxing the rule "is a measurement to
   > make deliberately, not an inference to act on".
 
-### Fit straight to the attached disk, not to local scratch
+### The output root
 
-Asked when the 2026-08 run was provisioned with a 2 TB premium disk: fit to the
-VM's local SSD and copy the results across afterwards, or write straight to the
-attached disk? **Straight to the attached disk.** Three reasons, in order of
-weight.
+On the workstation the output root is `D:\output\vocabulary-growth`, set
+machine-wide as `DSE_VOCAB_GROWTH_OUTPUT_DIR`, so `fit_model.py`,
+`fit_sensitivity.py`, `fit_recovery.py`, `sync_report_figures.py` and the driver
+all resolve it without `--output-dir`. The disk preflight prints the resolved
+root at the start of every fit; read it rather than assuming the variable is set
+in the shell you launched from.
 
 **The output root has to be one filesystem.** `create_staging_root` puts
 `.staging` _inside_ the output root, and `promote_staged_fit` publishes with
 `os.replace` — a rename. Across filesystems that raises `EXDEV` rather than
-degrading to a copy, so the pipeline cannot stage on local and publish to the
-attached disk; the rollback path (`.previous`, also under the output root) has
-the same constraint. Fitting to scratch therefore means the _whole_ output root
-lives on scratch, and the copy to the attached disk is a separate manual step
-outside the atomicity machinery — a crash during a 320 GB copy leaves a partial
-fit that nothing guards against. That trades a real protection for a saving the
-next point shows is negligible.
+degrading to a copy, so the pipeline cannot stage on one volume and publish to
+another; the rollback path (`.previous`, also under the output root) has the
+same constraint. Do not point `models/` at one drive and `.staging` at another
+through a link, and do not fit to one volume intending to copy the results to
+another afterwards: that copy is a separate manual step outside the atomicity
+machinery, and a crash part-way through a multi-hundred-gigabyte copy leaves a
+partial fit that nothing guards against.
 
-**The saving is noise against the sampling.** Posterior sampling is about 92% of
-a `rep` fit's wall clock (measured on VG12: 3h09m of 3h26m), and the trace is a
-single burst at the end. Writing a 16 GB `trace.nc` costs on the order of a
-minute to premium storage and a fraction of that to local NVMe — call it tens of
-seconds per fit, perhaps 10–25 minutes across the whole run. Copying ~320 GB back
-to the attached disk afterwards costs about the same again, so the round trip
-saves nothing and may lose.
+**Writing the trace is not where the time goes.** Posterior sampling is about 92%
+of a `rep` fit's wall clock (measured on VG12: 3h09m of 3h26m), and the trace is
+a single burst at the end, so the choice of volume is about capacity and
+durability, not speed.
 
-**Local disk is disposable by design, and the fits are long.** On the DSE data
-science fleet the two mounts are explicit about this
-([`dsegroup/infrastructure`](https://github.com/dsegroup/infrastructure), the
-data-science stack's cloud-init):
+### Archiving a run's output root
 
-| mount      | what it is                                 | survives teardown |
-| ---------- | ------------------------------------------ | ----------------- |
-| `/data`    | the persistent disk, mounted when attached | yes               |
-| `/scratch` | every local NVMe the tier carries, striped | **no — wiped**    |
-
-`$TMPDIR` points at `/scratch`. **Fit to `/data`.** The XL tier is
-`Standard_E32pds_v6` — the `d` variants do carry local NVMe, so the choice
-genuinely exists here and is not small: [infrastructure
-#1804](https://github.com/dsegroup/infrastructure/pull/1804) stripes all of it
-into one RAID0 volume, taking XL's `/scratch` from 440 GiB to about 1.3 TiB.
-That PR was still open on 2026-08-25, so a box provisioned before it merges comes
-up with the single-device 440 GiB `/scratch`; either way the size objection is
-not what decides this.
-
-What decides it is that `/scratch` is _meant_ to be lost. It is wiped on
-teardown, and a deallocate/start wipes local NVMe outright even though #1804
-gives the mount an `fstab` entry that survives a plain reboot. The stripe also
-multiplies the device-failure surface across three disks — which that PR
-correctly accepts, on the grounds that the failure "costs a workspace that
-teardown was going to wipe anyway". A fifteen-hour VG12 fit is not that. This
-project has already lost `rep` fits to a full disk (2026-08-14) and to a
-concurrent OOM; host maintenance is not a third failure mode worth buying for
-tens of seconds per fit.
-
-**Where `/scratch` does help**: PyTensor's compile cache
-(`PYTENSOR_FLAGS=base_compiledir=/scratch/...`). Many small latency-sensitive
-files, disposable by design — exactly what the mount is for, and with the stripe
-it has both the room and the throughput. Keep expectations low: CI measured the
-compile cache as noise and dropped it in `8b7de41`.
-
-### Bringing the output root home before teardown
-
-The fitting VM is ephemeral and the output root is **not** just `models/`. Four
-sibling directories carry state that nothing else can reproduce cheaply, and
-`models/` is the only one anybody thinks to copy:
+A refit replaces each model directory in place, so archive the outgoing output
+root before a run that will overwrite it, and archive the new one when the run
+is done. The output root is **not** just `models/`. Four sibling directories
+carry state that nothing else can reproduce cheaply, and `models/` is the only
+one anybody thinks to copy:
 
 | directory           | what is lost with it                                                        |
 | ------------------- | --------------------------------------------------------------------------- |
@@ -445,7 +392,7 @@ $env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
 
 The figures that follow are retained as the record of what the pre-2026-08-23 fits cost, not as guidance: at `full` that exceeded 400 GB; at `compact` it was roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB was comfortable at `compact`; 1 TB at `full`.**
 
-The 2026-08 refit is provisioned on a **2 TB attached disk**, so `full` is the tier to use and this section's `compact` advice does not apply to it. Measured against the current traces, its 28 planned fits come to about 320 GB at `full` — lower than the 400 GB above because that figure includes recovery replicates, which this run does not schedule. Either way it is comfortably inside the volume, and a fresh VM starts with an empty `output/`, so the peak equals the total rather than transiently holding both an old and a new trace.
+**On the workstation, check the free space on the output root's volume before a run**, not its size: `D:\output\vocabulary-growth` accumulates every cycle's fits, variants and recovery replicates until they are archived and cleared, and a refit transiently holds a second copy of each trace it replaces (in `.staging`, then `.previous`) before promotion completes. If the volume will not hold the round at `full`, archive and clear the previous cycle first (see [Archiving a run's output root](#archiving-a-runs-output-root)) rather than reaching for `compact`, which costs the recovery, plot-regeneration and LOSO paths.
 
 **Recovering a volume that is already full**: `scripts/compact_traces.py` applies the tier to traces already written. It reuses the same policy code the fit pipeline uses, verifies each rewrite carries every free parameter the original had before atomically replacing it, and records the tier in `fit_manifest.json`. It processes smallest-first, which matters — each rewrite needs room for its output beside the original, so the small traces buy the space the large ones need.
 
@@ -456,26 +403,34 @@ python scripts/compact_traces.py --exclude VG10-... --exclude VG12-... --exclude
 
 Note that it will not touch a model whose fit is mid-promotion, and that it distinguishes a live staging directory from one an `ENOSPC` crash left behind by checking the PID embedded in the name — the aftermath of a full disk is full of stale staging directories, and a _live_ fit of some other model is usually exactly what the space is being reclaimed for.
 
-**On provisioning.** Check `lsblk` before assuming the box is at its limit: this VM had two unmounted 440 GB NVMe devices alongside the one in use. Longer term the output root belongs on a **managed disk rather than the Azure temp disk** — not for speed (the local NVMe measured 472 MB/s sequential, and this workload writes each trace once, so storage is nowhere near the critical path) but because the temp disk is wiped on deallocation, which forces the VM to stay running through the idle stretches of a multi-day run, and because a managed disk can be grown online. Do not put `trace.nc` on blobfuse or Azure Files: netCDF here is HDF5, whose metadata I/O and POSIX assumptions make network filesystems a corruption risk. Blob remains the archive tier via `upload.py`.
+**Keep the output root on a local disk.** Do not put `trace.nc` on a network filesystem — a mapped network drive, blobfuse or Azure Files: netCDF here is HDF5, whose metadata I/O and POSIX assumptions make network filesystems a corruption risk. Storage speed is not the constraint (each trace is written once, at the end of a fit); integrity is. Blob storage remains the archive and publication tier, via `upload.py`.
 
 ### Surviving an OOM: precautions before launching the memory-heavy models
 
 On 2026-08-13 a kernel OOM killed `vg13` after **7h05m of successful sampling** and
 took three unrelated sensitivity fits and both drivers with it, costing about ten
-hours. Every item below is a direct consequence. Do all of them before starting the
-TD phase; they take about two minutes.
+hours. Every item below is a direct consequence. That run was on a Linux host with
+far larger per-fit peaks than today's: since 2026-08-23 the observation-sized
+deterministics are not sampled, and on the workstation the heaviest TD fits peak at
+27–28 GB (see [Parallel fitting](#parallel-fitting)) against about 137 GB of RAM.
+The margin is wide, which is exactly when these precautions get skipped; the
+principles still hold, and the Linux-specific mechanics are marked.
 
-**1. Provision swap first. The box ships with none.** 251 GB of RAM and `Total swap = 0kB`
-means a transient overshoot is an instant kill rather than a slowdown.
+**1. Make sure there is something to swap to.** On the 2026-08-13 host, 251 GB of
+RAM and `Total swap = 0kB` meant a transient overshoot was an instant kill rather
+than a slowdown. On the workstation the Windows page file plays that role — the
+2026-09-08 measurement recorded 83 GB of it — so leave it enabled and
+system-managed. On a Linux host with no swap, add a per-run swap file on a local
+disk with room, not a small root volume:
 
 ```bash
-sudo fallocate -l 128G /scratch/swapfile && sudo chmod 600 /scratch/swapfile
-sudo mkswap /scratch/swapfile && sudo swapon /scratch/swapfile
+sudo fallocate -l 128G <local-disk>/swapfile && sudo chmod 600 <local-disk>/swapfile
+sudo mkswap <local-disk>/swapfile && sudo swapon <local-disk>/swapfile
 sudo sysctl -w vm.swappiness=10   # backstop only, not a working store
 ```
 
-Put it on the scratch NVMe, not the 29 GB root. Deliberately **not** added to
-`/etc/fstab`: it is a per-run measure, and a run does not survive a reboot anyway.
+Deliberately **not** added to `/etc/fstab`: it is a per-run measure, and a run does
+not survive a reboot anyway.
 
 **2. Peaks are not predictable from plateaus, and plateaus are not stable between runs.** This is the trap, and the 2026-08-14 rerun sharpened it.
 
@@ -489,11 +444,14 @@ So do **not** budget from a remembered plateau, and do not trust a "peak ≈ 2×
 
 The practical rule is therefore about _headroom and reversibility_, not about a target number: keep a memory-heavy TD fit as the only significant tenant, keep everything else in a scope you can stop in one command, and watch it. Anything co-scheduled with `vg11`/`vg12`/`vg13` should be work you are willing to throw away.
 
-**3. Give every job its own systemd scope.** This is what turned one lost fit into
+**3. Give every job its own process scope, so one failure cannot take the others with it.** This is what turned one lost fit into
 four. All jobs were launched inside one tmux window, so they shared a single systemd
 scope, and when the kernel killed one process systemd applied `OOMPolicy` to the
-whole scope: `tmux-spawn-….scope: Failed with result 'oom-kill'`. Launch each phase
-in its own scope, and cap any batch that is not the one you are protecting:
+whole scope: `tmux-spawn-….scope: Failed with result 'oom-kill'`. On the workstation,
+run the protected TD pass as the only job in its own terminal (or as a scheduled
+task), separate from any other batch, so that stopping or losing one cannot stop the
+other. On a Linux host, launch each phase in its own systemd scope, and cap any batch
+that is not the one you are protecting:
 
 ```bash
 # the protected long job
@@ -534,13 +492,16 @@ kernel log. Sample per-process RSS filtered to the fit scripts, so the next mode
 budget comes from measurement — `scripts/memwatch.ps1 <logfile>`, which reads
 `/proc/meminfo` and `ps` on Linux and the equivalent CIM classes on Windows.
 
-**5. Read the kernel log before re-running anything.** `sudo dmesg -T | grep -i oom`
-and `journalctl --since …` distinguish the three cases that look identical from the
+**5. Establish why a fit died before re-running anything.** On a Linux host,
+`sudo dmesg -T | grep -i oom` and `journalctl --since …` distinguish the three cases that look identical from the
 status file — a real convergence failure, a process killed by the OOM killer, and a
 process killed as collateral scope teardown. The three sensitivity fits killed here
 had left the **known non-fatal** PyTensor rewrite traceback
 ([pymc-devs/pytensor#2349](https://github.com/pymc-devs/pytensor/issues/2349)) at the
-end of their logs, which reads convincingly as the cause and is not.
+end of their logs, which reads convincingly as the cause and is not. Windows has no
+OOM killer: a process that exhausts the commit limit fails its own allocation, so the
+evidence is in that fit's own log under `replication-logs/` rather than in a system
+log.
 
 > [!WARNING]
 > **The driver records nothing when the scope is torn down.** A `run_job` wrapper
@@ -549,7 +510,7 @@ end of their logs, which reads convincingly as the cause and is not.
 > terminal line — indistinguishable from "still running" until you check `pgrep`.
 > Never infer success or liveness from the status file alone.
 
-**6. Detach the driver from whatever supervises it.** A fit inherits the lifetime of its parent process group, so anything that stops the supervisor kills the fit — no kernel log entry, no OOM, nothing to diagnose after the fact. On 2026-08-16 `vg11 anchor-broad` was killed three hours in, past its prior predictive checks and well into sampling, because the agent-harness background task running the driver was stopped; `sudo dmesg -T` for that day was empty, which is what distinguishes this case from item 5. Launch the driver so it outlives its launcher:
+**6. Detach the driver from whatever supervises it.** A fit inherits the lifetime of its parent process group, so anything that stops the supervisor kills the fit — no kernel log entry, no OOM, nothing to diagnose after the fact. On 2026-08-16 `vg11 anchor-broad` was killed three hours in, past its prior predictive checks and well into sampling, because the agent-harness background task running the driver was stopped; `sudo dmesg -T` for that day was empty, which is what distinguishes this case from item 5. Launch the driver so it outlives its launcher. On the workstation that means its own `pwsh` terminal or a scheduled task, not a background task of an agent session or another tool; `run_replication.ps1` is resumable, so a driver that is stopped anyway loses only the fit in flight. On a Linux host:
 
 ```bash
 setsid nohup bash scripts/driver.sh >/dev/null 2>&1 < /dev/null &
@@ -694,7 +655,7 @@ correct natively; if any fit predates the fix, recompute from the trace:
 ```bash
 python - <<'PY'
 import arviz as az, xarray as xr
-dt = xr.open_datatree("<scratch>/models/<MODEL>/trace.nc")
+dt = xr.open_datatree("<output-root>/models/<MODEL>/trace.nc")
 r = az.rhat(dt["posterior"].to_dataset())
 print("max r_hat:", max(float(v.max()) for v in r.data_vars.values()))
 PY
@@ -776,13 +737,13 @@ Two report blocks read artefacts the fit itself does not write, and print a "run
 ```bash
 python scripts/prior_vs_posterior.py --table --model vg20 --model vg15   # writes prior_posterior_contraction.csv into each fit dir
 python scripts/emit_factor_correlation.py <output>/models/VG22-*/         # writes subject_factor_corr.csv for the factor model
-python scripts/regenerate_plots.py all --config rep --output-dir <scratch>   # re-runs the plot stage: since 2026-09-03 the joint RE pages reference study_fans.png and posterior_summary_monthly_weighted_{u,s}.csv, and the words/ratio figures carry the observed children, none of which a fit made before that date wrote
+python scripts/regenerate_plots.py all --config rep --output-dir <output-root>   # re-runs the plot stage: since 2026-09-03 the joint RE pages reference study_fans.png and posterior_summary_monthly_weighted_{u,s}.csv, and the words/ratio figures carry the observed children, none of which a fit made before that date wrote
 ```
 
 A template change is applied to an existing fit with `--render-only`, which re-stages `docs/models/<model>/index.qmd` **and** every `docs/models/_*.qmd` include beside it (the bivariate random-effects family transcludes one). Since 2026-09-02 that is a fresh render of every page, not only the changed ones, because the shared blocks changed.
 
 ```bash
-python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # validates fits, then feeds docs/report/figures/
+python scripts/sync_report_figures.py --config rep --output-dir <output-root>   # validates fits, then feeds docs/report/figures/
 # comparisons (consume fitted traces/summaries):
 for c in loo_compare loso_compare compare_models \
          compare_ds_td_trajectories compare_ds_td_expressive \
@@ -795,7 +756,7 @@ for m in vg10 vg14 vg15; do python scripts/compare_sensitivity.py $m --variant a
 # compare_ds_td_re and need not run. `subject_effect_correlation.py` writes
 # ds_subject_effect_correlation.csv, which the comparison book reads; it was missing
 # from this list until the 2026-09-03 tail failed on it.
-python scripts/sync_report_figures.py --config rep --output-dir <scratch>   # re-sync comparison artefacts
+python scripts/sync_report_figures.py --config rep --output-dir <output-root>   # re-sync comparison artefacts
 # Everything the report needs that is NOT model output -- the descriptives, the
 # introduction's illustrations (bayes_update*.png), the methods chapter's prior
 # figures and a placeholder for any figure still absent -- comes from one script
@@ -811,7 +772,7 @@ quarto render docs/report
 # The comparison book stages, renders, publishes and VERIFIES itself in one step.
 # Do not stage and render it by hand; `publish_comparison.py` exists because both
 # halves of doing so failed on 2026-09-03 (see below).
-python scripts/publish_comparison.py --output-dir <scratch>
+python scripts/publish_comparison.py --output-dir <output-root>
 ```
 
 Two more things the 2026-09-03 tail found. The **first** `sync_report_figures` in the block above fails with "comparison_manifest.json is missing" whenever `output/comparisons/` already holds artefacts from a script run outside the tail (a smoke run of `compare_ds_td_re.py`, say) and no comparison script that writes a manifest has run since: the sync validates the comparison directory as a whole, and a directory with artefacts and no manifest is invalid. Either clear the directory first or accept that the first sync validates the fits and fails on the comparisons, and rely on the second. And `check_fit.py all --purpose publish` has no caveat allowance: a fit that cleared R-hat and ESS but carries a divergence or a BFMI below 0.3 is reported `[invalid]` there even though `sync_report_figures --allow-caveats` and `upload.py --allow-caveats` accept it. On 2026-09-03 six fits were in that state (VG11, VG12, VG13, VG21, VG22, VG23); the decision to publish them under `--allow-caveats` is recorded in `output/run-record.md`, and the checklist item below is therefore not met by them.
@@ -828,7 +789,7 @@ So when a new model is added mid-run, either delete its provisional output befor
 
 Note also that `sync_report_figures._sync_dir` is flat: it copies files, not sub-directories. `comparisons/recovery/` and `comparisons/sensitivity/` are synced by an explicit loop, and anything else nested under `comparisons/` will silently not reach the report unless it is added there too.
 
-Per-model reports render after successful fits during `fit_model.py --render`; if a render fails, retry it without resampling using `python scripts/fit_model.py <model> --config rep --render-only --output-dir <scratch>`.
+Per-model reports render after successful fits during `fit_model.py --render`; if a render fails, retry it without resampling using `python scripts/fit_model.py <model> --config rep --render-only --output-dir <output-root>`.
 
 > [!NOTE]
 > **2026-09-08: the `code-links` gotcha no longer reproduces.** This section used
@@ -865,7 +826,7 @@ rm -rf docs/report/_freeze/<chapter>                # one per dependent
 
 ## 4. Completion checklist
 
-- [ ] `python scripts/check_fit.py all --config rep --purpose publish --output-dir <scratch>` passes; this includes complete lifecycle state, compatible provenance, reporting configuration, clean fit source state, rendered output, and `trace.nc` for every registered model.
+- [ ] `python scripts/check_fit.py all --config rep --purpose publish --output-dir <output-root>` passes; this includes complete lifecycle state, compatible provenance, reporting configuration, clean fit source state, rendered output, and `trace.nc` for every registered model.
 - [ ] All registered models PASS the gate on **unrounded** diagnostics (R-hat ≤ 1.01, ESS ≥ 400, 0 divergences, BFMI ≥ 0.3).
 - [ ] Understood-GP-ridge models refit with heavier tuning if needed.
 - [ ] `sync_report_figures.py` run; all model reports + `docs/report` +
