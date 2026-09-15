@@ -2306,26 +2306,35 @@ class JointCrossLagModelDefinition(JointCorrelatedSubjectREModelDefinition):
     while VG25 inherits VG24's ``rho_sign_q`` and its population baseline does
     not."""
 
-    sign_lag_in_cells: bool = True
+    sign_lag_in_cells: bool = False
     """Whether the lag term also enters the cross-tab composition likelihoods.
 
-    ``True`` (the registered choice) adds ``beta_sign_lag * x`` to the ``q``
-    used by the four-cell and produced-cell Dirichlet-Multinomials as well as to
-    the spoken marginal. ``False`` confines it to the marginal, which is where
-    VG15's *subject shifts* are confined.
+    ``False`` (the registered choice since 2026-09-15) confines ``beta_sign_lag *
+    x`` to the spoken marginal, which is where VG15's *subject shifts* are
+    confined. ``True`` also adds it to the ``q`` used by the four-cell and
+    produced-cell Dirichlet-Multinomials.
 
-    The two are not the same decision, and the difference is why this is a field
-    rather than an inherited rule. The subject shifts are kept out of the cells
-    because a **free per-child quantity** is co-identified with ``psi`` on those
-    thin rows and pulled it from 1.78 to about 2.8 when it was let in (see the
-    engine comment at the cell DMs). ``beta_sign_lag`` is one scalar against a
-    fixed covariate: it adds a single dimension to the parameter space and has no
-    per-child freedom to chase a composition with. Set against that, it does
-    compete with ``psi`` for the same rows, and the registered arm is the one
-    that lets it -- measured on the 2026-09-11 frame, 191 observations from 129
-    children against 111 from 80, with uk_07 entering at all only under ``True``.
-    The ``sign-lag-marginal-only`` sensitivity is what shows whether ``psi``
-    moved."""
+    **Why the default changed.** VG25 was registered with ``True``, on the
+    argument that ``beta_sign_lag`` is one scalar against a fixed covariate and so
+    has no per-child freedom to chase a composition with -- the reason VG15's
+    subject shifts are kept out of the cells does not apply to it. That premise
+    holds only for the ``population`` baseline. Under ``within`` the predictor
+    subtracts the child's own *estimated* signing intercept, so the term carries a
+    per-child quantity into exactly the likelihoods the subject shifts are kept
+    out of. VG25's first ``rep`` fit (2026-09-15) was bimodal: four chains at
+    ``beta_sign_lag`` +0.69 and two at -0.50, max R-hat 1.61, with
+    ``tau_subj_sign`` and ``rho_u_sign`` reshaped away from VG24's in both
+    modes. Twelve-chain probes on the real frame found two modes for ``within`` in
+    the cells and one for each of the other three combinations, with ``within`` on
+    the marginal leaving VG24's child block and ``psi`` where VG24 has them.
+    ``notes/202609151930-vg25-lag-out-of-the-cells.md`` records the fits and the
+    probes; ``scripts/experiments/vg25_sign_lag_modes.py`` reproduces the probes.
+
+    The cost is support: on the 2026-09-15 frame the lag rests on 110 supporting
+    observations from 79 children rather than 190 from 128, and uk_07, whose rows
+    carry no spoken marginal, contributes none. The ``sign-lag-in-cells``
+    sensitivity puts the term back in the cells under the ``population``
+    baseline, the combination in which the covariate really is fixed."""
 
     beta_sign_lag_mu: float = 0.0
     """Normal mean for ``beta_sign_lag`` (0 imposes no direction)."""
@@ -4158,9 +4167,11 @@ VG25 = _as_definition_subclass(
     # for and nothing left of its own to measure. Registered sensitivity:
     # `sign-lag-population`.
     sign_lag_baseline="within",
-    # The lag reaches the cross-tab compositions as well as the spoken marginal.
-    # Rationale and the measured cost of the alternative are on the field.
-    sign_lag_in_cells=True,
+    # The lag enters the spoken marginal only (2026-09-15). In the cross-tab
+    # compositions the within-child baseline carried each child's estimated
+    # signing intercept into likelihoods child effects are kept out of, and the
+    # first rep fit was bimodal. The measurements are on the field.
+    sign_lag_in_cells=False,
     beta_sign_lag_mu=0.0,
     beta_sign_lag_sigma=0.5,
     # The correction uses the source wave's denominator at both boundaries.

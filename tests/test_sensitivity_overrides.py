@@ -250,7 +250,7 @@ def test_registry_counts_and_models():
     # VG16's 1.5%, and under the clip those rows carry 76.1% of the *source
     # signed-share logit's* sum of squares -- the predictor's observed input,
     # not the fitted predictor, which also subtracts a latent baseline
-    # (residualised on the source wave's age and study it is 66.1%). `sign-lag-marginal-only` confines the term to the spoken
+    # (residualised on the source wave's age and study it is 66.1%). `sign-lag-marginal-only` confined the term to the spoken
     # marginal, where VG15's child shifts are confined, and is what says whether
     # the headline scope decision moved `psi`. The rest are checks:
     # `sign-lag-population` (VG16's baseline, which here doubles as the arm in
@@ -258,10 +258,16 @@ def test_registry_counts_and_models():
     # `sign-lag-uk07-marginal`, `sign-lag-gap-12`, the same-form restriction,
     # and the prior-scale pair.
     #
+    # +0 on 2026-09-15: the headline moved to the spoken marginal after its first
+    # rep fit was bimodal, so `sign-lag-marginal-only` became the headline and
+    # was replaced by `sign-lag-in-cells` (population baseline, in the cells).
+    #
     # +2 on 2026-09-13 (#297 check 5): `no-uk07` and `no-ie02`, VG25's
     # leave-one-study-out pair, once `JointModelDefinition` gained the
     # `exclude_studies` field they need. The two studies the lag's support rests
-    # on most: 52 and 43 of its 191 supporting observations.
+    # on most: 52 and 43 of its 191 supporting observations. On 2026-09-15, with
+    # the lag out of the cells and uk_07 no longer in its support, `no-uk07` was
+    # replaced by `no-uk05` (+0): ie_02 42 and uk_05 30 of 110.
     #
     # +19 on 2026-09-13 (#240): the typically developing variants its review
     # asked for, on VG11, VG12, VG21, VG23 and VG26. `no-study-threshold` and
@@ -292,6 +298,25 @@ def test_registry_counts_and_models():
     assert len(variants_for("vg20")) == 7
 
 
+def test_vg25s_in_cells_arm_is_the_population_baseline_in_the_cells():
+    """The within-child baseline in the cells was bimodal; the arm must not be it."""
+    import dataclasses
+
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    base = MODEL_REGISTRY["vg25"]
+    assert (base.sign_lag_baseline, base.sign_lag_in_cells) == ("within", False)
+    (arm,) = build_variant("vg25", "sign-lag-in-cells")
+    assert (arm.sign_lag_baseline, arm.sign_lag_in_cells) == ("population", True)
+    changed = {
+        item.name
+        for item in dataclasses.fields(base)
+        if getattr(base, item.name) != getattr(arm, item.name)
+    }
+    assert changed == {"sign_lag_baseline", "sign_lag_in_cells", "config_name", "banner"}
+    assert "sign-lag-marginal-only" not in {name for _model, name in VARIANTS if _model == "vg25"}
+
+
 def test_vg25s_leave_one_study_out_arms_remove_one_study_and_nothing_else():
     """The exclusion tuple is the whole of what each arm claims to test.
 
@@ -303,7 +328,7 @@ def test_vg25s_leave_one_study_out_arms_remove_one_study_and_nothing_else():
     from vocab_growth.models.definitions import MODEL_REGISTRY
 
     base = MODEL_REGISTRY["vg25"]
-    for variant, study in (("no-uk07", "uk_07"), ("no-ie02", "ie_02")):
+    for variant, study in (("no-ie02", "ie_02"), ("no-uk05", "uk_05")):
         (arm,) = build_variant("vg25", variant)
         assert arm.exclude_studies == (study,)
         assert arm.config_name == f"{base.config_name}-{variant}"

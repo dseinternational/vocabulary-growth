@@ -84,13 +84,13 @@ def test_only_a_sign_cross_lag_definition_declares_the_sign_predictor():
     assert predictor is not None
     assert predictor.name == "sign_cross_lag"
     assert predictor.source_column == "signed"
-    # The registered arm puts the term in the compositions as well, so all three
-    # consumers are declared. Confining it to the marginal drops the two
-    # composition nodes and nothing else.
-    assert predictor.consumer_rv_names == ("y_s_obs", "cells_obs", "nz_prod_cells_obs")
-    marginal_only = dataclasses.replace(VG25, sign_lag_in_cells=False)
-    assert (
-        outcome_dependent_predictor(marginal_only).consumer_rv_names == ("y_s_obs",)
+    # Since 2026-09-15 the registered model confines the term to the spoken
+    # marginal, so it declares that consumer alone. Letting it into the
+    # compositions adds the two composition nodes and nothing else.
+    assert predictor.consumer_rv_names == ("y_s_obs",)
+    in_cells = dataclasses.replace(VG25, sign_lag_in_cells=True)
+    assert outcome_dependent_predictor(in_cells).consumer_rv_names == (
+        "y_s_obs", "cells_obs", "nz_prod_cells_obs"
     )
 
 
@@ -161,10 +161,10 @@ def test_vg25_selects_the_wave_loop_from_its_own_declaration():
     predictor = outcome_dependent_predictor(VG25)
     assert not single_pass_is_sound(JOINT_SPEC, VG25, predictor)
     # And it is the SAME-STAGE source that decides it, not the extra consumers:
-    # confining the lag to the spoken marginal leaves it unsound too.
-    marginal_only = dataclasses.replace(VG25, sign_lag_in_cells=False)
+    # letting the lag into the compositions leaves it unsound too.
+    in_cells = dataclasses.replace(VG25, sign_lag_in_cells=True)
     assert not single_pass_is_sound(
-        JOINT_SPEC, marginal_only, outcome_dependent_predictor(marginal_only)
+        JOINT_SPEC, in_cells, outcome_dependent_predictor(in_cells)
     )
 
 

@@ -333,11 +333,13 @@ def test_the_spoken_difference_is_the_headline_on_every_engine():
 
 
 def test_the_joint_engine_scores_the_composition_the_lag_enters():
-    """VG25's scope decision put the lag in the cross-tab cells.
+    """The composition is scored on the joint engine whichever scope a fit has.
 
-    Scoring the marginals alone would score the coefficient on the evidence that
-    decision chose against -- the registration's own measurement was 191
-    supporting observations with the cells against 111 without them.
+    VG25 was registered with the lag in the cross-tab cells, where the
+    composition is a second place the coefficient can pay for itself. Since
+    2026-09-15 the headline keeps it out, which makes the composition a control
+    on the headline and a lag outcome again on `sign-lag-in-cells`; both readings
+    need the column.
     """
     assert "elpd_cells" in wf.OUTCOME_COLUMNS["joint"]
     assert "elpd_cells" not in wf.OUTCOME_COLUMNS["bivariate_re"]
