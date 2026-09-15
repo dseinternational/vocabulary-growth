@@ -41,7 +41,7 @@ Reading the result (#229, 2026-09-06):
 "Shows the ridge" is read on corr(tau_subj_u, kappa at the young anchor) and on
 the energy BFMI beside it, against the baseline arm fitted on the same machine
 at the same tier -- not against the model of record's numbers, which were
-measured on the VM.
+measured on a different machine.
 
 What this is not
 ----------------

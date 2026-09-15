@@ -41,8 +41,8 @@ REPORT_FIGS_DIR = os.path.join(REPORT_DIR, "figures")
 # Output-root resolution
 # ---------------------------------------------------------------------------
 # Model traces and reporting-quality artefacts are large (a reporting-config
-# ``trace.nc`` exceeds 10 GB), so on ephemeral VMs we want to redirect them to a
-# scratch disk without disturbing local development or report rendering. The
+# ``trace.nc`` exceeds 10 GB), so a reporting-quality run redirects them to
+# another volume without disturbing local development or report rendering. The
 # output root is therefore resolved at *call time*, with this precedence:
 #
 #   1. an explicit override set via ``set_output_root`` (e.g. from ``--output-dir``)
@@ -51,13 +51,13 @@ REPORT_FIGS_DIR = os.path.join(REPORT_DIR, "figures")
 #
 # ``docs/report/figures/`` is deliberately *not* under this root: it is the
 # report-facing cache populated by ``scripts/sync_report_figures.py`` and always
-# lives in the checkout so the Quarto report renders without the scratch disk.
+# lives in the checkout so the Quarto report renders without the output volume.
 OUTPUT_DIR_ENV_VAR = "DSE_VOCAB_GROWTH_OUTPUT_DIR"
 
 _DEFAULT_OUTPUT_DIR = os.path.join(ROOT_DIR, "output")
 
-# ``resolve_symlinks=False``: ``<repo>/output`` is a symlink to a scratch volume
-# on the fitting VM, and the link path is the stable name recorded in fit
+# ``resolve_symlinks=False``: ``<repo>/output`` may be a symlink to another
+# volume, and the link path is the stable name recorded in fit
 # manifests and blob-upload prefixes, so a configured root is normalised with
 # ``expanduser`` + ``abspath`` rather than resolved through the link.
 _OUTPUT_ROOT = OutputRoot(
