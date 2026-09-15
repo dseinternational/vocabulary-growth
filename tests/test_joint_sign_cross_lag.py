@@ -158,7 +158,10 @@ def test_the_registered_choices_are_the_ones_the_record_states():
     76% of the source logit's sum of squares comes from a floor constant.
     """
     assert VG25.sign_lag_baseline == "within"
-    assert VG25.sign_lag_in_cells is True
+    # False since 2026-09-15: in the cells the within-child predictor carried each
+    # child's estimated signing intercept into the compositions, and the first
+    # rep fit was bimodal (notes/202609151930-vg25-lag-out-of-the-cells.md).
+    assert VG25.sign_lag_in_cells is False
     assert VG25.sign_lag_zero_handling == LAG_ZERO_CONTINUITY
     assert VG25.sign_lag_max_gap_months is None
 
@@ -696,7 +699,12 @@ def _build(definition, *, output_dir, monkeypatch):
 
 @pytest.fixture(scope="module")
 def graphs(tmp_path_factory):
-    """VG25, VG24 and three VG25 variants, built once each."""
+    """VG25, VG24 and three VG25 variants, built once each.
+
+    ``in-cells`` differs from VG25 in the cells flag alone, so it isolates what the
+    flag reaches; ``population-in-cells`` is the registered ``sign-lag-in-cells``
+    arm, and beside ``in-cells`` it differs in the baseline alone.
+    """
     from _pytest.monkeypatch import MonkeyPatch
 
     patcher = MonkeyPatch()
@@ -704,17 +712,17 @@ def graphs(tmp_path_factory):
     variants = {
         "vg25": VG25,
         "vg24": VG24,
-        "marginal-only": _as_definition_subclass(
+        "in-cells": _as_definition_subclass(
             VG25, JointCrossLagModelDefinition, model_id="VG99",
-            sign_lag_in_cells=False,
+            sign_lag_in_cells=True,
         ),
         "lag-off": _as_definition_subclass(
             VG25, JointCrossLagModelDefinition, model_id="VG99",
             use_sign_cross_lag=False,
         ),
-        "population": _as_definition_subclass(
+        "population-in-cells": _as_definition_subclass(
             VG25, JointCrossLagModelDefinition, model_id="VG99",
-            sign_lag_baseline="population",
+            sign_lag_baseline="population", sign_lag_in_cells=True,
         ),
     }
     try:
@@ -758,9 +766,12 @@ def test_same_form_restriction_removes_cross_form_likelihood_dependence(
     # restriction removes every lag, while retaining all likelihood rows.
     frame["survey_vocab_max"] = np.tile([810, 416], len(frame) // 2)
     monkeypatch.setattr(f"{__name__}._mixed_joint_frame", lambda _: frame.copy())
-    unrestricted = _build(VG25, output_dir=str(tmp_path), monkeypatch=monkeypatch)
+    # With the cells flag on, so the restriction is seen to act on both factors
+    # the lag can reach; VG25 itself keeps the lag in the spoken marginal.
+    in_cells = replace(VG25, sign_lag_in_cells=True)
+    unrestricted = _build(in_cells, output_dir=str(tmp_path), monkeypatch=monkeypatch)
     restricted = _build(
-        replace(VG25, sign_lag_same_form_only=True),
+        replace(in_cells, sign_lag_same_form_only=True),
         output_dir=str(tmp_path),
         monkeypatch=monkeypatch,
     )
@@ -802,16 +813,16 @@ def test_the_coefficient_reaches_every_likelihood_it_claims_to(graphs):
 
     A headline parameter the density does not depend on produces a fit that
     looks exactly like one that found nothing. So this measures the dependence
-    rather than asserting it: the spoken marginal and the cross-tab composition
-    must move when `beta_sign_lag` moves, and the two likelihoods the lag has no
-    business touching must not.
+    rather than asserting it: the spoken marginal must move when `beta_sign_lag`
+    moves, and the likelihoods the lag has no business touching must not. Since
+    2026-09-15 the cross-tab composition is one of those.
     """
     model = graphs["vg25"]
-    for factor in ("y_s_obs", "cells_obs"):
-        moved = _moved_by_beta(model, factor)
-        assert moved is not None and moved > 1e-8, (
-            f"{factor} does not depend on beta_sign_lag"
-        )
+    moved = _moved_by_beta(model, "y_s_obs")
+    assert moved is not None and moved > 1e-8, "y_s_obs does not depend on beta_sign_lag"
+    assert _moved_by_beta(model, "cells_obs") == pytest.approx(0.0, abs=1e-10), (
+        "cells_obs moved with beta_sign_lag; the lag reached the compositions"
+    )
     # The lag shifts `q`, so comprehension and the signed ratio are untouched.
     for factor in ("y_u_obs", "y_sign_obs"):
         moved = _moved_by_beta(model, factor)
@@ -822,17 +833,19 @@ def test_the_coefficient_reaches_every_likelihood_it_claims_to(graphs):
 
 @pytest.mark.slow
 @pytest.mark.xdist_group("joint-sign-cross-lag")
-def test_confining_the_lag_to_the_marginal_takes_it_out_of_the_compositions(graphs):
-    """`sign_lag_in_cells=False` must change exactly which factors it reaches.
+def test_the_cells_flag_changes_exactly_which_factors_the_lag_reaches(graphs):
+    """`sign_lag_in_cells` must add the compositions and nothing else.
 
     This is the registered scope decision expressed as a graph property. If the
-    flag did nothing, the `sign-lag-marginal-only` sensitivity would be a second
-    fit of the headline under another name -- and it is the arm that says
-    whether the headline moved `psi`.
+    flag did nothing, `sign-lag-in-cells` would be a second fit of the headline
+    under another name -- and it is the arm in which the lag reaches the rows
+    that identify `psi`.
     """
-    model = graphs["marginal-only"]
-    assert _moved_by_beta(model, "y_s_obs") > 1e-8
-    assert _moved_by_beta(model, "cells_obs") == pytest.approx(0.0, abs=1e-10)
+    headline, in_cells = graphs["vg25"], graphs["in-cells"]
+    assert _moved_by_beta(headline, "cells_obs") == pytest.approx(0.0, abs=1e-10)
+    assert _moved_by_beta(in_cells, "cells_obs") > 1e-8
+    for model in (headline, in_cells):
+        assert _moved_by_beta(model, "y_s_obs") > 1e-8
 
 
 @pytest.mark.slow
@@ -841,11 +854,13 @@ def test_the_baseline_changes_the_predictor_rather_than_the_factors_it_reaches(g
     """`population` and `within` must reach the same factors and differ inside.
 
     The population baseline removes the child's signing shift from the
-    predictor, which is what makes it the arm in which no estimated per-child
-    quantity reaches the cell likelihoods. If the two produced identical
-    densities the sensitivity would be measuring nothing.
+    predictor, which is what makes it the baseline under which the lag may enter
+    the cell likelihoods (`sign-lag-in-cells`) without carrying an estimated
+    per-child quantity there. Compared with the cells flag held on, so both
+    reach the compositions. If the two produced identical densities the
+    sensitivity would be measuring nothing.
     """
-    within, population = graphs["vg25"], graphs["population"]
+    within, population = graphs["in-cells"], graphs["population-in-cells"]
     for factor in ("y_s_obs", "cells_obs"):
         assert _moved_by_beta(population, factor) > 1e-8, factor
 

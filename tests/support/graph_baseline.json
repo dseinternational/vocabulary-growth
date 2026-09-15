@@ -5225,7 +5225,7 @@
    "a_kappa_sign",
    "b_kappa_mag_sign"
   ],
-  "logp_at_fixed_point": -6961.641070576586,
+  "logp_at_fixed_point": -6785.6568984898295,
   "observed_RVs": [
    "y_u_obs",
    "y_s_obs",

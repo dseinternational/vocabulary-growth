@@ -885,31 +885,37 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # stand-in for the latent baseline the fitted predictor subtracts -- and a
     # child who understood 2 words enters identically to one who understood 406.
     # This arm is the clip, so the choice is measured on a fit rather than
-    # defended by that arithmetic.
+    # defended by that arithmetic. The boundary weighs more since the lag left the
+    # cells (2026-09-15): 27 of the 110 supporting rows (24.5%) sit on it, and
+    # under the registered continuity treatment they carry 50.6% of the source
+    # logit's sum of squares, against 45.8% of 190 rows in the cells scope.
     ("vg25", "sign-lag-clip"): {"suffix": "sign-lag-clip", "scalar": {
         "sign_lag_zero_handling": LAG_ZERO_CLIP}},
     #
-    # `sign-lag-marginal-only` confines the lag to the spoken marginal, which is
-    # where VG15's SUBJECT SHIFTS are confined. The headline lets it into the
-    # cross-tab compositions too, on the argument that one scalar coefficient on
-    # a fixed covariate cannot do to `psi` what a free per-child offset did. This
-    # is what tests that: if `psi` sits where VG24 leaves it under the headline,
-    # the argument held; if it moves, this arm is the one to report from. It also
-    # costs most of the evidence -- 111 supporting observations from 80 children
-    # against 191 from 129, with uk_07 contributing nothing at all -- so it is a
-    # check, not a fallback to be preferred on caution.
-    ("vg25", "sign-lag-marginal-only"): {"suffix": "sign-lag-marginal-only", "scalar": {
-        "sign_lag_in_cells": False}},
+    # `sign-lag-in-cells` replaced `sign-lag-marginal-only` on 2026-09-15, when
+    # the headline itself moved to the spoken marginal. The headline had let the
+    # lag into the cross-tab compositions on the argument that one scalar on a
+    # fixed covariate cannot do to `psi` what a free per-child offset did. Under
+    # the within-child baseline the covariate is not fixed -- it subtracts the
+    # child's estimated signing intercept -- and the first rep fit was bimodal
+    # (`beta_sign_lag` +0.69 / -0.50, R-hat 1.61). So the in-cells arm is
+    # registered under the POPULATION baseline, the one combination in which the
+    # argument holds; twelve-chain probes found it unimodal, as they found the
+    # headline. It is what the 80 extra supporting observations and uk_07's 52
+    # rows are worth: 190 from 128 children against the headline's 110 from 79.
+    # Read `psi` from it too, since it is the arm in which the lag reaches the
+    # rows that identify `psi`. notes/202609151930-vg25-lag-out-of-the-cells.md.
+    ("vg25", "sign-lag-in-cells"): {"suffix": "sign-lag-in-cells", "scalar": {
+        "sign_lag_baseline": "population", "sign_lag_in_cells": True}},
     #
-    # `sign-lag-population` is VG16's registered baseline applied here, and it
-    # does double duty. As an estimand it retains the child's persistent signing
-    # standing in the predictor, which with `rho_sign_q` in the same model makes
-    # it a second, noisier reading of that correlation -- which is the argument
-    # for not registering it as the headline, and worth seeing rather than
-    # asserting. As a check it is the only arm in which NO estimated per-child
-    # quantity reaches the cell likelihoods, because this baseline subtracts the
-    # subject shift back out; read beside the arm above it separates "the lag
-    # moved psi" from "a child effect reached psi through the lag".
+    # `sign-lag-population` is VG16's registered baseline applied here, on the
+    # headline's marginal-only scope. As an estimand it retains the child's
+    # persistent signing standing in the predictor, which with `rho_sign_q` in
+    # the same model makes it a second, noisier reading of that correlation --
+    # the argument for not registering it as the headline, and worth seeing
+    # rather than asserting. The probes agree with the argument's direction:
+    # it took `rho_sign_q` from VG24's 0.39 to 0.22, where the within-child
+    # headline left it at 0.34.
     ("vg25", "sign-lag-population"): {"suffix": "sign-lag-population", "scalar": {
         "sign_lag_baseline": "population"}},
     #
@@ -927,19 +933,20 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "scalar": {"sign_lag_same_form_only": True},
     },
     #
-    # uk_07 supplies 52 of the 191 supporting observations, 27% of the evidence,
-    # and it is the study the headline scope decision brings in -- so a
-    # coefficient that leans on it leans on that decision. This arm attacks that
-    # from the other side than `sign-lag-marginal-only` does: with
-    # `include_uk07_cells=False` uk_07 falls back to its merged-view marginals,
-    # so the SAME children and the SAME lags stay in the model and move from the
-    # `cells` branch to the `marginal` one. Agreement between the two says the
-    # coefficient does not depend on which likelihood carries uk_07.
+    # uk_07's rows are all four-cell rows and carry no spoken marginal, so since
+    # the lag left the cells (2026-09-15) uk_07 supplies none of its support.
+    # With `include_uk07_cells=False` uk_07 falls back to its merged-view
+    # marginals, and its 52 lags enter the spoken marginal the headline uses:
+    # support rises from 110 observations from 79 children to 162 from 106. It
+    # is the within-child way of bringing uk_07's children back, where
+    # `sign-lag-in-cells` is the population-baseline way, and agreement between
+    # the headline and this arm says the coefficient does not depend on uk_07's
+    # children. It also removes one of the four sources that identify `psi`.
     #
     # It is NOT a leave-one-study-out check, and is not labelled as one.
     # #297 check 5 asks for those, and since 2026-09-13 `JointModelDefinition`
-    # carries `exclude_studies`, so two are registered just below: `no-uk07` and
-    # `no-ie02`.
+    # carries `exclude_studies`, so two are registered just below: `no-ie02` and
+    # `no-uk05`.
     #
     # The field landed without refitting anything, as the paragraphs below
     # argued it could. An earlier version of this comment had put that cost at
@@ -971,27 +978,24 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "include_uk07_cells": False}},
     #
     # The leave-one-study-out pair (#297 check 5), for the two studies the lag's
-    # support rests on most. Five studies supply its 191 supporting observations
-    # -- uk_07 52, ie_02 43, uk_02 41, uk_05 30, uk_04 25 -- and these two carry
-    # half of it between them. On the 2026-09-13 frame `no-uk07` takes the
-    # support to 139 and `no-ie02` to 148, which is exactly their own
-    # contributions; a full sweep over the other three is one registry line each.
+    # support rests on most. On the 2026-09-15 frame four studies supply its 110
+    # supporting observations -- ie_02 42, uk_05 30, uk_04 25, uk_02 13 -- and
+    # these two carry two thirds of it between them. `no-ie02` takes the support
+    # to 68 observations from 37 children and `no-uk05` to 80 from 64, exactly
+    # their own contributions; the other two are one registry line each.
     #
-    # They are not the same kind of check, and should not be read as one.
-    # `no-uk07` removes a **cross-tabulation** source: all 82 of uk_07's rows are
-    # four-cell rows, so the arm takes a quarter of the lag's evidence and one of
-    # the four sources that identify `psi` at once. Read `beta_sign_lag` from it;
-    # a move in `psi` or the trajectories is expected and is not a lag result.
-    # Beside `sign-lag-uk07-marginal`, which keeps uk_07's children and moves
-    # their rows to the marginal likelihood, it separates "the coefficient needs
-    # uk_07's children" from "it needs where their rows enter". `no-ie02` removes
-    # a **merged-view** source with no cross-tabulation, so the composition
-    # likelihood is untouched and a moved coefficient is a statement about ie_02's
-    # children alone.
-    ("vg25", "no-uk07"): {"suffix": "no-uk07", "scalar": {
-        "exclude_studies": ("uk_07",)}},
+    # `no-uk05` replaced `no-uk07` on 2026-09-15. With the lag in the spoken
+    # marginal only, uk_07 contributes no support at all (its rows carry no
+    # spoken marginal), so leaving it out would no longer test the lag.
+    #
+    # Both remove **merged-view** sources with no cross-tabulation, so the
+    # composition likelihood is untouched and a moved coefficient is a statement
+    # about that study's children. uk_05 is also one of the five signing sources,
+    # so a move in the sign trajectory there is expected and is not a lag result.
     ("vg25", "no-ie02"): {"suffix": "no-ie02", "scalar": {
         "exclude_studies": ("ie_02",)}},
+    ("vg25", "no-uk05"): {"suffix": "no-uk05", "scalar": {
+        "exclude_studies": ("uk_05",)}},
     #
     # The coefficient-prior pair, matching VG16's `beta-tight` / `beta-wide` and
     # for the same reason: a symmetric prior is not a calibrated one, and

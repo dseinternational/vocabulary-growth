@@ -19,11 +19,14 @@ prospective, occasion-level quantity it is named for. Reported beside VG24's
 ``notes/202608160930-early-signing-and-later-speech.md``, those are three
 different quantities and the report's job is to say which is which.
 
-The term enters the spoken marginal and the cross-tab compositions; the
-``sign-lag-marginal-only`` sensitivity confines it to the marginal, which is
-where VG15's subject shifts are confined, and is what shows whether ``psi``
-moved. See ``docs/models/vg25/index.qmd`` for the support and
-``common_joint_modality`` for the engine.
+The term enters the spoken marginal only, which is where VG15's subject shifts
+are confined. It was registered in the cross-tab compositions as well, and the
+first ``rep`` fit was bimodal because the within-child baseline carries each
+child's estimated signing intercept into them; see
+``notes/202609151930-vg25-lag-out-of-the-cells.md``. The ``sign-lag-in-cells``
+sensitivity puts the term in the compositions under the population baseline.
+See ``docs/models/vg25/index.qmd`` for the support and ``common_joint_modality``
+for the engine.
 
 Issue #297.
 """
