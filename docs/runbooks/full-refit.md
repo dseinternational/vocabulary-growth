@@ -153,7 +153,10 @@ python scripts/compare_sensitivity.py vg10 --variant dse-native-only
 python scripts/compare_sensitivity.py vg15 --variant dse-native-only
 ```
 
-Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, which must read **1,523** against the current pool. It is the widest-scoped variant registered — **264 of 1,787** rows survive, from ie_01's 810 wave (46), ie_02 (111), uk_02's DSE arm (96) and uk_06 (11), leaving 181 children — so expect wide intervals and read it for whether the trajectory _shapes_ hold, not for agreement to three significant figures.
+Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, which must read **1,633** against the current pool. It is the widest-scoped variant registered — **153 of 1,786** rows survive, from ie_01's 810 wave (46), uk_02's DSE arm (96) and uk_06 (11), leaving 116 children — so expect wide intervals and read it for whether the trajectory _shapes_ hold, not for agreement to three significant figures.
+
+> [!NOTE]
+> **Re-pinned from 1,523 / "264 of 1,787" on 2026-09-15**, when `ie_02` left the native set. Its administrations omitted DSE Checklist 3, so the view now records their own 476-word ceiling (`data_utils.DSE_SHORT_FORM_CEILINGS`) rather than 810; its 111 rows and 65 children leave the variant, and the form-ceiling guard drops one more `ie_02` administration from the pool, whose comprehension count of 477 exceeds that ceiling. Recomputed through `analysis_frames.build_analysis_frame` on VG10, VG15 and VG16, all reporting `non_native_rows_excluded = 1633`. **On VG15 this arm loses its largest signing source**: 50 signed observations remain, from `uk_02` and `uk_06` alone, where the 2026-09-06 fit that missed the gate had three sign-contributing studies — expect the escalation rung to be needed.
 
 > [!NOTE]
 > **Re-pinned from 1,243 / "278 of 1,521" on 2026-09-06**, after ingesting `us_03`. Recomputed through `analysis_frames.build_analysis_frame` on VG10 and VG15 — the fits' own builder, not a proxy for the rule — both reporting `non_native_rows_excluded = 1523`.

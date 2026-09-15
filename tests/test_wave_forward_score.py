@@ -182,11 +182,15 @@ def test_the_lagged_scored_rows_are_the_coefficients_own_support():
     words produced (#320) restored 42 uk_01 comprehension values, and 28 uk_01
     later waves gained a lag source from them (22 -> 50 supporting rows there;
     every other study unchanged). The audit's 473 describes the frame before it.
+
+    500 since 2026-09-15: ie_02's recorded 476-word ceiling lets the form-ceiling
+    guard drop one administration whose comprehension count of 477 exceeds it,
+    and that administration was the lag source for its child's later wave.
     """
     frame, definition = _registered_frame()
     lagged, _source = wf.lag_source(frame, definition)
     supporting = int((lagged & frame["spoken"].notna().to_numpy()).sum())
-    assert supporting == 501
+    assert supporting == 500
 
 
 @pytest.mark.slow

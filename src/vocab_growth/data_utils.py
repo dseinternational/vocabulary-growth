@@ -166,6 +166,39 @@ not administered:
   so the zeros are an un-administered subscale, not ability.
 """
 
+DSE_SHORT_FORM_CEILINGS: dict[str, tuple[int, ...]] = {"ie_02": (476,)}
+"""Per-study ``survey_vocab_max`` values marking a DSE short form kept on the 810 scale.
+
+``ie_02`` administered DSE Checklists 1 and 2 only (127 + 349 = 476 achievable
+words); Checklist 3 was not given. That is the same instrument subset as
+``ie_01``'s baseline wave, which :data:`INCOMPLETE_ADMINISTRATION_CEILINGS` masks.
+The study owner decided on 2026-09-15 to treat ``ie_02`` differently: its counts
+stay in the pool on the 810-item reference scale, as the nested Oxford CDI and
+MB-CDI forms do, and its ceiling is recorded as 476 so the rules that read
+``survey_vocab_max`` see the form it actually was. The form-ceiling guard therefore
+drops the administrations whose ``understood`` of 477 exceeds it, and
+:func:`restrict_to_dse_native_administrations` no longer counts ``ie_02`` as native.
+
+The evidence the decision rested on, measured on ``ie_01``'s follow-up wave, the
+one wave in the pool with all three checklists recorded (44 comprehension
+records): Checklist 3 adds little below about 300 words on Checklists 1 + 2
+(medians of 0 to 24 words per band), but a median of 100 at 300-400 and 233 at
+400-476, where it is 22-35% of the child's full count. The bands hold 5 to 11
+records each. In ``ie_02``, 17.5% of comprehension counts are at or above 300 and
+the spoken counts are almost all small (90th percentile 42), so masking the study
+would have discarded mostly unaffected rows -- 65 children, and 111 of the joint
+models' 251 signed observations -- to remove an understatement concentrated in a
+fifth of one outcome. (Those figures are the pool at the decision; the guard's
+one dropped administration makes them 110 of 250 signed observations after it.)
+
+The understatement is real where it occurs, so it has a registered check rather
+than none: :func:`mask_short_form_comprehension`, reached through the
+``mask_dse_short_form_comprehension`` definition field, masks these studies'
+comprehension counts for a sensitivity arm. The asymmetry with ``ie_01``'s baseline
+is deliberate but not argued from evidence that separates the two, and is recorded
+as such.
+"""
+
 DUPLICATED_OUTCOME_MAX_AGE_MONTHS = 18
 DUPLICATED_OUTCOME_MIN_UNDERSTOOD = 100
 DUPLICATED_OUTCOME_RATIO = 0.75
@@ -486,6 +519,43 @@ def mask_incomplete_administrations(
         dropped[study] = int(out.loc[mask, outcome_columns].notna().to_numpy().sum())
         out.loc[mask, outcome_columns] = float("nan")
     return out, dropped
+
+
+def mask_short_form_comprehension(
+    df: pd.DataFrame,
+    *,
+    mask_short_form: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Mask comprehension counts from DSE short-form administrations, as a sensitivity.
+
+    The inverse of the other rules in this module: by default nothing is masked,
+    because :data:`DSE_SHORT_FORM_CEILINGS` keeps those administrations on the
+    810-item scale. With ``mask_short_form=True`` their ``understood`` counts are
+    set missing -- the outcome where the omitted checklist's harder words matter --
+    and every other count and the rows themselves are kept. The returned counts
+    report how many comprehension values were masked per study, for the fit log.
+    """
+    required = {"study", "survey_vocab_max"}
+    missing = required - set(df.columns)
+    if missing:
+        raise KeyError(
+            "Short-form comprehension masking requires columns: "
+            + ", ".join(sorted(missing))
+        )
+
+    out = df.copy()
+    masked: dict[str, int] = {}
+    if not mask_short_form or "understood" not in out.columns:
+        return out, masked
+
+    for study, ceilings in DSE_SHORT_FORM_CEILINGS.items():
+        mask = out["study"].eq(study) & out["survey_vocab_max"].isin(ceilings)
+        count = int(out.loc[mask, "understood"].notna().sum())
+        if count == 0:
+            continue
+        masked[study] = count
+        out.loc[mask, "understood"] = float("nan")
+    return out, masked
 
 
 def mask_duplicated_outcome_administrations(
@@ -1205,11 +1275,18 @@ def restrict_to_dse_native_administrations(
 
     A sensitivity-analysis transformation, not a primary inclusion rule. It
     answers what the trajectories look like when no count has been carried onto
-    a denominator its form did not use: 277 of the Down syndrome pool's 1,920
-    rows survive, from 194 children across ie_01 (its 810 wave only), ie_02,
-    uk_02 (DSE form only) and uk_06 -- 258 understood, 263 spoken and 217 signed
-    observations spanning 9-115 months. Every other source is on a shorter form
-    and drops out entirely, es_01, nz_01, uk_07, us_01 and us_03 among them.
+    a denominator its form did not use: 166 of the loader's 1,799 Down syndrome
+    rows survive, from 129 children across ie_01 (its 810 wave only), uk_02 (DSE
+    form only) and uk_06 -- 139 understood, 152 spoken and 106 signed
+    observations. Every other source is on a shorter form and drops out entirely,
+    es_01, ie_02, nz_01, uk_07, us_01 and us_03 among them.
+
+    Re-measured 2026-09-15, when ie_02 left the native set. Its administrations
+    omitted DSE Checklist 3 and now carry their own 476-word ceiling
+    (:data:`DSE_SHORT_FORM_CEILINGS`), which took 111 rows and 65 children out of
+    the variant -- the largest signing source among them, so the joint models'
+    native arm now rests on uk_02 and uk_06 for signing. The paragraph below
+    describes the set before that.
 
     Re-measured 2026-09-08, after the ``us_03`` ingestion. The surviving subset
     is **unchanged** -- same 277 rows, same 194 children, same four studies --
@@ -1487,8 +1564,13 @@ def _sql_string_list(values: tuple[str, ...]) -> str:
 # Native checklist ceilings (``survey_vocab_max``), by source form (issue #128):
 #   - DSE Checklists (1+2+3 = 120+340+350) = 810 words. This is the common
 #     reference inventory every model's likelihood scores counts against
-#     (``n_trials = 810``), so DSE-native studies (uk_02 DSE form, ie_01, uk_06,
-#     ie_02) carry survey_vocab_max = 810.
+#     (``n_trials = 810``), so DSE-native studies (uk_02 DSE form, ie_01's
+#     follow-up wave, uk_06) carry survey_vocab_max = 810.
+#   - DSE Checklists 1 + 2 only (ie_02) = 476 achievable words; Checklist 3 was
+#     not administered. Read from the source, and kept on the 810 scale as a
+#     short form rather than masked as partial (see DSE_SHORT_FORM_CEILINGS).
+#     ie_01's baseline wave is the same instrument subset recorded as zeros on
+#     Checklist 3, carried as 460 and masked (INCOMPLETE_ADMINISTRATION_CEILINGS).
 #   - Oxford CDI = 416 words (uk_02 Oxford form, uk_03, uk_04, uk_05).
 #   - MacArthur-Bates CDI: Words & Gestures (WG) = 396 (us_01 WG form, us_02 —
 #     which carries comprehension, so it is the WG form); Words & Sentences
@@ -1769,6 +1851,12 @@ def vocab_combined_view_sql() -> str:
         810                                 as survey_vocab_max
     FROM vocab_uk_06 as vuk06
         UNION ALL
+    -- ie_02 administered DSE Checklists 1 + 2 only, so its ceiling is the 476
+    -- achievable words the source now records, not the full instrument's 810.
+    -- Its counts stay on the 810 reference scale as a short form; see
+    -- DSE_SHORT_FORM_CEILINGS. Three Checklist 2 counts of 350 against 349
+    -- achievable words take `understood` to 477, and the form-ceiling guard
+    -- drops those rows as it drops any count above its form's ceiling.
     SELECT 'ie_02'                           as study,
         vie2.subject_id,
         CASE vie2.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
@@ -1777,7 +1865,7 @@ def vocab_combined_view_sql() -> str:
         vie2.spoken,
         vie2.signed                         as signed,
         vie2.spoken                         as produced,
-        810                                 as survey_vocab_max
+        vie2.survey_vocab_max               as survey_vocab_max
     FROM vocab_ie_02 as vie2
     WHERE vie2.english_speaking = 'yes'
     UNION ALL
@@ -1921,6 +2009,7 @@ def load_combined_data(
     include_comprehension_below_production=False,
     include_same_day_disagreements=False,
     include_structurally_distinct_subsamples=False,
+    mask_dse_short_form_comprehension=False,
     include_produced=False,
 ):
     """
@@ -1963,6 +2052,10 @@ def load_combined_data(
             :data:`SAME_DAY_DISAGREEMENT_FACTOR` first — the two counts this
             puts back record 385 and 406 words spoken at 23 months against
             same-day measurements of 11 and 50.
+        mask_dse_short_form_comprehension (bool): Mask the comprehension counts
+            of the DSE short forms kept on the 810 scale
+            (:data:`DSE_SHORT_FORM_CEILINGS`), for sensitivity analysis. Defaults
+            to False, which keeps them.
         include_produced (bool): Keep the ``produced`` column in the returned
             frame. Defaults to False, preserving the historical column set every
             existing caller expects. The exploratory produced-outcome models
@@ -2015,6 +2108,12 @@ def load_combined_data(
     df, _ = drop_duplicate_administrations(df)
     df, _ = mask_incomplete_administrations(
         df, include_incomplete=include_incomplete_administrations
+    )
+    # Beside the other reference-scale rule, and before the comprehension-below-
+    # production rule at the end, so a count this sensitivity masks is not also
+    # reported as masked there.
+    df, _ = mask_short_form_comprehension(
+        df, mask_short_form=mask_dse_short_form_comprehension
     )
     df, _ = mask_duplicated_outcome_administrations(
         df, include_duplicated=include_duplicated_outcomes
@@ -2138,6 +2237,36 @@ def count_reinstated_same_day_disagreements(
     )
 
 
+def count_masked_dse_short_form_comprehension(
+    max_age_months: int | None = None,
+    *,
+    include_implausible_production: bool = False,
+    include_same_day_disagreements: bool = False,
+) -> int:
+    """Comprehension observations the short-form sensitivity masks.
+
+    The fit-log figure for ``mask_dse_short_form_comprehension``, for the same
+    reason the reinstatement counts above exist: a sensitivity whose flag had
+    stopped biting would otherwise look like a pass. Differenced through the
+    loader with the other two engine-forwarded flags held at the definition's
+    values on both sides.
+    """
+    kept = load_combined_data(
+        max_age_months=max_age_months,
+        include_implausible_production=include_implausible_production,
+        include_same_day_disagreements=include_same_day_disagreements,
+    )
+    masked = load_combined_data(
+        max_age_months=max_age_months,
+        include_implausible_production=include_implausible_production,
+        include_same_day_disagreements=include_same_day_disagreements,
+        mask_dse_short_form_comprehension=True,
+    )
+    return int(
+        kept["understood"].notna().sum() - masked["understood"].notna().sum()
+    )
+
+
 def _subsample_subjects(
     df: pd.DataFrame, sample_fraction: float, random_seed: int
 ) -> pd.DataFrame:
@@ -2200,6 +2329,7 @@ def load_data(
     include_comprehension_below_production: bool = False,
     include_same_day_disagreements: bool = False,
     include_structurally_distinct_subsamples: bool = False,
+    mask_dse_short_form_comprehension: bool = False,
 ) -> pd.DataFrame:
     """
     Load vocabulary data for the specified population.
@@ -2234,6 +2364,10 @@ def load_data(
         for sensitivity analysis. **DS only** — each names a specific documented
         defect class in the DS pool, so passing one for the TD population is a
         caller error rather than a silent no-op.
+    mask_dse_short_form_comprehension : bool
+        Mask the DSE short forms' comprehension counts, for sensitivity analysis
+        (:func:`mask_short_form_comprehension`). **DS only**, refused for TD
+        the same way.
 
     Returns
     -------
@@ -2252,13 +2386,21 @@ def load_data(
         "include_same_day_disagreements": include_same_day_disagreements,
     }
     if population == Population.DOWN_SYNDROME:
-        df = load_combined_data(max_age_months=max_age_months, **reinstatements)
+        df = load_combined_data(
+            max_age_months=max_age_months,
+            mask_dse_short_form_comprehension=mask_dse_short_form_comprehension,
+            **reinstatements,
+        )
         return df[columns]
 
-    if any(reinstatements.values()):
+    ds_only_flags = {
+        **reinstatements,
+        "mask_dse_short_form_comprehension": mask_dse_short_form_comprehension,
+    }
+    if any(ds_only_flags.values()):
         raise ValueError(
-            "Defect-reinstatement flags apply to the Down syndrome pool only; "
-            f"got {sorted(k for k, v in reinstatements.items() if v)} for {population}."
+            "Down syndrome pool flags apply to the Down syndrome pool only; "
+            f"got {sorted(k for k, v in ds_only_flags.items() if v)} for {population}."
         )
 
     # Typically developing — query wordbank_child directly.
