@@ -183,17 +183,20 @@ def test_dse_native_restriction_on_the_real_pool():
     )
     native, dropped = data_utils.restrict_to_dse_native_administrations(pool)
 
-    assert len(native) == 277
-    assert dropped == len(pool) - 277
-    assert sorted(native["study"].unique()) == ["ie_01", "ie_02", "uk_02", "uk_06"]
-    assert native["subject_id"].nunique() == 194
-    # 250, not 259: seven of the eleven counts mask_comprehension_below_production
-    # masks are ie_01 rows inside this subset, the uk_02 record with no
-    # `produced` (#236) is an 810-item row inside it too, and the withheld ie_02
-    # t2 administration (IE02_WITHHELD_ADMINISTRATIONS) took one more.
-    assert int(native["understood"].notna().sum()) == 250
-    assert int(native["spoken"].notna().sum()) == 263
-    assert int(native["signed"].notna().sum()) == 217
+    # 166 rows from three studies since 2026-09-15, when ie_02 (111 rows, 65
+    # children) left: its administrations omitted Checklist 3, so it now carries
+    # its own 476-word ceiling as a short form (DSE_SHORT_FORM_CEILINGS) and is
+    # no longer on the native form.
+    assert len(native) == 166
+    assert dropped == len(pool) - 166
+    assert sorted(native["study"].unique()) == ["ie_01", "uk_02", "uk_06"]
+    assert native["subject_id"].nunique() == 129
+    # Seven of the nine counts mask_comprehension_below_production masks are
+    # ie_01 rows inside this subset, and the uk_02 record with no `produced`
+    # (#236) is an 810-item row inside it too.
+    assert int(native["understood"].notna().sum()) == 139
+    assert int(native["spoken"].notna().sum()) == 152
+    assert int(native["signed"].notna().sum()) == 106
 
 
 def test_us01_ceiling_sensitivity_runs_through_ds_loader(tmp_path, monkeypatch):
@@ -578,6 +581,14 @@ def test_load_data_rejects_reinstatement_flags_for_td(tmp_path, monkeypatch):
             columns=["age", "spoken"],
             include_implausible_production=True,
         )
+    # The short-form sensitivity is refused the same way: no TD source is a DSE
+    # checklist, so asking for it there is a caller error too.
+    with pytest.raises(ValueError, match="mask_dse_short_form_comprehension"):
+        data_utils.load_data(
+            Population.TYPICALLY_DEVELOPING,
+            columns=["age", "understood"],
+            mask_dse_short_form_comprehension=True,
+        )
 
 
 def test_reinstated_implausible_production_count_is_reported(tmp_path, monkeypatch):
@@ -872,7 +883,7 @@ _SOURCE_TABLE_SCHEMAS = {
     "vocab_uk_05": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
     "vocab_us_02": "subject_id VARCHAR, age DOUBLE, understood INTEGER, spoken INTEGER",
     "vocab_uk_06": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER",
-    "vocab_ie_02": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR",
+    "vocab_ie_02": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, english_speaking VARCHAR, survey_vocab_max INTEGER",
     "vocab_nz_01": "subject_id VARCHAR, age BIGINT, not_spoken_or_signed BIGINT, signed BIGINT, spoken_signed BIGINT, spoken BIGINT",
     "vocab_es_01": 'subject_id VARCHAR, pair_id INTEGER, "group" VARCHAR, sex INTEGER, age BIGINT, age_days BIGINT, mental_age DOUBLE, mental_age_level INTEGER, understood INTEGER, spoken INTEGER, gestured INTEGER, spoken_or_gestured INTEGER',
     "vocab_uk_07": 'subject_id VARCHAR, "group" VARCHAR, sex INTEGER, timepoint VARCHAR, age BIGINT, understood INTEGER, spoken INTEGER, signed INTEGER, spoken_signed INTEGER, produced INTEGER, survey_vocab_max INTEGER',
@@ -1505,6 +1516,65 @@ def test_mask_incomplete_administrations_reports_counts_and_needs_columns():
         data_utils.mask_incomplete_administrations(frame.drop(columns="survey_vocab_max"))
 
 
+def test_mask_short_form_comprehension_is_off_by_default_and_masks_understood_only():
+    """The short-form sensitivity: nothing by default, then comprehension alone.
+
+    ie_02 omitted Checklist 3, whose harder words matter for comprehension, so
+    the arm masks those counts and must leave its speech and signing, every
+    other study, and every row in place.
+    """
+    frame = pd.DataFrame({
+        "study": ["ie_02", "ie_02", "ie_01", "uk_03"],
+        "survey_vocab_max": [476, 476, 810, 416],
+        "understood": [300.0, np.nan, 500.0, 90.0],
+        "spoken": [20.0, 5.0, 200.0, 30.0],
+        "signed": [40.0, 2.0, np.nan, np.nan],
+    })
+    kept, none_masked = data_utils.mask_short_form_comprehension(frame)
+    assert none_masked == {}
+    assert kept.equals(frame)
+
+    out, masked = data_utils.mask_short_form_comprehension(frame, mask_short_form=True)
+    assert masked == {"ie_02": 1}                       # observed counts only
+    assert pd.isna(out.loc[0, "understood"])
+    assert out[["spoken", "signed"]].equals(frame[["spoken", "signed"]])
+    assert out.loc[2, "understood"] == 500.0 and out.loc[3, "understood"] == 90.0
+    assert len(out) == len(frame)
+
+    with pytest.raises(KeyError, match="survey_vocab_max"):
+        data_utils.mask_short_form_comprehension(frame.drop(columns="survey_vocab_max"))
+
+
+def test_ie02_is_a_476_item_short_form_on_the_real_pool():
+    """ie_02 carries its own Checklists 1 + 2 ceiling, and the arm bites on it.
+
+    Pinned against the real sources because the decision of 2026-09-15 has two
+    consequences a later change could undo silently: the form-ceiling guard now
+    drops the retained administration whose comprehension count of 477 exceeds
+    476 (110 rows, not 111), and the sensitivity must mask every one of ie_02's
+    comprehension counts and nothing else.
+    """
+    pool = data_utils.load_combined_data()
+    ie = pool[pool["study"] == "ie_02"]
+    assert set(ie["survey_vocab_max"]) == {476}
+    assert len(ie) == 110
+    assert not (ie[["understood", "spoken", "signed"]] > 476).any().any()
+
+    masked = data_utils.load_combined_data(mask_dse_short_form_comprehension=True)
+    assert len(masked) == len(pool)
+    for column in ("spoken", "signed"):
+        assert masked[column].notna().sum() == pool[column].notna().sum()
+    assert masked.loc[masked["study"] == "ie_02", "understood"].isna().all()
+    other = pool["study"] != "ie_02"
+    assert (
+        masked.loc[masked["study"] != "ie_02", "understood"].notna().sum()
+        == pool.loc[other, "understood"].notna().sum()
+    )
+    assert data_utils.count_masked_dse_short_form_comprehension() == int(
+        ie["understood"].notna().sum()
+    ) == 110
+
+
 # ---- duplicated-outcome administrations (the us_01/Edgin infant records) ----
 #
 # An infant recorded as saying nearly every word they understand has an internally
@@ -1919,11 +1989,12 @@ def test_comprehension_rule_counts_per_study():
 
 
 @requires_real_db
-def test_load_combined_data_masks_the_eleven_impossible_comprehension_counts():
-    # End-to-end against the real database. Eleven administrations across four
+def test_load_combined_data_masks_the_nine_impossible_comprehension_counts():
+    # End-to-end against the real database. Nine administrations across three
     # studies record a comprehension count below the child's own production:
-    # ten against `produced`, and the uk_02 row with no `produced` against its
-    # spoken count (#236).
+    # eight against `produced`, and the uk_02 row with no `produced` against its
+    # spoken count (#236). uk_01 contributed two more until its comprehension
+    # count was corrected at source to include words said and signed (#320).
     masked = data_utils.load_combined_data()
     reinstated = data_utils.load_combined_data(
         include_comprehension_below_production=True
@@ -1931,10 +2002,10 @@ def test_load_combined_data_masks_the_eleven_impossible_comprehension_counts():
     difference = int(
         reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
     )
-    assert difference == 11
+    assert difference == 9
     newly = reinstated["understood"].notna() & masked["understood"].isna()
     assert reinstated.loc[newly, "study"].value_counts().to_dict() == {
-        "ie_01": 7, "uk_01": 2, "it_01": 1, "uk_02": 1,
+        "ie_01": 7, "it_01": 1, "uk_02": 1,
     }
     # The flag reinstates comprehension only; nothing else moves, and `produced`
     # never reaches a caller.
@@ -2009,7 +2080,7 @@ def test_the_comprehension_reinstatement_reaches_the_supported_fit_interface():
     difference = int(
         reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
     )
-    assert difference == 11
+    assert difference == 9
 
     # It is a Down-syndrome-pool defect class, so asking for it on the
     # typically-developing pool is a caller error rather than a silent no-op.

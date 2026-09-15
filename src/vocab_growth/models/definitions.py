@@ -1150,10 +1150,13 @@ class BivariateModelDefinition:
     running the model differently -- it is probed by removing the rows that need
     it, which is what this flag does (issue #190).
 
-    It is the widest-scoped sensitivity in the registry, and deliberately so: 278
-    of the merged view's 1,521 Down syndrome rows survive, from 194 children
-    across ie_01 (its 810 wave only), ie_02, uk_02 (DSE form only) and uk_06,
-    spanning 9-115 months. Comprehension is the least affected outcome -- 252 of
+    It is the widest-scoped sensitivity in the registry, and deliberately so: on
+    2026-09-15 the loader keeps 166 of 1,799 Down syndrome rows, from 129
+    children across ie_01 (its 810 wave only), uk_02 (DSE form only) and uk_06,
+    and VG10's prepared frame 153 of 1,707. ie_02 left the native set that day,
+    when its Checklists 1 + 2 administrations were given their own 476-word
+    ceiling (``data_utils.DSE_SHORT_FORM_CEILINGS``). The figures below are from
+    before the ``us_03`` ingestion and before that change. Comprehension is the least affected outcome -- 252 of
     977 understood observations survive, against 264 of 1,428 spoken -- because
     the short forms are production-heavy, so expect the spoken trajectory to move
     more than the understood one.
@@ -1204,6 +1207,21 @@ class BivariateModelDefinition:
     default is ``False``, so a manifest that lacks the field records a fit with
     it set to ``False``. That claim is pinned in ``tests/test_fit_identity.py``
     against the loader's own signature."""
+    mask_dse_short_form_comprehension: bool = False
+    """Mask the comprehension counts of the DSE short forms kept on the 810 scale.
+
+    ``ie_02`` administered DSE Checklists 1 and 2 only, and since 2026-09-15 its
+    counts enter the pool as a short form with a 476-word ceiling rather than
+    being masked as a partial administration
+    (``data_utils.DSE_SHORT_FORM_CEILINGS``). Checklist 3's harder words matter
+    for comprehension above about 300 words, so this flag masks those studies'
+    ``understood`` counts and keeps everything else, for the
+    ``ie02-comprehension-masked`` sensitivity arm.
+
+    Added with a ``fit_identity.BACKFILL_DEFAULTS`` entry, on the same claim as
+    ``include_same_day_disagreements``: every fit made before the field existed
+    called the loader without the argument, whose default is ``False``. Pinned
+    in ``tests/test_fit_identity.py`` against the loader's own signature."""
 
     # -- Sex as a covariate (issue #324) --
     sex_effect_sigma: float | None = None
@@ -1250,7 +1268,7 @@ class BivariateModelDefinition:
 
     A **data** change and a sensitivity control, not the reporting design: on
     the Down syndrome pool it removes the seven studies that record no sex (711
-    of VG20's 1,708 rows, ``us_03`` among them). It is what makes a sex-known
+    of VG20's 1,707 rows, ``us_03`` among them). It is what makes a sex-known
     control arm comparable with its effect arm, since both see the same rows,
     and it refuses a study that records sex for only part of its rows rather
     than turning silently into a row-level filter. Down syndrome pool only.
@@ -1881,9 +1899,13 @@ class JointModelDefinition:
     running the model differently -- it is probed by removing the rows that need
     it, which is what this flag does (issue #190).
 
-    It is the widest-scoped sensitivity in the registry, and deliberately so: 278
-    of the merged view's 1,521 Down syndrome rows survive, from ie_01 (its 810
-    wave only), ie_02, uk_02 (DSE form only) and uk_06.
+    It is the widest-scoped sensitivity in the registry, and deliberately so: on
+    2026-09-15 the prepared joint frame keeps 153 of 1,707 rows, from ie_01 (its
+    810 wave only), uk_02 (DSE form only) and uk_06. ie_02 left the native set
+    that day, when its Checklists 1 + 2 administrations were given their own
+    476-word ceiling (``data_utils.DSE_SHORT_FORM_CEILINGS``), and it was the
+    largest signing source: the sign block keeps 50 signed observations, from
+    uk_02 and uk_06 alone.
 
     The cost is legible in what leaves. es_01, nz_01 and uk_07 are all on shorter
     forms, so the only cross-tab source left is uk_02's DSE form -- all 56 of its
@@ -1976,6 +1998,21 @@ class JointModelDefinition:
     default is ``False``, so a manifest that lacks the field records a fit with
     it set to ``False``. That claim is pinned in ``tests/test_fit_identity.py``
     against the loader's own signature."""
+    mask_dse_short_form_comprehension: bool = False
+    """Mask the comprehension counts of the DSE short forms kept on the 810 scale.
+
+    ``ie_02`` administered DSE Checklists 1 and 2 only, and since 2026-09-15 its
+    counts enter the pool as a short form with a 476-word ceiling rather than
+    being masked as a partial administration
+    (``data_utils.DSE_SHORT_FORM_CEILINGS``). Checklist 3's harder words matter
+    for comprehension above about 300 words, so this flag masks those studies'
+    ``understood`` counts and keeps everything else, for the
+    ``ie02-comprehension-masked`` sensitivity arm.
+
+    Added with a ``fit_identity.BACKFILL_DEFAULTS`` entry, on the same claim as
+    ``include_same_day_disagreements``: every fit made before the field existed
+    called the loader without the argument, whose default is ``False``. Pinned
+    in ``tests/test_fit_identity.py`` against the loader's own signature."""
     exclude_studies: tuple[str, ...] = ()
     """Study codes to drop before fitting, for leave-one-study-out sensitivity.
 

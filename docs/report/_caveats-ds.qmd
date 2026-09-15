@@ -16,12 +16,25 @@ Claude Code/Fable 5.1, 2026-09-05.
 Sex sentence rewritten for the sex covariate the reporting models carry from
 2026-09-13 (issue #324), and the "differs by one parameter" clause corrected, by
 Claude Code/Opus 5, 2026-09-13.
+Word-difficulty paragraph, screened stratum table and the untestable-ordering
+statement (issue #320) added by Claude Code/Opus 5, 2026-09-14. The table's
+figures are pinned by scripts/verify_item_difficulty_notes.py.
 -->
 
 ::: {.callout-warning title="Scope and caveats"}
 The Down syndrome estimates in this chapter describe a **pooled research sample, not a population**: children with Down syndrome from studies in six countries, recruited through research projects (including an intervention trial), charities and family organisations, and assessed between the 1990s and the 2020s. Families who enrol in such studies are not a random draw of all families of children with Down syndrome, so the reported trajectories and percentiles are expectations for the modelled pool and are **not norms**, cut-offs or a screening instrument.
 
 All outcomes are **parent-report checklist counts**, harmonised from several instruments onto a common 810-item reference inventory (@sec-data). Comprehension is the least direct of the three measures, and everything derived from it — the production ratio $q(a)$, the signing ratio $r(a)$ and total expressive vocabulary — inherits that. A checklist word count says nothing about intelligibility, grammar or use in context, and nothing about which words: a count treats a verb or a function word the same as a noun, and those are the words that grammar is built from (@sec-ds-vocabulary-grammar).
+
+**Words are not equally hard, and a count cannot show which words a child knows.** The models treat every word on the reference inventory as equally likely to be known by a child at a given level. The one source that records counts by difficulty, `ie_01`, used three checklists graded from earlier-learned to later-learned words, and they show a steep gradient, as they were designed to:
+
+| share of each checklist's words | Checklist 1 | Checklist 2 | Checklist 3 |
+| :------------------------------ | ----------: | ----------: | ----------: |
+| understood                      |        0.75 |        0.50 |        0.28 |
+| said                            |        0.50 |        0.26 |        0.15 |
+| said, of the words understood   |        0.67 |        0.53 |        0.52 |
+
+The table pools 38 children aged 27 to 86 months, and each share is of the checklist's 127, 349 or 353 possible words, which include the child's own name and the names of family and pets. Eight further records report more words said than understood on at least one checklist, which cannot be right, and are left out; with them the understood shares are 0.63, 0.44 and 0.25. For the reported trajectories and predictive counts this matters little: under the assumption described in @sec-betabinomial a total count loses nothing about how far a child has progressed, and the predictive count distributions are checked against the observed counts directly. It matters for anything read at the level of words. The production ratio $q(a)$ is an average over the words a child happens to understand, which are mostly the easier ones. And **whether children with Down syndrome learn words in the same order as typically developing children cannot be tested from these counts at all**, because a count carries no information about which words make it up: a comparison of the two groups at the same number of words understood assumes a shared order rather than showing one. That test needs word-level data and is specified separately ([`notes/202607261210`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202607261210-route1-dif-prespecification.md)).
 
 Coverage is **uneven across age**: dense between about 18 and 54 months and thin above 72 months for spoken words and above about 60 for words understood, where the study mix also changes. Estimates at older ages are smoothed by the model from few children and carry correspondingly wide intervals; monthly rows with `n_obs = 0` are extrapolation, not evidence.
 

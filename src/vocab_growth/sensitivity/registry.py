@@ -223,6 +223,28 @@ VARIANTS: dict[tuple[str, str], dict] = {
         },
     },
 
+    # ie_02 as a short form (2026-09-15). ie_02 administered DSE Checklists 1 + 2
+    # only; the study owner kept its counts on the 810 scale with a recorded
+    # ceiling of 476 instead of masking it as a partial administration, as
+    # ie_01's baseline is (`data_utils.DSE_SHORT_FORM_CEILINGS`). The omitted
+    # Checklist 3 holds harder words that matter for comprehension above about
+    # 300 words, so this arm masks ie_02's comprehension counts and keeps its
+    # spoken and signed counts: if the headline comprehension trajectory or `q`
+    # moves, the short-form judgement is carrying weight. On VG10 and VG15 beside
+    # the other data-handling arms, and on VG20, the model of record.
+    ("vg10", "ie02-comprehension-masked"): {
+        "suffix": "ie02-comprehension-masked",
+        "scalar": {"mask_dse_short_form_comprehension": True},
+    },
+    ("vg15", "ie02-comprehension-masked"): {
+        "suffix": "ie02-comprehension-masked",
+        "scalar": {"mask_dse_short_form_comprehension": True},
+    },
+    ("vg20", "ie02-comprehension-masked"): {
+        "suffix": "ie02-comprehension-masked",
+        "scalar": {"mask_dse_short_form_comprehension": True},
+    },
+
     # The 810-item reference denominator. Every model scores raw counts against
     # n_trials = 810, so counts from the 416-item Oxford CDI, the 396/680-item
     # MB-CDI forms, the 651-item CDI-Down, the 674-item Reading CDI and the
@@ -234,12 +256,13 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # that need it, not by re-running the model differently.
     #
     # This is the widest-scoped variant registered. Two figures, at two stages,
-    # because they differ and both get quoted: the loader keeps 277 of 1,516
-    # administrations and the fit log prints the 1,239 it excluded, while the
-    # prepared analysis frame that is actually fitted keeps 264 of 1,424. Both
-    # are pool-dependent -- the comment said "278 of 1,521" until 2026-09-03,
-    # correct for the pool of the day it was written -- so read the fit log for
-    # the live figure rather than trusting a number here.
+    # because they differ and both get quoted: on 2026-09-15 the loader keeps
+    # 166 of 1,799 administrations and the fit log prints the 1,633 it excluded,
+    # while the prepared analysis frame that is actually fitted keeps 153 of
+    # 1,707. Both are pool-dependent -- they fell that day from 277 and 264, when
+    # ie_02's Checklists 1 + 2 administrations were given their own 476-word
+    # ceiling and left the native set -- so read the fit log for the live figure
+    # rather than trusting a number here.
     # On vg15 it also collapses psi to its single-study branch, because uk_02's
     # DSE arm is the only cross-tab source native to 810 — so read it for the
     # trajectory shapes, not for the association. Both engines print the excluded
@@ -723,8 +746,9 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # use. The lag predictor is a logit of a *proportion*, understood / 810, so
     # a short-form source enters it already deflated -- the harmonisation acts
     # directly on the regressor here, not only on the outcome. Read the verdict
-    # with its support in view: the same restriction keeps 264 of VG10's 1,424
-    # fitted rows, and it changes study composition as well as size. (Until
+    # with its support in view: the same restriction keeps 153 of VG10's 1,707
+    # fitted rows (2026-09-15, three studies once ie_02 left the native set), and
+    # it changes study composition as well as size. (Until
     # #289 task 4.2 the plot-grid `gap` series was matched on exact ages, so a
     # restricted pool's different linspace made every such variant "partial
     # coverage" with nothing compared; it is now interpolated onto the

@@ -222,7 +222,7 @@ if __name__ == "__main__":
         help=(
             "Root directory for model output (overrides "
             "$DSE_VOCAB_GROWTH_OUTPUT_DIR; default: <repo>/output). Useful for "
-            "redirecting heavy traces to a scratch disk on ephemeral VMs."
+            "redirecting heavy traces to another volume."
         ),
     )
     parser.add_argument(
@@ -251,8 +251,8 @@ if __name__ == "__main__":
             "Which compiler nutpie evaluates the log-density with (overrides "
             "$DSE_VOCAB_GROWTH_NUTPIE_BACKEND; default: numba). 'jax' is the "
             "escape hatch for a graph numba cannot compile on a platform -- "
-            "VG15 fallback-dispersion's 44 free variables on the linux-aarch64 "
-            "refit VM (#289 task 4.1). Does not affect the posterior; recorded "
+            "VG15 fallback-dispersion's 44 free variables on linux-aarch64 "
+            "(#289 task 4.1). Does not affect the posterior; recorded "
             "in the fit manifest's runtime block."
         ),
     )
