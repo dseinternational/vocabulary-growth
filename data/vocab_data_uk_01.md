@@ -99,6 +99,7 @@ This data was collected during the 1990s through to 2000.
 - survey_vocab_max
 - spoken
 - signed
+- understood_only
 - understood
 - understood_imputed
 - produced
@@ -123,18 +124,34 @@ analysis.
 The `survey_vocab_max` recorded for WS rows was 690 for most of this dataset's history, and briefly 689; neither survives verification. The original project report (Sarah Duffen Centre, August 2000, `project_2.doc` in the DSE research archive) describes administering and scoring the standard MacArthur CDI per the Fenson et al. (1993) manual and comparing against the Fenson normative sample, with no mention of any restructured UK form; its instrument paragraph states "a checklist of 689 words" — the source of the 689 that stood here until 2026-08-31 — but that same paragraph also miscounts the WS categories (19 + 2 where the actual form has 22), and no published CDI version has 689 items. The published CDI:WS vocabulary checklist is 680 words across 22 semantic categories. The source data agrees: over the 154 WS administrations, the maximum count attained equals the standard American category size exactly in every category where the ceiling is reached (five children at exactly 103 action words, 14 at exactly 7 question words, 43 at exactly 12 sound effects, …), the remaining categories stay below their sizes, and the handful of single-row overshoots are isolated entry errors — two of them sit in rows that are corrupt on other fields as well (e.g. pronouns recorded as 55 of 25). The recorded 690 had no traceable source at all. No observed count exceeds 680 (WS maximum spoken/produced is 669), so the correction drops or masks nothing; it changes the recorded form ceiling only.
 
 The per-item columns carry a `c` / `v` / `s` suffix per semantic category:
-**c = comprehension** (understands), **v = vocalised** (says), **s = signed**. Signing
+**c = understood only** (understands, but neither says nor signs), **v = vocalised** (understands and says), **s = signed**. The three are **alternative responses for each word**, not independent ticks, so a category's words understood are `c + v + s`. Signing
 was recorded as a **per-word add-on question** ("indicate if the child _signs_ the
 word"), and — per the write-up — was added to **only some** questionnaires.
 
 Summary columns (verified against the category counts):
 
-| Column       | Meaning in uk_01                                                        |
-| ------------ | ----------------------------------------------------------------------- |
-| `understood` | words understood (comprehension)                                        |
-| `spoken`     | **vocalised** words (words the child says) = sum of the `v` categories  |
-| `signed`     | **signed-only** words (signed but not vocalised) — see note below       |
-| `produced`   | **total expressive union** = `spoken + signed` (each word once)         |
+| Column            | Meaning in uk_01                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `understood_only` | words understood but neither said nor signed = sum of the 19 `c` categories              |
+| `understood`      | **total words understood** = `understood_only + produced` on Words and Gestures rows; empty on Words and Sentences rows |
+| `spoken`          | **vocalised** words (words the child says) = sum of the `v` categories                   |
+| `signed`          | **signed-only** words (signed but not vocalised) — see note below                        |
+| `produced`        | **total expressive union** = `spoken + signed` (each word once)                          |
+
+### `understood` counts every word understood, including those said or signed (corrected 2026-09-14)
+
+> [!NOTE]
+> This section was drafted by an LLM-based AI tool (Claude Code/Opus 5), from the source file and the original study report ([#320](https://github.com/dseinternational/vocabulary-growth/issues/320)).
+
+Until 2026-09-14 `understood` was the sum of the `c` columns alone — words understood but **not** produced — so `spoken / understood` could exceed 1 (it did for 2 of the 29 rows then carrying a value, to 1.95), and those two were masked by `mask_comprehension_below_production`. The exclusive reading rests on three checks, detailed in `prepare/uk_01_edg.md` in `research-data-analysis`, where the CSV is built and where the correction was made:
+
+- **The form.** The original project report describes the Words and Gestures form as asking whether the child "understands" each word or "understands and says" it.
+- **The source's own totals.** `Combined groups.sav` holds both `WORDSUND` ("Words understood") and `UNDERST` ("Total words understood"), and `UNDERST == WORDSUND + WORDS` (total words produced) on all 224 rows.
+- **The category ceilings.** On the 70 Words and Gestures rows `c + v + s` reaches the published category size exactly in 16 of 19 categories, while no row in any category has `c` at the category size alongside a single word said or signed.
+
+The same correction retired an upstream rule that set a category's `c` to missing wherever it was zero while `v` or `s` was not — under this coding, simply a child who produces every word they understand in that category. It had emptied the comprehension of **41 of the 70** Words and Gestures rows, so uk_01 now contributes 69 comprehension counts to the pool (one row belongs to a withheld subject, below) where it contributed 27.
+
+Comprehension was recorded on the **Words and Gestures form only**: every `c` is zero on all 149 Words and Sentences rows, so `understood` is empty there and `survey_vocab_max` for every comprehension count is 396.
 
 ### `produced` is a de-duplicated union — NOT a double-count
 

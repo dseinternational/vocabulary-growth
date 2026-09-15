@@ -187,7 +187,7 @@ def test_dse_native_restriction_on_the_real_pool():
     assert dropped == len(pool) - 277
     assert sorted(native["study"].unique()) == ["ie_01", "ie_02", "uk_02", "uk_06"]
     assert native["subject_id"].nunique() == 194
-    # 250, not 259: seven of the eleven counts mask_comprehension_below_production
+    # 250, not 259: seven of the nine counts mask_comprehension_below_production
     # masks are ie_01 rows inside this subset, the uk_02 record with no
     # `produced` (#236) is an 810-item row inside it too, and the withheld ie_02
     # t2 administration (IE02_WITHHELD_ADMINISTRATIONS) took one more.
@@ -1919,11 +1919,12 @@ def test_comprehension_rule_counts_per_study():
 
 
 @requires_real_db
-def test_load_combined_data_masks_the_eleven_impossible_comprehension_counts():
-    # End-to-end against the real database. Eleven administrations across four
+def test_load_combined_data_masks_the_nine_impossible_comprehension_counts():
+    # End-to-end against the real database. Nine administrations across three
     # studies record a comprehension count below the child's own production:
-    # ten against `produced`, and the uk_02 row with no `produced` against its
-    # spoken count (#236).
+    # eight against `produced`, and the uk_02 row with no `produced` against its
+    # spoken count (#236). uk_01 contributed two more until its comprehension
+    # count was corrected at source to include words said and signed (#320).
     masked = data_utils.load_combined_data()
     reinstated = data_utils.load_combined_data(
         include_comprehension_below_production=True
@@ -1931,10 +1932,10 @@ def test_load_combined_data_masks_the_eleven_impossible_comprehension_counts():
     difference = int(
         reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
     )
-    assert difference == 11
+    assert difference == 9
     newly = reinstated["understood"].notna() & masked["understood"].isna()
     assert reinstated.loc[newly, "study"].value_counts().to_dict() == {
-        "ie_01": 7, "uk_01": 2, "it_01": 1, "uk_02": 1,
+        "ie_01": 7, "it_01": 1, "uk_02": 1,
     }
     # The flag reinstates comprehension only; nothing else moves, and `produced`
     # never reaches a caller.
@@ -2009,7 +2010,7 @@ def test_the_comprehension_reinstatement_reaches_the_supported_fit_interface():
     difference = int(
         reinstated["understood"].notna().sum() - masked["understood"].notna().sum()
     )
-    assert difference == 11
+    assert difference == 9
 
     # It is a Down-syndrome-pool defect class, so asking for it on the
     # typically-developing pool is a caller error rather than a silent no-op.

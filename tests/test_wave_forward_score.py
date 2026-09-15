@@ -177,25 +177,32 @@ def test_the_lagged_scored_rows_are_the_coefficients_own_support():
     The audit says the coefficient rests on 473 administrations. That is exactly
     the lagged rows carrying a spoken observation, so if this script's scored set
     disagreed with it, one of the two would be describing a different model.
+
+    501 since 2026-09-14: correcting uk_01's comprehension count to include the
+    words produced (#320) restored 42 uk_01 comprehension values, and 28 uk_01
+    later waves gained a lag source from them (22 -> 50 supporting rows there;
+    every other study unchanged). The audit's 473 describes the frame before it.
     """
     frame, definition = _registered_frame()
     lagged, _source = wf.lag_source(frame, definition)
     supporting = int((lagged & frame["spoken"].notna().to_numpy()).sum())
-    assert supporting == 473
+    assert supporting == 501
 
 
 @pytest.mark.slow
 def test_the_audits_unlagged_later_wave_count_is_reproduced():
-    """153 later rows whose every earlier wave lacked comprehension.
+    """125 later rows whose every earlier wave lacked comprehension.
 
     The third number the available-case audit reached independently. Together
     with the 975 first waves it accounts for every row the coefficient cannot
-    reach, so agreement here means the two are describing the same frame.
+    reach, so agreement here means the two are describing the same frame. The
+    audit counted 153; the 2026-09-14 uk_01 comprehension correction (#320) gave
+    28 of them a lag source, all uk_01 (58 -> 30), and moved no first wave.
     """
     frame, definition = _registered_frame()
     lagged, _source = wf.lag_source(frame, definition)
     later = wf.wave_index(frame) > 0
-    assert int((later & ~lagged).sum()) == 153
+    assert int((later & ~lagged).sum()) == 125
     assert int((~later).sum()) == 975
 
 
