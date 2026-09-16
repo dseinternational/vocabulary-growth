@@ -32,6 +32,16 @@ VG11_SUMMARY = {
     "checks": {},
 }
 
+#: The 2026-09-16 refit's failure: the same GP ridge, seen on the length scale
+#: rather than on a basis coefficient, with the coefficients at 1.0068.
+VG11_LENGTH_SCALE_SUMMARY = {
+    "max_rhat": 1.0116,
+    "min_ess": 888.9,
+    "rhat_failing": ["ell_unit", "ell"],
+    "ess_failing": [],
+    "checks": {},
+}
+
 
 def test_only_vg11_has_an_exception():
     """One entry. A second is a decision, not a refactor."""
@@ -40,6 +50,28 @@ def test_only_vg11_has_an_exception():
 
 def test_the_exception_applies_to_the_failure_it_was_written_for():
     assert accepted_rhat_exception("VG11", VG11_SUMMARY) is not None
+
+
+def test_the_exception_covers_the_length_scale_the_refit_failed_on():
+    """`ell`/`ell_unit` are the 2026-09-16 decision, and both must be covered.
+
+    They are one quantity — `ell` is `ell_unit` mapped onto the z scale — so an
+    entry naming only one of them would close the gate on the other.
+    """
+    assert accepted_rhat_exception("VG11", VG11_LENGTH_SCALE_SUMMARY) is not None
+    for parameter in ("ell", "ell_unit"):
+        summary = {**VG11_LENGTH_SCALE_SUMMARY, "rhat_failing": [parameter]}
+        assert accepted_rhat_exception("VG11", summary) is not None, parameter
+
+
+def test_the_length_scale_exception_refuses_to_widen():
+    """A reported quantity failing alongside the length scale still closes it."""
+    for extra in ("eta", "tau_subject", "f_plot[12]"):
+        summary = {
+            **VG11_LENGTH_SCALE_SUMMARY,
+            "rhat_failing": [*VG11_LENGTH_SCALE_SUMMARY["rhat_failing"], extra],
+        }
+        assert accepted_rhat_exception("VG11", summary) is None, extra
 
 
 @pytest.mark.parametrize(
