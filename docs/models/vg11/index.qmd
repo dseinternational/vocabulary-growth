@@ -297,7 +297,7 @@ render_prior_posterior_contraction()
 
 The study-effect scale, the child-effect scale and the two variance-partition parameters first; then the GP length-scale and amplitude, and the age-varying dispersion. VG11 exists to use the whole typically-developing pool while absorbing between-dataset variation, so weak behaviour in the hierarchy terms is substantively important rather than merely technical.
 
-Compare the marginal posteriors above with the prior figures earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. This is worth doing deliberately for the GP amplitude, whose calibration in this model family is a known open question.
+Compare the marginal posteriors above with the prior figures earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. This is worth doing deliberately for the GP amplitude, whose calibration in this model family is a known open question. Its prior was narrowed from `HalfNormal(0.5)` to the standard `HalfNormal(0.4)` on 2026-09-16: under the wider prior the length scale failed the convergence check twice while every reported quantity converged, and a fit at the narrower prior had already cleared the check with the reported trajectory unchanged to within half a word. The data pin down how much the curve bends, not how that bend splits between amplitude and length scale, so expect the length-scale posterior to stay close to its prior. The amplitude is the opposite case: the data ask for more of it than the narrower prior readily offers, so its posterior sits in the prior's upper tail, which is the prior regularising a parameter this report does not interpret rather than a restatement of it.
 
 Repeated observations of the same child are uncommon in this pool, which limits how sharply the child scale can be separated from residual dispersion, and is the recorded structural reason this model family strains the energy diagnostic. It is not something a different parameterisation fixes.
 
@@ -335,7 +335,7 @@ The between-child row is a different estimand again: it is how much children of 
 
 ::: {.callout-note title="Sensitivity variants"}
 
-Several deliberate one-change variants of this model are registered and can be refitted with `scripts/fit_sensitivity.py`: alternative anchor priors, a narrower GP amplitude, wider and narrower study-effect scales, and a variant retaining a single administration per child with the child effects removed. **None of them is reported here.** Any conclusion in this report that would change under one of those changes is not established by this fit alone, and the variants are the way to find out which conclusions those are.
+Several deliberate one-change variants of this model are registered and can be refitted with `scripts/fit_sensitivity.py`: alternative anchor priors, the wider GP amplitude this model carried until September 2026, wider and narrower study-effect scales, and a variant retaining a single administration per child with the child effects removed. **None of them is reported here.** Any conclusion in this report that would change under one of those changes is not established by this fit alone, and the variants are the way to find out which conclusions those are.
 
 :::
 
