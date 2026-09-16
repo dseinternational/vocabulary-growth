@@ -367,11 +367,14 @@ VARIANTS: dict[tuple[str, str], dict] = {
             log_ratio_sigma=0.5,
         )}},
 
-    # VG11 (TD spoken anchors, #138): revert the (norm-anchored) spoken band and eta.
+    # VG11 (TD spoken anchors, #138): revert the (norm-anchored) spoken band.
     ("vg11", "anchor-broad"): {"suffix": "anchor-broad", "scalar": {
         "p_slope_low_alpha": 1.0, "p_slope_low_beta": 15.0,
         "p_slope_hi_alpha": 1.5, "p_slope_hi_beta": 1.1}},
-    ("vg11", "eta-narrow"): {"suffix": "eta-narrow", "scalar": {"eta_sigma": 0.4}},
+    # The widened GP amplitude VG11 carried until 2026-09-16. This arm was
+    # `eta-narrow` (0.4) until the model of record adopted 0.4 (#357), which made
+    # it a no-op; it now keeps the former model of record reachable instead.
+    ("vg11", "eta-wide"): {"suffix": "eta-wide", "scalar": {"eta_sigma": 0.5}},
 
     # VG12 (TD understood anchors, #138): the 12 mo LOW anchor is Wordbank-norm
     # matched (test it reverts cleanly); the 26 mo HIGH anchor has NO CDI

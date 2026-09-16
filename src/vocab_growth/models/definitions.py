@@ -3408,13 +3408,28 @@ VG11 = UnivariateREModelDefinition(
     slope_anchors=(12, 26),
     ages_query=(9, 12, 15, 18, 21, 24, 27, 30,),
     gp_domain_months=_TD_GP_DOMAIN_MONTHS,
-    # Spoken trajectory priors shared with VG03 (see the note there): lower the
-    # 12 mo anchor for delayed TD production, soften the 26 mo anchor, widen eta.
+    # Spoken trajectory anchors shared with VG03 (see the note there): lower the
+    # 12 mo anchor for delayed TD production and soften the 26 mo anchor. The GP
+    # amplitude is NOT shared with VG03 any more -- see eta_sigma below.
     p_slope_low_alpha=1.0,
     p_slope_low_beta=30.0,
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
-    eta_sigma=0.5,
+    # NARROWED from 0.5 to 0.4 on 2026-09-16 (study-owner decision, #357), back to
+    # the standard GP amplitude; VG03 keeps the widened 0.5. VG11's GP is
+    # orthogonalised against the constant and the line, and every admissible
+    # length scale leaves nearly the same residual shape, so the data identify
+    # how much curvature there is but not its split between amplitude and length
+    # scale (notes/202609160500 §2). At 0.5 the model of record failed the hard
+    # R-hat gate on that ridge twice -- 1.0125 in August, 1.0116 on `ell` on
+    # 2026-09-16 -- while every reported quantity converged. The registered
+    # `eta-narrow` arm measured the remedy at `rep` on 2026-08-15: 16 -> 3
+    # divergences, max R-hat 1.0125 -> 1.0075, and the eight reported ages within
+    # 0.22% (largest difference 0.44 words at 30 mo), every point inside the
+    # 0.5 fit's own 89% interval (notes/202608142000 §5c). The old value stays
+    # reachable as the `eta-wide` sensitivity arm. See
+    # notes/202609161440-vg11-eta-sigma-0.4.md.
+    eta_sigma=0.4,
     # Use all bivariate-capable rows (WG + Oxford CDI) plus WS production rows.
     # Study REs absorb between-lab variation, so subsampling is not needed.
     sample_fraction=1.0,
