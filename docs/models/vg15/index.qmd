@@ -136,7 +136,7 @@ $$
 \pi_\text{both} = C(r, q; \psi), \quad \pi_\text{sign-only} = r - \pi_\text{both}, \quad \pi_\text{speak-only} = q - \pi_\text{both}, \quad \pi_\text{neither} = 1 - r - q + \pi_\text{both}.
 $$
 
-$\psi = 1$ is independence, where $\pi_\text{both} = r\,q$ — the assumption [VG14](../vg14/index.qmd) has to make. $\psi > 1$ is positive association: a word is signed and spoken together more often than independence predicts. The **data-identified total expressive vocabulary** is then the union, counting a word the child both signs and says exactly once:
+$\psi = 1$ is independence, where $\pi_\text{both} = r\,q$ — the assumption [VG14](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg14/index.qmd) has to make. $\psi > 1$ is positive association: a word is signed and spoken together more often than independence predicts. The **data-identified total expressive vocabulary** is then the union, counting a word the child both signs and says exactly once:
 
 $$
 p_\text{any}(a) = p_U(a)\,\bigl(r(a) + q(a) - \pi_\text{both}(a)\bigr),

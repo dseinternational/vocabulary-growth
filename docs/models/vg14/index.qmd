@@ -54,7 +54,7 @@ render_reading_routes('development', instead='VG15')
 
 ::: {.callout-important title="Superseded: read VG15 instead for any total-expressive number"}
 
-**VG14 is a development step, not a source for reported numbers.** The study owner confirmed on 2026-08-06 that it is wholly replaced by [VG15](../vg15/index.qmd) for reporting; see the role table in [the model inventory](../README.md). VG15 supplies everything VG14 does — including this model's independence-based total, which VG15 emits alongside its own as `p_any_indep` — on a better-specified model. This page is retained to show how the signing structure was built.
+**VG14 is a development step, not a source for reported numbers.** The study owner confirmed on 2026-08-06 that it is wholly replaced by [VG15](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg15/index.qmd) for reporting; see the role table in [the model inventory](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/README.md). VG15 supplies everything VG14 does — including this model's independence-based total, which VG15 emits alongside its own as `p_any_indep` — on a better-specified model. This page is retained to show how the signing structure was built.
 
 VG14 differs from VG15 in two ways, and the second matters more than the first:
 
