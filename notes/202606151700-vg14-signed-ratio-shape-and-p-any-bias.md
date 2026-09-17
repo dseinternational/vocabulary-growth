@@ -1,5 +1,8 @@
 # VG14 review: signed-ratio shape, p_any bias, and uk_06
 
+> [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The description of independence as an upper bound requires qualification. At fixed sign and speech margins, independence lies between the possible union bounds. It overstates the union only when overlap exceeds independence. See the [corrected VG14 explanation](../docs/models/vg14/index.qmd#total-expressive-vocabulary) and [composition example](../docs/tutorials/model-code-walkthrough.md#count-overlapping-spoken-and-signed-words). The fitted numbers below remain a dated record.
+
 Status: 2026-06-15, post-baseline review. Checks the first VG14 fit
 (`202606151500-vg14-signing-baseline.md`) against the raw source data. Author:
 Ethan (with Claude Code). All numbers are computed from `data/` (the merged

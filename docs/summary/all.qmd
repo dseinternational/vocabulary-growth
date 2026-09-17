@@ -47,8 +47,8 @@ format:
 
 <!--
 The combined review document: every site page, in order, as one DOCX or PDF
-for partners to read before publication. Not rendered by a bare `quarto render`
-(see _quarto.yml); use `quarto render all.qmd --to docx` or `--to pdf`.
+for partners to read before publication. Included in a project render (see _quarto.yml). Render it alone with
+`quarto render all.qmd --to docx` or `--to pdf`.
 The pages carry no front matter of their own so that they can be included here
 and exported on their own to Markdown. Keep this list in step with README.md.
 -->

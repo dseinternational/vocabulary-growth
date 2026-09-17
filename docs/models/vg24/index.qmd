@@ -20,12 +20,14 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 :::
 
 ::: {.callout-note}
-This narrative was written from the model's specification before its first reporting-quality fit, deliberately from scratch rather than derived from VG15's report — copying the parent's report is how VG21 inherited three claims that had already been withdrawn from VG13 ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)). Every number on this page is rendered from the fit named in the banner below. The sections on what the correlations mean were written before that fit existed and should be read as the questions the fit answers, not as its answers.
+The tables and figures describe the fit named in the banner. Model structure alone does not establish the direction or size of an association.
 :::
 
 ```{python}
@@ -60,17 +62,17 @@ render_reading_routes('record', signing=True)
 
 ## Why this model, and why not a cross-lag {#sec-why}
 
-The sign-to-speech question has been examined descriptively three times and has never had a fitted model behind it. The three descriptive answers are different quantities, and reading them as one is the mistake this page is written to prevent:
+Earlier work examined several different associations. The table gives their definitions and source records, not interchangeable estimates.
 
-| Where | Quantity | Result |
-| --- | --- | --- |
-| `notes/202608160930-early-signing-and-later-speech.md` | Prospective: signed share predicts *later* spoken vocabulary, holding earlier speech and comprehension fixed | $+0.19$ SD per SD, 89% ETI $[0.03, 0.36]$ |
-| `notes/202608141500-sign-speech-additivity-and-cross-lag.md` §3 | Concurrent between-child association at matched comprehension and age | zero to negative, bracketed $[-0.44, -0.05]$ |
-| Gate 1 for this model | Correlation of VG15's own fitted child intercepts | $+0.198$, 89% ETI $[0.107, 0.289]$ |
+| Source | Quantity |
+| --- | --- |
+| `notes/202608160930-early-signing-and-later-speech.md` | Prospective: signed share predicts *later* spoken vocabulary, holding earlier speech and comprehension fixed |
+| `notes/202608141500-sign-speech-additivity-and-cross-lag.md` §3 | Concurrent between-child association at matched comprehension and age |
+| Gate 1 for this model | Correlation of VG15's own fitted child intercepts |
 
-The second and third do not conflict, because they are measured on almost disjoint children: the concurrent analysis used the three cell-partition sources (`uk_02`, `uk_07`, `es_01`), which are exactly where VG15's child effects do not enter. VG24 estimates the third quantity properly — adjusted for age, study and the Beta-Binomial measurement model, with the uncertainty propagated rather than read off point estimates.
+These analyses differ in sample and target. VG24 estimates the persistent child-effect correlation within its own observation model. A descriptive correlation of estimated child effects is not the same estimate with uncertainty fully propagated.
 
-**A sign → speech cross-lag is the other obvious model, and is deliberately not this one** ([#297](https://github.com/dseinternational/vocabulary-growth/issues/297), deferred on [#242](https://github.com/dseinternational/vocabulary-growth/issues/242)). The argument is the one `notes/202608151140-cross-lag-not-for-models-of-record.md` made for VG16 and it is unchanged here: within-child deviations were measured to have no memory beyond the occasion, so a population-baseline lag mostly absorbs the covariance between *persistent* standings through a noisy proxy. The persistent covariance is what VG24 estimates directly. It comes first for the same reason VG20 came before any lag model on the bivariate side.
+VG25 adds an earlier-signing predictor to VG24. A population-relative lag can mix persistent differences between children with change within children. A within-child baseline changes that target, but does not by itself prove a causal or purely within-child interpretation. The earlier claim that temporary deviations have no persistence was withdrawn after the lag-wave correction.
 
 ## What identifies each correlation {#sec-support}
 
@@ -136,9 +138,9 @@ except Exception as _exc:  # noqa: BLE001 - a report must not fail on a missing 
 ::: {.callout-warning}
 ## The reporter confound, stated up front
 
-All three counts come from **one questionnaire completed by one parent**. A parent who over-reports tends to over-report every modality, so shared reporting tendency is not merely hard to separate from shared child ability — the model contains no term for it at all, and it loads onto the correlations by default. That biases all three **upward** in magnitude.
+A parent can report several outcomes on the same questionnaire. Shared reporting or occasion effects may contribute to the fitted correlations because the graph has no separate terms for them. The direction and size of that contribution are not established.
 
-This is the same caveat VG20 and VG23 carry for $\rho_{uq}$, and it applies with more force here: signing and speech are reported on the same form, item by item, by the same informant. Any number this page produces should be read as a model-conditional association in observed child standing, not as a pure persistent-ability correlation.
+Read the correlations as associations under this model, with reporting and measurement assumptions included. They do not isolate a biological trait or the effect of teaching signs.
 :::
 
 ## How to read this report
@@ -185,12 +187,12 @@ Every prior is VG15's, unchanged, including the three child-effect scales: $\tau
 ::: {.callout-note}
 ## $\eta = 2$ here is not quite $\eta = 2$ in VG20
 
-$\eta = 2$ is chosen to match VG20 and VG23 so that the three models' $\rho_{uq}$ are estimated under the same concentration and a comparison between them is not an artefact of regularisation. The induced **marginal** on any one correlation is not identical, because it depends on the size of the block: under $\mathrm{LKJ}(\eta)$ on an $n \times n$ matrix, $(\rho + 1)/2 \sim \mathrm{Beta}(\eta + (n-2)/2,\ \eta + (n-2)/2)$. At VG24's $n = 3$ that is a prior SD of $0.41$, against $0.45$ at VG20's $n = 2$ — close enough that the comparison is fair, different enough to state rather than imply that the priors are the same object. The priors table above computes the bounds it quotes from the block's actual size.
+VG24 uses the same LKJ concentration as VG20 and VG23, but its three-dimensional block gives a different marginal correlation prior. Under LKJ($\eta$) on an $n \times n$ matrix, $(\rho+1)/2$ follows $\mathrm{Beta}(\eta+(n-2)/2,\eta+(n-2)/2)$. Read the prior table and sensitivity checks before treating comparisons as prior-matched.
 :::
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend may move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior on the understood GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -200,7 +202,7 @@ $\eta = 2$ is chosen to match VG20 and VG23 so that the three models' $\rho_{uq}
 
 ### Production ratio
 
-![How far apart in age two points must be before the production ratio may move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior on the production-ratio GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -210,7 +212,7 @@ $\eta = 2$ is chosen to match VG20 and VG23 so that the three models' $\rho_{uq}
 
 ### Signed ratio
 
-![How far apart in age two points must be before the signed trend may move independently.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
+![Prior on the signed GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the tent mean, on the logit scale.](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
 
@@ -314,20 +316,20 @@ render_diagnostic_verdict()
 ```
 
 ::: {.callout-note}
-The child block is sampled as one joint object rather than as three independent scales, so its geometry is not VG15's. A correlation near $\pm 1$ makes the covariance near-singular and is the failure mode to watch for in the energy and pair plots; a correlation the data cannot determine shows instead as a flat posterior close to the prior, which is an informative result rather than a defect.
+The child block is sampled as one joint object rather than as three independent scales, so its geometry is not VG15's. A correlation near $\pm 1$ makes the covariance near-singular and is the failure mode to watch for in the energy and pair plots; limited learning may leave a posterior close to its prior. Neither pattern replaces the full convergence and sensitivity assessment.
 :::
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors for the prioritised parameters. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors for the prioritised parameters. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the sampled and derived parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
 ### Prior to posterior {#sec-contraction}
 
-How much each prior was narrowed by the data, computed from this fit's trace rather than read off the figures above. For the three correlations this is the number that separates "estimated" from "returned unchanged".
+Contraction compares posterior and prior standard deviations. Also inspect shifts in location and shape; unchanged width does not mean the data supplied no information.
 
 ```{python}
 #| echo: false
@@ -457,7 +459,7 @@ The child shifts do not enter the cell likelihoods that identify $\psi$, so $\ps
 
 ## Total expressive vocabulary {#sec-total-expressive}
 
-![The data-identified total expressive vocabulary against the independence upper bound.](p_any_identified_vs_bound.png){#fig-p-any .lightbox fig-align="left"}
+![Total expressive vocabulary under the fitted association and under independence. Independence is a comparison assumption, not a general upper bound.](p_any_identified_vs_bound.png){#fig-p-any .lightbox fig-align="left"}
 
 ## What signing is worth to the child {#sec-signing-value}
 
@@ -515,8 +517,8 @@ render_loo_section()
 
 ## Limits {#sec-limits}
 
-- **The correlations are model-conditional associations in observed child standing, not persistent-ability correlations.** The graph contains no informant, same-administration or measurement-error term, so shared parent-reporting tendency loads onto all three. The confound is stated at the top of this page because it is not removable by anything in this model.
+- **The correlations are model-conditional associations in observed child standing, not persistent-ability correlations.** The graph contains no informant, same-administration or measurement-error term, so shared parent-reporting tendency can contribute to the fitted associations. The confound is stated at the top of this page because it is not removable by anything in this model.
 - **$\rho_{sign\,q}$ and $\rho_{u\,sign}$ rest on a subset of the frame**, quantified in @sec-support. The interval each carries is the interval that subset supports.
 - **Signing is very nearly a study-level property.** A binary signer/non-signer contrast is not identifiable in this pool, which is why the model estimates a correlation among continuous child standings rather than a group difference. Study random intercepts absorb between-study level, so the correlation is estimated within studies; where a study contributes few children with both marginals, it contributes little.
-- **This is a between-child estimate and carries no temporal direction.** It cannot say whether signing earlier leads to more speech later. That is the cross-lag question, deliberately deferred to [#297](https://github.com/dseinternational/vocabulary-growth/issues/297) behind [#242](https://github.com/dseinternational/vocabulary-growth/issues/242), and no reading of $\rho_{sign\,q}$ substitutes for it.
+- **This is a between-child estimate and carries no temporal direction.** It cannot say whether signing earlier leads to more speech later. VG25 examines an earlier-signing predictor; $\rho_{sign\,q}$ does not answer that question.
 - **A correlation is not a mechanism.** Children who sign more of what they understand and say more of it may share a cause — earlier intervention, a more responsive language environment, a milder phenotype — that this model does not observe and does not adjust for.

@@ -20,12 +20,14 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 :::
 
 ::: {.callout-note}
-This narrative was written from the model's specification before its first reporting-quality fit, deliberately from scratch rather than derived from VG13's report — copying the parent's report is how VG21 inherited three claims that had already been withdrawn from VG13 ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)). Every number on this page is rendered from the fit named in the banner below. The sections on what the correlation means and what the between-child scales can be read as were written before that fit existed and should be read as the questions the fit answers, not as its answers.
+The tables and figures describe the fit named in the banner. Model structure alone does not establish the direction or size of an association.
 :::
 
 ```{python}
@@ -38,7 +40,7 @@ render_sampling_banner()
 
 VG23 is VG13 plus one parameter — and, since 2026-09-13, plus the sex covariate the reporting models carry ([#324](https://github.com/dseinternational/vocabulary-growth/issues/324)), which VG13, superseded, does not. VG13 gives each typically-developing child two deviations — one on the comprehension trajectory, one on the production ratio $q$ — and draws them independently, which fixes at zero the relationship between how much a child understands relative to their age and how much of it they say. VG23 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer. VG13 with the sex covariate added is nested exactly at $\rho_{uq} = 0$.
 
-It is the same change VG20 makes to VG10 on the Down syndrome side, and the prior is matched deliberately ($\eta = 2$), so the two populations' correlations are estimated under the same prior and any comparison between them is not an artefact of how each was regularised.
+It is the same change VG20 makes to VG10 on the Down syndrome side, and the prior is matched deliberately ($\eta = 2$), so the two correlation parameters share a marginal prior. Other model assumptions and prior effects can still affect the comparison.
 
 ```{python}
 #| echo: false
@@ -62,16 +64,16 @@ render_reading_routes('reference', joint=True)
 
 The correlation is worth estimating in its own right, but it is not the reason VG23 was registered. The reason is identification (issue [#229](https://github.com/dseinternational/vocabulary-growth/issues/229), option 3).
 
-Separating **between-child** from **within-child** variation needs replication — the same child measured more than once. The typically-developing pool has very little: VG13's children average 1.16 administrations, and only 15.1% have a second visit. The split is therefore identified largely by the shape of the likelihood rather than by repeated observation, which means it is only as good as the noise model. That is consistent with the recovery evidence: the between-child scale comes back below its truth in 9 of 9 replicates across three models ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)).
+Repeated assessments help distinguish persistent child differences from residual count variation. Most children in this TD pool contribute one assessment, so that split depends strongly on the model and priors. Recovery findings apply to the particular definitions, truth settings and converged replicates tested.
 
-A correlation between the two child effects opens a second channel that needs no repeat visit at all. Every administration yields **two** counts — understood and spoken — from one child on one day. A child's persistent ability moves both, while the Beta-Binomial noise is assumed independent across them, so the agreement between the two counts carries information about that child's standing. Where replication informs the split on 15% of rows, this informs it on 100%.
+Paired comprehension and speech counts can add information about the association between child effects, even at a single visit. The nested likelihood already links spoken counts to understood counts. Estimating an additional persistent correlation still depends on the assumed observation model; a paired observation is not a substitute for repeated measurements.
 
 ::: {.callout-warning}
 ## The confound, stated up front
 
-Both counts come from **one questionnaire completed by one parent**. A parent who over-reports tends to over-report both, so shared reporting tendency is not merely hard to separate from shared child ability — the model contains no term for it at all, and it loads onto $\rho_{uq}$ by default. That biases the correlation, and through it the child scales, **upward**.
+The same parent reports comprehension and speech. Shared reporting or occasion effects could contribute to the fitted child association, and the model does not separate them. Their size and direction on the comprehension and conversion scales are not established.
 
-The variance partition that VG11 and VG12 carry biases the same quantity **downward**. The two therefore *bracket* the truth rather than resolving it. Neither is a point estimate to publish unqualified, and any number this report produces for $\rho_{uq}$ or for the between-child scales should be read with that stated.
+Recovery bias in a different model does not provide the opposite end of a valid bound. Neither the partition model nor the correlated model establishes where the true child variation lies without further checks.
 :::
 
 ## How to read this report
@@ -113,7 +115,7 @@ from vocab_growth.report_cells import render_priors_table
 render_priors_table()
 ```
 
-Every prior is VG13's, unchanged. The one addition is the LKJ concentration on the child-effect correlation, $\eta = 2$ — a gentle pull toward independence, so that a correlation has to be evidenced rather than assumed. A prior that made a large correlation cheap would be assuming the answer to the question the model was built to ask.
+VG23 inherits VG13's trajectory and scale priors and adds sex effects and an LKJ(2) child correlation. This correlation prior favours values near zero but remains informative about magnitude. Use the current prior table and sensitivity output to assess its influence.
 
 ![Trajectories for words understood drawn from the priors.](prior_samples_u.png){#fig-prior-samples-u .lightbox fig-align="left"}
 
@@ -171,14 +173,14 @@ render_diagnostic_verdict()
 ```
 
 ::: {.callout-note}
-VG13 carries a recorded energy-BFMI caveat, and VG23 may inherit it. The measured position on the typically-developing models is that the energy pathology is driven by children the data cannot inform and is not reparameterisable away: marginalising the singleton child effects raises minimum BFMI from 0.187 to 0.492 without changing the posterior at all, and pushing the sampler harder does not move it (VG12 at target-accept 0.99 removed every divergence and moved BFMI by 0.001). Whether adding the correlation changes this is an open question, and an informative one — a change would be evidence that the second identification channel supplied information rather than reparameterised what was already there.
+Earlier TD fits showed low energy BFMI, and later experiments linked it to difficulty separating child variation from residual variation. See `notes/202609061900-td-bfmi-is-the-tau-kappa-ridge.md`. Read this fit's diagnostics directly. Changing the correlation structure does not guarantee that the difficulty is resolved.
 :::
 
 ![Energy distribution of the sampler.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters, including $\rho_{uq}$, the study and child scales, the GP hyperparameters and the dispersion terms.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -260,8 +262,8 @@ render_variation_table()
 
 Two comparisons are worth making once there are numbers, and neither is automatic:
 
-- **Against VG13**, which is nested at $\rho_{uq} = 0$. The population trajectories should sit close, but agreement is an empirical stability check rather than a correctness invariant — correlation changes nonlinear subject-marginal expectations, and refitting can legitimately reallocate fixed effects and marginal scales.
-- **Against VG20**, which estimates the same parameter on the Down syndrome pool under the same prior. The reporter confound above applies to both, so a difference between the populations is better founded than either value alone.
+- **Against VG13 with sex effects added**, which is nested at $\rho_{uq} = 0$. The population trajectories should sit close, but agreement is an empirical stability check rather than a correctness invariant — correlation changes nonlinear subject-marginal expectations, and refitting can legitimately reallocate fixed effects and marginal scales.
+- **Against VG20**, which estimates the same parameter on the Down syndrome pool under the same prior. Reporting effects could differ between populations, so they cannot be assumed to cancel in the contrast.
 
 ```{python}
 #| echo: false
@@ -278,7 +280,7 @@ render_family_notes()
 ![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
-![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the zero-effect population trajectory — study and child effects set to zero, which is not an average across children.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ![The fitted production ratio against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
@@ -438,7 +440,7 @@ render_loo_section()
 
 ## Limits {#sec-limits}
 
-- **The reporter confound above is the first limit, not a footnote.** The model has no same-administration or informant term, so shared reporting tendency has nowhere to go but $\rho_{uq}$.
+- **The reporter confound above is the first limit, not a footnote.** The model has no same-administration or informant term, so the fitted correlation can include variation the model does not separate from child differences.
 - **The window is VG13's**, 8–18 months. The study owner has adopted the 8–22-month specification as VG13's successor (VG21). VG23 is derived from VG13 rather than VG21 so that it differed from its parent in exactly one thing (it now also carries the sex covariate VG13 does not). Carrying the correlation to the wider window is VG26, registered on 2026-09-13.
 - **The reference scale is the 810-item inventory**, as elsewhere in this project, and the source forms are shorter. Counts near a short form's ceiling are effectively right-censored.
 - **Nothing here establishes a causal reading.** A correlation between a child's two deviations says they move together, not that one produces the other.

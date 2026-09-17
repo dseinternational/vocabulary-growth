@@ -1,5 +1,8 @@
 # Wordbank By-Child Summary Data (All Languages)
 
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+
 Downloaded from the [Wordbank website](https://wordbank.stanford.edu/data/?name=admin_data) on 15 June 2026.
 
 Language = All, Form = All, Health Conditions = All, Language Status = All.
@@ -14,11 +17,11 @@ For the typically-developing pool this truncation is appropriate — the forms a
 
 ## Language scope
 
-Queries restrict to `ENGLISH_LANGUAGES` (`English (American)`, `English (Australian)`, `English (British)`, `English (Irish)`) by default. The hierarchical typically-developing models (VG11, VG12, VG13) use `ENGLISH_AND_ROMANCE_LANGUAGES`, which adds `Italian` and `Spanish (European)` so the reference pool spans several languages on both sides of the Down-syndrome-versus-typically-developing comparison. VG03/VG04 stay English-only. Both constants are defined in `src/vocab_growth/models/definitions.py`, with the admission criteria and measurement checks on `ROMANCE_LANGUAGES`.
+Queries restrict to `ENGLISH_LANGUAGES` (`English (American)`, `English (Australian)`, `English (British)`, `English (Irish)`) by default. The hierarchical typically-developing models (VG11–VG13, VG21, VG23 and VG26) use `ENGLISH_AND_ROMANCE_LANGUAGES`, which adds `Italian` and `Spanish (European)` so the reference pool spans several languages on both sides of the Down-syndrome-versus-typically-developing comparison. VG03/VG04 stay English-only. Both constants are defined in `src/vocab_growth/models/definitions.py`, with the admission criteria and measurement checks on `ROMANCE_LANGUAGES`.
 
 ## Health conditions
 
-Only the `Edgin` dataset populates `health_conditions`, and it is the only dataset with any `typically_developing = false` rows. Checked 2026-08-03 against the contributor listing (42 languages, 128 dataset entries) and all 147 `raw_data/*/*_fields.csv` field-mapping files in `langcog/wordbank`: **no non-English dataset codes a health condition at all**, and there is no Down syndrome data in Wordbank in any language other than English (American). Note what that does and does not establish — a contributor who supplied no condition column would leave a clinical cohort indistinguishable from a typical one, so the negative result rests on the contributor listing, not on the condition field being empty.
+Only the `Edgin` dataset populates `health_conditions`, and it is the only dataset with any `typically_developing = false` rows. Checked 2026-08-03 against the contributor listing (42 languages, 128 dataset entries) and all 147 `raw_data/*/*_fields.csv` field-mapping files in `langcog/wordbank`: **no non-English dataset codes a health condition at all**, and that audit found no Down syndrome dataset outside English (American). This is a dated finding, not a check of later Wordbank additions. Note what that does and does not establish — a contributor who supplied no condition column would leave a clinical cohort indistinguishable from a typical one, so the negative result rests on the contributor listing, not on the condition field being empty.
 
 `typically_developing` is not a database field. It is computed per child in the Shiny app as `is_null(health_conditions)`, so `false` requires a linked condition row — which is why Edgin's comparison group, whose condition code maps to an empty name, arrives flagged `false` with a blank label. See [US 01](vocab_data_us_01.md).
 

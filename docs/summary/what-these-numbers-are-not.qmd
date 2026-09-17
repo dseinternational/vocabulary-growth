@@ -13,7 +13,7 @@ Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure onl
 :::
 
 <!--
-Outline (sketch note §9, item 9): not a diagnosis, not a target, not a
+Planned page content (item 9): not a diagnosis, not a target, not a
 description of any one child; what the studies are (countries, years,
 instruments, that several are intervention cohorts); what the models leave out.
 -->

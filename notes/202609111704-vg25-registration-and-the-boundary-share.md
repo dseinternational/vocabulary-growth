@@ -1,6 +1,9 @@
 # VG25 registered: the sign → speech cross-lag, and the boundary share that changed a default
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). The initial cross-tabulation lag design is superseded. The registered lag now enters the spoken marginal only. [Follow-up](202609151930-vg25-lag-out-of-the-cells.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]

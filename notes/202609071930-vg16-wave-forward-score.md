@@ -1,6 +1,9 @@
 # VG16's sequential validation target: what is held out, and what may be claimed from it
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The statement that VG16 recovery is unavailable was superseded by the [recovery implementation check](202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md). Both recovery and forward scoring are implemented; each still needs suitable completed runs to provide evidence.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 Date: 2026-09-07. Implements [#242](https://github.com/dseinternational/vocabulary-growth/issues/242) item 5's second half and [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 3.8. The harness is `scripts/wave_forward_score.py`; **no reporting-quality run has been made**, and the numbers it will produce belong in the VM refit window alongside task 3.7's arms.

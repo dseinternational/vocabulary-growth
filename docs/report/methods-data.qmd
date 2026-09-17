@@ -3,6 +3,7 @@ abstract: "**TODO**"
 ---
 
 ::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
 Drafted in part by an LLM-based AI tool (Claude Code/Fable 5).
 :::
 
@@ -10,17 +11,15 @@ Drafted in part by an LLM-based AI tool (Claude Code/Fable 5).
 
 Parent-reported vocabulary checklists record a subset of the words a child knows, speaks or signs.
 
-Lexical items - a subset of total words known.
-
 ## Measures
 
-Different measures - MacArthur-Bates Communicative Development Inventories (WG, WS), Oxford CDI, DSE Checklists, etc.
+The sources use MacArthur-Bates CDI Words and Gestures and Words and Sentences forms, the Oxford CDI, DSE checklists and related adaptations. Their item lists and response options differ. The [data source notes](../../data/readme.md) record the known measurement details.
 
 \[TODO\]
 
 ### Signing measures
 
-Sources record signing in different ways, and the signing fields are harmonised before fitting. `uk_01` records sign-only words and cannot identify total signed vocabulary from its aggregate data, so its understood and spoken values are retained while its signing values are masked in the primary signing analyses (VG14, VG15 and VG17); an explicit sensitivity analysis reintroduces it rather than pooling it silently with the comparable total-sign measures. The `uk_06` signing field was masked on the same principle while its construct was unverified, and was reinstated once the source confirmed the instrument: the standard DSE checklists, whose second column is completed for a word the child *understands and signs*, ticked for imitated as well as spontaneous signs. That is a total sign count, and the data agrees -- signed and spoken are each nested within understood on every uk_06 record, while their sum exceeds it on seven of eleven, which only overlapping per-word ticks can produce.
+Sources record signing in different ways, and the signing fields are harmonised before fitting. `uk_01` records sign-only words and cannot identify total signed vocabulary from its aggregate data, so its understood and spoken values are retained while its signing values are masked in the primary signing analyses (VG14, VG15 and the registered models derived from VG15); an explicit sensitivity analysis reintroduces it rather than pooling it silently with the comparable total-sign measures. The `uk_06` signing field was masked on the same principle while its construct was unverified, and was reinstated once the source confirmed the instrument: the standard DSE checklists, whose second column is completed for a word the child *understands and signs*, ticked for imitated as well as spontaneous signs. That is a total sign count, and the data agrees; signed and spoken are each nested within understood on every uk_06 record, while their sum exceeds it on seven of eleven, which is consistent with overlapping per-word ticks.
 
 ## Studies
 
@@ -28,7 +27,7 @@ We pool data from a variety of sources, including data collected by charities an
 
 ### A study of vocabulary, signing and grammatical complexity in 218 children with Down syndrome (uk_01)
 
-This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Communicative Development Inventory (CDI), using both the Words and Gestures and Words and Sentences forms [@marchmanMacArthurBatesCommunicativeDevelopment2023; @fensonMacArthurCommunicativeDevelopment1993].  The data were collected through several research projects at The Sarah Duffen Centre, a joint initiative of the University of Portsmouth and Down Syndrome Education International (then the Portsmouth Down's Syndrome Trust). Parents were provided with the form appropriate for their child's age. In many instances, adapted versions were used. In addition to the standard "understands" and "understands and says" options, the adapted Words and Gestures forms added an option to indicate if the child "signs" the word. The adapted Words and Sentences forms (which usually only include "says") added "understands" and "signs" as options. Each word takes one response, so a child's words understood are the words marked "understands", "understands and says" or "signs" together; no Words and Sentences form in the data supplied marks any word "understands", so this study's comprehension counts come from the Words and Gestures forms alone. Participants were 218 children with Down syndrome between 1 and 9 years of age, including 102 girls and 116 boys. Words and Sentences was completed by 154 participants and Words and Gestures was completed by 64 participants. The families participating lived in the five closest counties to Portsmouth -- Hampshire, West Sussex, Surrey, Dorset and Wiltshire.
+This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Communicative Development Inventory (CDI), using both the Words and Gestures and Words and Sentences forms [@marchmanMacArthurBatesCommunicativeDevelopment2023; @fensonMacArthurCommunicativeDevelopment1993].  The data were collected through several research projects at The Sarah Duffen Centre, a joint initiative of the University of Portsmouth and Down Syndrome Education International (then the Portsmouth Down's Syndrome Trust). Parents were provided with the form appropriate for their child's age. In many instances, adapted versions were used. In addition to the standard "understands" and "understands and says" options, the adapted Words and Gestures forms added an option to indicate if the child "signs" the word. The adapted Words and Sentences forms (which usually only include "says") added "understands" and "signs" as options. Each word takes one response, so a child's words understood are the words marked "understands", "understands and says" or "signs" together; no Words and Sentences form in the data supplied marks any word "understands", so this study's comprehension counts come from the Words and Gestures forms alone. Participants were 218 children with Down syndrome between 1 and 9 years of age, including 102 girls and 116 boys. Words and Sentences was completed by 154 participants and Words and Gestures was completed by 64 participants. The families participating lived in the five closest counties to Portsmouth: Hampshire, West Sussex, Surrey, Dorset and Wiltshire.
 
 ### The development of vocabulary in Spanish children with Down syndrome: comprehension, production, and gestures (es_01)
 
@@ -74,28 +73,28 @@ print_wide_table(
 
 ## Vocabulary by age {#sec-vocabulary-by-age}
 
-Every observation in the pooled Down syndrome data, coloured by study, against the pooled interquartile band (25th–75th percentile) per 6-month age bin, drawn where a bin holds at least five observations. The scatter covers the pool's full age range deliberately: beyond about 72 months coverage rests on a couple of studies, which is why the results are reported to 72 months.
+Every observation in the pooled Down syndrome data, coloured by study, against the pooled interquartile band (25th–75th percentile) per 6-month age bin, drawn where a bin holds at least five observations. The scatter covers the pool's full age range deliberately: beyond about 72 months coverage rests on a couple of studies, so coverage should be checked before interpreting older ages. Reporting limits differ by outcome (@sec-models-of-record).
 
 ![Words understood by age in the pooled Down syndrome data, coloured by study, against the pooled interquartile band.](figures/descriptives/observations_age_understood_ds){#fig-obs-understood-ds .lightbox}
 
 ![Words spoken by age in the pooled Down syndrome data, coloured by study, against the pooled interquartile band.](figures/descriptives/observations_age_spoken_ds){#fig-obs-spoken-ds .lightbox}
 
-The typically-developing Wordbank reference pool is too dense for a scatter — hundreds of administrations at each integer age — so its by-age view is the monthly distribution: one violin per month (density clipped to that month's observed range), with the pooled monthly median and interquartile band. Comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do:
+The Wordbank reference pool has hundreds of administrations at each month of age. Each violin shows that month's distribution, clipped to its observed range, with the pooled median and interquartile band. The comprehension panel ends where its forms do.
 
-![Words understood by age in the typically-developing reference pool — monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_understood_td){#fig-obs-understood-td .lightbox}
+![Words understood by age in the typically-developing reference pool, monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_understood_td){#fig-obs-understood-td .lightbox}
 
-![Words spoken by age in the typically-developing reference pool — monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_spoken_td){#fig-obs-spoken-td .lightbox}
+![Words spoken by age in the typically-developing reference pool, monthly distributions with the pooled median and interquartile band.](figures/descriptives/violins_age_spoken_td){#fig-obs-spoken-td .lightbox}
 
 ## Repeated measures {#sec-repeated-measures}
 
-Many children are measured more than once, and the within-child trajectories motivate the models' subject-level random effects. In the figures below each line joins one child's visits on one checklist form, drawn against the pooled median, mean and interquartile range for that age window (computed over all observations, single-visit children included). Lines are linked **within form only**: a child measured on two forms at one visit, or moved between forms, records counts on different item inventories, and joining those would draw measurement-scale changes as development. The Down syndrome figures cover the 8–72 month reporting window; individual trajectories fan widely around the pooled centre — same-age children span an order of magnitude in vocabulary, and individual slopes vary far more than the median slope.
+Many children are measured more than once, and the within-child trajectories motivate the models' subject-level random effects. In the figures below each line joins one child's visits on one checklist form, drawn against the pooled median, mean and interquartile range for that age window (computed over all observations, single-visit children included). Lines are linked **within form only**: a child measured on two forms at one visit, or moved between forms, records counts on different item inventories, and joining those would draw measurement-scale changes as development. The Down syndrome figures cover an 8–72 month display window. Differences between the lines can reflect child differences, assessment variation and study effects. A change between visits is not, by itself, an estimate of a child's underlying learning rate.
 
-![Words understood by age — repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_understood_ds){#fig-rm-understood-ds .lightbox}
+![Words understood by age, repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_understood_ds){#fig-rm-understood-ds .lightbox}
 
-![Words spoken by age — repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_spoken_ds){#fig-rm-spoken-ds .lightbox}
+![Words spoken by age, repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_spoken_ds){#fig-rm-spoken-ds .lightbox}
 
 The same view of the typically-developing Wordbank reference pool, over its 8–30 month admission window (3-month bins; comprehension is measured only on the bivariate forms, so the understood panel ends where those forms do):
 
-![Words understood by age — repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_understood_td){#fig-rm-understood-td .lightbox}
+![Words understood by age, repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_understood_td){#fig-rm-understood-td .lightbox}
 
-![Words spoken by age — repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_spoken_td){#fig-rm-spoken-td .lightbox}
+![Words spoken by age, repeated measures in the typically-developing reference pool, coloured by dataset.](figures/descriptives/repeat_measures_age_spoken_td){#fig-rm-spoken-td .lightbox}

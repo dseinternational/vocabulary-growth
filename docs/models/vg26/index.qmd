@@ -20,12 +20,14 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 :::
 
 ::: {.callout-note}
-This narrative was written from the model's specification before its first reporting-quality fit, from VG23's report rather than VG21's, because VG26 differs from VG21 in the way VG23 differs from VG13. Every number on this page is rendered from the fit named in the banner below. The sections on what the correlation means, and on how it compares with the shorter window, were written before that fit existed and should be read as the questions the fit answers, not as its answers.
+The tables and figures describe the fit named in the banner. Model structure alone does not establish the direction or size of an association.
 :::
 
 ```{python}
@@ -65,17 +67,16 @@ The project compares the two populations in two ways, and until this model it dr
 - The **trajectory and matched-comprehension** comparison sets VG20 against **VG21**. VG20 lets a child's two effects correlate; VG21 does not.
 - The **between-child correlation** comparison sets VG20 against **VG23**, which does, but only over VG13's 8–18-month window.
 
-VG23 is the evidence that the independence assumption VG21 inherits from VG13 is wrong: the correlation it estimates is small but clearly above zero. VG26 carries the correlation on the window the matched-comprehension comparison needs, so one typically developing model could serve both comparisons, with the same child-effect structure the Down syndrome side already has.
+VG23 tests the independence assumption over 8–18 months. VG26 estimates the corresponding correlation over the wider window used by VG21. Whether one model can serve both reporting roles depends on its fitted results and checks, not on adding the correlation parameter alone.
 
 It is not "VG23 with a wider window". VG21's priors were calibrated to its own window, and three of them differ from VG13's for that reason, so widening VG23 would not reproduce VG21. The correlation is added to VG21 instead.
 
 ::: {.callout-warning}
 ## Two confounds, stated up front
 
-**One parent completes both counts.** A parent who over-reports tends to over-report both, so shared reporting tendency is not separable from shared child ability — the model contains no term for it, and it loads onto $\rho_{uq}$. That biases the correlation, and through it the child scales, **upward**, as it does for VG20 and VG23.
+**Shared reporting can affect both counts.** The model has no separate informant or occasion term. These effects may contribute to the fitted correlation and scales, but their direction and size are not established.
 
-**Comprehension above 18 months is measured differently.** Wordbank's Words & Sentences form records a production proxy rather than comprehension, which is why VG13 stops at 18 months and why that form is excluded from every comprehension model. What remains above 18 months is thinner, and the Oxford CDI's 418-item ceiling starts to bind towards 22. A correlation between a child's comprehension offset and their conversion offset is the quantity most exposed to a change in how comprehension is measured, so read this model's $\rho_{uq}$ beside VG23's 8–18-month value (see [the comparison below](#sec-window-comparison)), not in place of it.
-:::
+**Check measurement support above 18 months.** Words & Sentences records a production proxy and is excluded from comprehension models at every age. Paired Words & Gestures data remain available beyond 18 months, including Italian data, but ceiling effects become more common at older ages. The 8–22-month window follows the assessment in `notes/202608211100-window-22-adopted.md`. Compare its correlation with VG23's shorter-window estimate alongside the changes in support and priors.
 
 ## How to read this report
 
@@ -174,14 +175,14 @@ render_diagnostic_verdict()
 ```
 
 ::: {.callout-note}
-VG21 carries a recorded energy-BFMI caveat, and VG26 is expected to inherit it. The measured position on the typically-developing models is that the energy pathology comes from the between-child / within-child split resting on the few children seen more than once, and that it is not repaired by reparameterising: VG23 added this same correlation to VG13 and its BFMI stayed below the threshold, and freezing the split at any value clears the diagnostic without adding information ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.6, [#229](https://github.com/dseinternational/vocabulary-growth/issues/229)).
+Earlier TD fits showed difficulty separating persistent child differences from residual variation. Adding a correlation did not remove that difficulty in the experiments recorded in `notes/202609061900-td-bfmi-is-the-tau-kappa-ridge.md`. Assess VG26 using its own diagnostics and sensitivities.
 :::
 
 ![Energy distribution of the sampler.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters, including $\rho_{uq}$, the study and child scales, the GP hyperparameters and the dispersion terms.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -298,7 +299,7 @@ print(
 )
 ```
 
-This is the first check recorded against the model on [#240](https://github.com/dseinternational/vocabulary-growth/issues/240). The two windows share every child seen before 18 months, so close agreement is expected if the correlation is stable in age and if comprehension is measured comparably either side of 18 months. **A material difference is a finding about the wider window**, not a reason to discard the correlation: it would say that the 19–22-month comprehension counts carry the child's standing differently, which bears on every typically developing comparison drawn at those ages.
+Compare the wider-window correlation with VG23's estimate. The models share many observations but also differ in priors and older-age support. A difference could reflect age patterns, measurement, sample composition or prior sensitivity; it does not identify a single explanation.
 
 ```{python}
 #| echo: false
@@ -319,7 +320,7 @@ render_variation_table()
 Two further comparisons are worth making once there are numbers, and neither is automatic:
 
 - **Against VG21**, which is nested at $\rho_{uq} = 0$. The population trajectories should sit close, but agreement is an empirical stability check rather than a correctness invariant — correlation changes nonlinear subject-marginal expectations, and refitting can legitimately reallocate fixed effects and marginal scales.
-- **Against VG20**, which estimates the same parameter on the Down syndrome pool under the same prior. The reporter confound applies to both, so a difference between the populations is better founded than either value alone.
+- **Against VG20**, which estimates the same parameter on the Down syndrome pool under the same prior. Reporting effects could differ between populations, so they cannot be assumed to cancel in the contrast.
 
 ```{python}
 #| echo: false
@@ -335,7 +336,7 @@ render_family_notes()
 
 ![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
-![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the zero-effect population trajectory — study and child effects set to zero, which is not an average across children.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ![The fitted production ratio against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
@@ -495,9 +496,9 @@ render_loo_section()
 
 ## Limits {#sec-limits}
 
-- **The reporter confound is the first limit, not a footnote.** The model has no same-administration or informant term, so shared reporting tendency has nowhere to go but $\rho_{uq}$.
-- **The window's top four months are where comprehension measurement changes.** Read $\rho_{uq}$ against VG23's 8–18-month value, above, before treating it as a property of the whole window.
+- **The reporter confound is the first limit, not a footnote.** The model has no same-administration or informant term, so the fitted correlation can include unseparated reporting variation.
+- **Measurement support and ceiling effects change towards the top of the window.** Read $\rho_{uq}$ against VG23's 8–18-month value, above, before treating it as a property of the whole window.
 - **VG21 keeps its reference role until this model has one of its own.** Registering VG26 does not retire VG21 or VG13; that follows only from this fit and the checks on #240.
-- **Sensitivity debt transfers here.** VG13's `single-admin` and `window-22-vague-anchors` variants were never fitted, and no GP-amplitude variant was registered against it; if VG26 supersedes VG21, those questions become this model's.
+- **Check VG26's own sensitivities.** Single-administration and wider-anchor variants are registered. Their current fitted status and findings belong in the robustness output, not in an inherited description of VG13.
 - **The reference scale is the 810-item inventory**, as elsewhere in this project, and the source forms are shorter. Counts near a short form's ceiling are effectively right-censored, which binds towards the top of this window.
 - **Nothing here establishes a causal reading.** A correlation between a child's two deviations says they move together, not that one produces the other.

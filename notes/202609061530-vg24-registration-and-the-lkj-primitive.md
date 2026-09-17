@@ -1,6 +1,9 @@
 # VG24 registered, and why it is not built on `pm.LKJCorr`
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The registration status below is historical. The [role decision](202609091600-model-roles-settled.md) adopted VG24 for the sign-conversion child correlation only. VG15 remains the source for signing trajectories, within-word association and total expressive vocabulary.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 Date: 2026-09-06. Registers **VG24** ([#296](https://github.com/dseinternational/vocabulary-growth/issues/296)) — VG15 with its three child random intercepts drawn from one joint Normal with a free correlation — ahead of the `us_03` refit, so it fits in the same window as VG15 rather than needing a second one. Nothing is fitted here; the numbers below are smoke checks from a short `dev`-tier run, not results.

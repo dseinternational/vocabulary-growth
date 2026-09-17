@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
@@ -127,7 +129,7 @@ render_glossary([
 
 Two different predictions run through this report, and confusing them is the easiest way to misread it.
 
-- A **population-level** curve sets every random effect to zero. It is a conditional zero-effect trajectory — approximately the **median** child in the average study, not the average of children's curves, because the inverse-logit link is nonlinear — and its interval is uncertainty about that reference trajectory. In the summary tables these are the `p_population_*` and `Ey_population_*` columns.
+- A **population-level** curve sets every random effect to zero. It is a conditional zero-effect trajectory — a reference with study and child effects set to zero, not the average of children's curves — and its interval is uncertainty about that reference trajectory. In the summary tables these are the `p_population_*` and `Ey_population_*` columns.
 - A **subject-marginal** prediction draws a new child's random effects as well. It answers _where would one more child fall?_, and it is much the wider of the two. In the summary tables these are the `p_subject_marginal_*` / `Ey_subject_marginal_*` columns, and the `Y_*` and `P(Y<=k)` columns, which are predictive counts for an unseen child.
 
 Every figure below is labelled with which of the two it draws. In particular the **joint-trajectory figures are subject-marginal**: their bands are the range individual children occupy, not uncertainty in the average trajectory. The historical `p_*` and `Ey_*` columns keep their population-level meaning; the explicit `p_population_*` columns restate it so that no column's estimand has to be inferred.
@@ -136,7 +138,7 @@ Every figure below is labelled with which of the two it draws. In particular the
 
 ## Statistical model
 
-Words understood are a bounded count out of the reference inventory, with a Beta-Binomial likelihood. On the logit scale the expected proportion understood is a straight-line developmental trend in age plus a Gaussian process term, which lets the curve bend away from the line by as much as the data support and no more.
+Words understood are a bounded count out of the reference inventory, with a Beta-Binomial likelihood. On the logit scale the expected proportion understood is a straight-line developmental trend in age plus a Gaussian process term, which allows smooth departures whose size and shape depend on the priors and data.
 
 Spoken words are modelled _through_ comprehension rather than beside it. For a row where both counts are present and logically nested, spoken words are drawn conditionally on the child's own observed understood count, $S \mid U \sim \operatorname{BetaBinomial}(U, q, \kappa_S)$, so the trials are the words that child actually understands. A row that carries no usable understood count — missing, out of range, or recording more spoken than understood words — falls back to the marginal form against the full reference inventory. A substantial minority of the spoken rows take that fallback, which matters when reading the spoken dispersion: it governs both branches.
 
@@ -147,7 +149,7 @@ $$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + \tilde g_q(a) + \
 
 where $a_z$ is age standardised, $\delta[s]$ is the offset of study $s$, $\delta^{\text{subj}}[i]$ the offset of child $i$, and $\tilde g$ the anchored Gaussian process described below. The likelihood's $q$ is the _child's_ ratio, $\operatorname{logit}^{-1} h(a, s, i)$, including both random effects — not the population curve plotted later in this report.
 
-Neither straight line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. One caution on reading them: the anchors parameterise the straight-line component only. The anchored Gaussian process below is pinned to zero at the reference age and orthogonalised against the trend on the observed rows, but it is not zero at the anchor ages themselves, so the fitted curve there is the anchor plus the process's contribution — the anchors are coordinates of the trend, not exact values of the fitted curve. A second caution, which VG05 and VG07 state and this report has not: the understood anchors and the high production-ratio anchor are calibrated against this project's own frame rather than against independent Down syndrome norms — data-informed regularisation, not external evidence — so posterior agreement with them is partly by construction and is not independent corroboration. Every Down syndrome model from VG05 to VG22 carries these same anchor values, so the caution applies identically across the lineage; the registered broad-anchor sensitivities are what would test it.
+Neither straight line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages, so the prior can be expressed in terms of vocabulary at those ages. One caution on reading them: the anchors parameterise the straight-line component only. The anchored Gaussian process below is pinned to zero at the reference age and orthogonalised against the trend on the observed rows, but it is not zero at the anchor ages themselves, so the fitted curve there is the anchor plus the process's contribution — the anchors are coordinates of the trend, not exact values of the fitted curve. A second caution, which VG05 and VG07 state and this report has not: the understood anchors and the high production-ratio anchor are calibrated against this project's own frame rather than against independent Down syndrome norms — data-informed regularisation, not external evidence — so posterior agreement with them is partly by construction and is not independent corroboration. Every Down syndrome model from VG05 to VG22 carries these same anchor values, so the caution applies identically across the lineage; the registered broad-anchor sensitivities are what would test it.
 
 Children of the same age differ far more than a Binomial count would allow, so both likelihoods are Beta-Binomial with a dispersion that is itself allowed to change with age.
 
@@ -233,7 +235,7 @@ Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ a
 
 ## Prior predictive checks {#sec-prior-predictive}
 
-These simulate trajectories from the priors alone, before the data are seen. The figures below are **population mean functions** — study and child effects at zero, no Beta-Binomial counts — so they test the mean structure's priors only and cannot validate the random-effect scales or the dispersion priors. Read them as a plausibility test with four criteria: young children should usually sit near the floor on both outcomes; older trajectories should not be forced towards the ceiling; the simulated comprehension-production gap should be able to open and to close again; and the simulated production ratio should be able to reach both low and high values across the age range. A prior that failed any of these would be shaping the answer rather than permitting it. The falsifier to watch for is the opposite of the usual one: if the prior spoken curves were _too narrow_, the stabilising priors would be doing substantive work that belongs to the data.
+These figures draw reference curves from the priors without conditioning on the likelihood. Study and child effects are set to zero and no count noise is drawn, so they assess the mean structure only. Check whether their levels and shapes are plausible for the age range. Separate simulations are needed to assess the random-effect scales, dispersion and individual count distributions. Some priors were calibrated on the same data; these are not independent validation figures.
 
 The figures below satisfy those criteria — the prior envelopes are wide at every age, and neither outcome is pinned to a floor or a ceiling anywhere in the range.
 
@@ -303,15 +305,15 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate — this is the figure the GP anchor was introduced to clean up.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure earlier in this report: a posterior indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure earlier in this report: little change from a marginal prior suggests limited learning about that parameter, and any conclusion resting on it is a restatement of the prior.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
 ### Prior to posterior {#sec-contraction}
 

@@ -1,6 +1,9 @@
-# Vocabulary data - 3
+# Vocabulary data - UK (3)
 
-[Description to follow]
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+
+This source records comprehension and production on the 416-item Oxford CDI. The pooled view maps these to `understood` and `spoken`; it supplies no signed count or recorded sex. The source has 27 rows. The age derivation is documented below.
 
 ## Columns
 

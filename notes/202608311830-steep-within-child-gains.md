@@ -1,6 +1,9 @@
 # Steep within-child vocabulary gains: what is real and what is not
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. This is a dated audit of observed gains. The description of `ie_02` as a full 810-word administration is superseded: it used Checklists 1 and 2, with a 476-word ceiling. See the [current source note](../data/vocab_data_ie_02.md). The recorded gain calculations remain historical evidence, not a current data summary.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 
 **2026-08-31.** After the uk_01 identifier fixes (`notes/202608311600-uk01-homonym-fusion.md`), the repeated-measures spaghetti plots still showed remarkable within-child gains in comprehension and production over short periods. This note records the investigation: how steep gains were ranked and benchmarked, which proved genuine, which proved defective, and the two data-preparation actions taken.

@@ -1,16 +1,16 @@
 # Summary report for parents and practitioners
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+> Drafted with assistance from Claude Code/Fable 5.1; revised by OpenAI Codex/GPT-6.
 
 > [!WARNING]
-> **Skeleton, 2026-09-03.** Structure and mechanics only: every page is a placeholder, except for one worked sentence on the words-understood page showing how quoted numbers are computed. The design it implements is in [`notes/202609031500-parent-practitioner-report-sketch.md`](../../notes/202609031500-parent-practitioner-report-sketch.md), §3 and §8.
+> These pages are an unfinished outline. One worked sentence demonstrates computed values; the remaining findings, interactive components and site export are not complete.
 
 ## What this is
 
-The plain-language companion to the technical report, written for families and practitioners and published on the main web site. Quarto is the authoring tool here, not the publishing one: each page is one `.qmd`, rendered to Markdown for import into `dsegroup/content`, and the same sources render as one combined DOCX or PDF for partners to review before publication. The interactive tools are not built here; the pages carry placeholders (`data-chart-id` blocks) for the site's chart components, which read a prediction pack exported from the models of record.
+The plain-language companion to the technical report, written for families and practitioners intended for the main website. Quarto is the authoring tool here, not the publishing one: each page is one `.qmd`, rendered to Markdown for import into `dsegroup/content`, and the same sources render as one combined DOCX or PDF for partners to review before publication. The interactive tools are not built here; the pages carry placeholders (`data-chart-id` blocks) for the site's chart components, which read a prediction pack exported from the models of record.
 
-No number in the prose is typed. Each is computed in a code cell from the fitted output through the helpers in `_summary_data.qmd` and exported as `<span data-vg="…">216</span>`: the value is baked into the Markdown, DOCX and PDF, and on the site the component refreshes every bound span from the pack it loaded, so a page corrects itself if the Markdown lags a pack version.
+No number in the prose is typed. Each is computed in a code cell from the fitted output through the helpers in `_summary_data.qmd` and exported as `<span data-vg="…">216</span>`: the value is baked into the Markdown, DOCX and PDF, The spans provide hooks for a future site component. This repository does not implement or verify live updates.
 
 ## Layout
 
@@ -47,13 +47,13 @@ The cells read `docs/report/figures/` (the cache `scripts/sync_report_figures.py
 
 ## Conventions
 
-- **Numbers come from helpers.** `median_at(age, outcome)`, `interval_at(age, outcome, prob)`, `lower_at` / `upper_at`, `share_below(age, outcome, k)`, `one_in_below(age, outcome, k)`, `n_obs(age, outcome)`, `cap(outcome)`, `years_months(age)` and `generated_from()`. Outcomes are `"understood"` and `"spoken"`; ages are whole months; `k` is one of the pack's bucket thresholds. Every helper returns a bound value; only `years_months` and `cap` return plain text, because they describe an input or a policy rather than an estimate.
+- **Numbers come from helpers.** `median_at(age, outcome)`, `interval_at(age, outcome, prob)`, `lower_at` / `upper_at`, `share_below(age, outcome, k)`, `one_in_below(age, outcome, k)`, `n_obs(age, outcome)`, `cap(outcome)`, `years_months(age)` and `generated_from()`. Outcomes are `"understood"` and `"spoken"`; ages are whole months; `k` is one of the pack's bucket thresholds. Most helpers return values with an HTML binding. `years_months` and `cap` return plain text. `share_below` and `one_in_below` read inclusive probabilities, `P(Y <= k)`, so prose must say "k or fewer", not "fewer than k".
 - **Component placeholders** are a pair of conditional blocks: `::: {.content-visible when-format="gfm"}` holding the `data-chart-id` div, and `::: {.content-visible unless-format="gfm"}` holding the static figure for DOCX and PDF. The `0.0.0/…` chart identifiers are placeholders until the versioning of the published assets is decided.
 - **Callouts** take their title as an attribute (`title="…"`); the Markdown export renders it as a bold first paragraph of the alert block.
 - **Pages are self-contained.** A cross-reference to another page resolves in the combined document but not in the page's own export.
 - **The helper cell is unlabelled** on purpose: `all.qmd` includes every page, and a labelled cell included ten times is a duplicate-label error.
-- Every page carries the AI-attribution callout the project requires for drafted content; remove or reword it editorially before publication.
+- Every page carries the AI-attribution callout the project requires for drafted content; retain it when publishing AI-assisted text.
 
 ## Export to the site
 
-Not built yet. The sketch note (§8) specifies `scripts/export_summary.py`, which will place each `output/summary/<page>.md` in a `dsegroup/content` checkout as `content-en-gb.md` beside a `resource.json` left to the author, since title, description, layout and ordering are editorial. Until then, copy by hand.
+The export script and prediction-pack integration are not implemented here. The Markdown output is available for editorial review, but chart identifiers and bindings remain placeholders. Confirm the destination site's import and update behaviour before publication.

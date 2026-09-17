@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
@@ -56,7 +58,7 @@ render_reading_routes('superseded', instead='VG21', joint=True, robustness=True)
 
 VG13 is **superseded** as the typically-developing joint comparator by VG21, its 8–22-month window, which took the role on 2 September 2026 because VG13's support ends at about 221 understood words; nothing on this page is a reported number. It was registered to give the Down syndrome joint models — VG05 without hierarchy, VG20 with it — a typically-developing comprehension-and-production picture to be read against, and it superseded the retired VG06. It remains the exact nested null of VG23, which adds the between-child correlation this model fixes at zero.
 
-Its relatives are worth knowing before reading any figure here. **VG04** asks the comprehension question of the same population with no study or child effects, on a subsample and an English-only pool; **VG03** is its spoken-vocabulary counterpart. **VG12** asks the comprehension question with both kinds of random effect, on the full pool, over a much wider age range. VG12 is the direct comparison for this model: where the two windows overlap, they should agree, and because they use different engines, different age ranges and different likelihoods, agreement between them is a genuine external check rather than a restatement. Disagreement with VG04 in the same region is expected and informative in the other direction — VG04 carries no hierarchy, so between-study differences reach its curve as though they were between-child differences.
+VG03 and VG04 provide single-level spoken and understood baselines on English-only subsamples. VG12 estimates comprehension with study and child effects over a wider range. Agreement with VG12 within shared support is a check across model specifications fitted to overlapping data, not independent validation.
 
 **A reference is not a target.** A typically-developing trajectory describes what typically-developing children in these datasets did. It is a comparison baseline, not a goal against which an individual child with Down syndrome should be judged or an intervention scored.
 
@@ -301,7 +303,7 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters, including the study and child scales, the GP hyperparameters and the dispersion terms.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -333,7 +335,7 @@ The parameters to watch here are the two study-effect scales, the anchored GP hy
 
 **The hierarchy terms are the weakest part of the fit and still clear the gate.** The lowest effective sample sizes and the highest R-hat values in the diagnostics table sit on the study-effect scales rather than on the trajectory parameters — which is what the sparse-replication problem above predicts — but they sit inside the thresholds, and the caveat block above states whether any exception was needed.
 
-**The Gaussian processes are close to inert, and that is a limit on what this model can detect rather than evidence of linearity.** Read the amplitude and length-scale rows of the contraction table above: a contraction near zero means they were barely moved. The shared length-scale prior spans roughly 6–18 months against a ten-month window, and the anchored GP is additionally stripped of the components that mimic its mean's basis, so the model has little effective capacity to bend inside the frame in the first place — a shorter-length-scale experiment left the length scale prior-driven while costing divergences (`notes/202608060900-three-prior-conflicts.md`). The defensible reading is therefore that curvature was **not identified** under this graph: straight lines on the logit scale describe these data adequately over this window, but the fit does not demonstrate that the trajectories are straight, and the GP's inertness must not be quoted as evidence for it. It follows that the anchor priors are load-bearing here in a way they are not in the wider-window models — which is exactly why the production-ratio anchor discussion above matters, and why the registered sensitivity variants are worth running.
+A small fitted Gaussian-process contribution does not establish that the underlying developmental curve is linear. Its apparent size depends on the amplitude and length-scale priors, the projection constraints and the age window. Check the current contraction table and sensitivity fits. Limited change in a marginal distribution alone does not show that curvature is absent.
 
 :::
 
@@ -363,7 +365,7 @@ Read them with three things in mind. **The plotted population curves are the ave
 
 ::: {.callout-note title="Sensitivity variants"}
 
-Four deliberate one-change variants of this model are registered and can be refitted with `scripts/fit_sensitivity.py`: retaining a single administration per child with the child effects removed (`single-admin`), and three observation-window variants (`window-22`, `window-25` and `window-22-vague-anchors`). **Nothing in this report is a result from any of them.** The window pair was fitted on 2026-08-20 at this model's own reporting settings, and the study owner adopted the 8–22-month specification for the matched-comprehension comparison while rejecting 8–25 as ceiling-contaminated (`notes/202608211100-window-22-adopted.md`). That promotion has landed: [VG21](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg21/index.qmd) is registered and was fitted at `rep` on 2026-09-02, so the window question is settled in its own model rather than by this variant, and the `window-22` and `window-25` rows here are retained as the measurement that decided it. The `single-admin` variant has not been run — given that repeated administrations are the mechanism behind both the child scales and the energy caveat, it is the variant most worth having next.
+Four deliberate one-change variants of this model are registered and can be refitted with `scripts/fit_sensitivity.py`: retaining a single administration per child with the child effects removed (`single-admin`), and three observation-window variants (`window-22`, `window-25` and `window-22-vague-anchors`). **Nothing in this report is a result from any of them.** The window pair was fitted on 2026-08-20 at this model's own reporting settings, and the study owner adopted the 8–22-month specification for the matched-comprehension comparison while rejecting 8–25 as ceiling-contaminated (`notes/202608211100-window-22-adopted.md`). That promotion has landed: [VG21](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg21/index.qmd) is registered and was fitted at `rep` on 2026-09-02, so the window question is settled in its own model rather than by this variant, and the `window-22` and `window-25` rows here are retained as the measurement that decided it. Use the current robustness output for the fitted status of other variants.
 
 :::
 
@@ -382,13 +384,13 @@ render_family_notes()
 ![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
-![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are uncertainty intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children — not the range individual children occupy; for that, read the predictive figures and the monthly tables.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are uncertainty intervals on the zero-effect population trajectory — study and child effects set to zero, which is not an average across children — not the range individual children occupy; for that, read the predictive figures and the monthly tables.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ::: {.callout-warning title="Age restriction: what it costs, and what it buys"}
 
 VG13 is restricted to a narrow young window and **should not be used as a general typically-developing trajectory beyond it**. The upper bound is this model's own choice; the lower bound is not — it is the age floor of the typically-developing pool as a whole, so nothing here says anything about what happens below it either way.
 
-**Every reported age is carried by at least three of the six retained datasets**, and the typical age by four. The retained studies' spans do differ — ByersHeinlein and Karousou stop at 15 months where Floccia and Thal begin at 12 — but they overlap enough that no month in this window rests on one or two laboratories, which is not true of VG12 above 18 months. The 200-row study threshold removes three of the nine eligible studies to remove 2.1% of the rows, and what that does to the study-effect scale has not been measured ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240); counts in `notes/202609062350-td-common-age-support.md`).
+The dated age-support audit found overlap among studies across this window. Counts and study membership can change, so read the current support table and the assessment in `notes/202609062350-td-common-age-support.md` together. A minimum study-size threshold changes the mix even when few rows are removed.
 
 **What the restriction rested on, and what remains of it.** The original justification — that above 18 months only a single dataset contributed usable paired observations — is obsolete: since the Romance-language extension, Italian Words & Gestures supplies paired rows to 24 months, and several hundred admissible administrations from two studies sit above the cap (694 when counted on 2026-08-20; VG12 fits every one of them). What remains is a density and measurement argument: coverage above 18 months is real but thin, and the Oxford CDI's 418-item ceiling binds increasingly from 23 months. The registered `window-22` and `window-25` variants were fitted to measure the cap's cost, and the study owner adopted the 8–22-month specification (`notes/202608211100-window-22-adopted.md`). That specification is now its own registered model, [VG21](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg21/index.qmd), fitted at `rep` on 2026-09-02, and **this 8–18-month report is retained as the historical model** rather than as the current one — read VG21 for the wider window, and read this report for what the narrower one gives.
 
@@ -588,7 +590,7 @@ monthly_s
 
 ## Robustness {#sec-robustness}
 
-A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+Sensitivity variants refit the model under changed assumptions. The table compares their reported quantities with this fit's 89% intervals and records missing or unsuitable comparisons. This is a screen for sensitivity to the tested choices, not proof that all assumptions are harmless.
 
 ```{python}
 from pathlib import Path
@@ -620,7 +622,7 @@ else:
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
+Read the `verdict` column rather than the deltas. A variant marked robust kept the checked summaries within this fit's intervals. This does not establish equivalence or rule out smaller changes that matter for a particular use. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ## Predictive calibration {#sec-calibration}
 
@@ -654,8 +656,8 @@ Read any over-coverage here alongside the between-child scales in the Findings s
 - **The population curves are the average study.** They are not the curves of any contributing dataset, and the study composition is not constant across the window.
 - **Language and dataset cannot be separated.** The pool spans English, Italian and Spanish (European), and each non-English language enters through a single dataset, so any language effect is reported as between-dataset heterogeneity and cannot be isolated.
 - **Interval bounds are the weakest numbers on this page**, wherever the diagnostics section reports an energy shortfall — as it does for this fit, on every chain. Medians are then the most reliable summaries and the outer interval endpoints the least.
-- **The Gaussian processes are close to inert.** The anchor priors are therefore doing more of the work than in the wider-window models, and the registered sensitivity variant that would test this has not been run.
+- **Anchor and smoothing priors matter.** Check their sensitivity in compatible fitted outputs. A small GP contribution does not establish linearity.
 - **$q(a)$ is a conversion proportion, not a mechanism.** It does not say that raising a child's comprehension would raise their production by the corresponding amount.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat, and both contributing forms reach well under its top.
 - **Repeated measurement is sparse.** Most children contribute a single administration, which limits how well persistent between-child differences can be separated from residual dispersion.
-- **The two child effects are drawn independently, and that assumption is now known to be wrong.** This model fixes at zero the relationship between how much a child understands for their age and how much of it they say. [VG23](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg23/index.qmd) is this model plus that one free correlation, fitted at `rep` on 2026-09-02, and returns $\rho_{uq}$ = **0.128 [0.096, 0.160]** — small, but excluding zero comfortably on 5,496 children. What it does *not* do is move this model's numbers: the child scales agree to the third decimal (`tau_subj_u` 0.734 here against 0.729 there, `tau_subj_q` 1.108 against 1.105), so the independence assumption is mis-specified rather than distorting. Read the correlation itself from VG23, with the reporter caveat that report states: both counts come from one questionnaire completed by one parent, and shared reporting tendency has no term in either graph, so it loads onto $\rho_{uq}$ and biases it upward. For scale, the Down syndrome pool's equivalent ([VG20](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg20/index.qmd), same $\eta = 2$ prior) is 0.433 [0.355, 0.508].
+- **The two child effects are independent by assumption.** VG23 relaxes that assumption and also includes sex effects. Its current fit provides the correlation estimate. Agreement in some trajectory summaries does not prove that the independence assumption is harmless for all uses, and shared reporting effects cannot be separated by either model.

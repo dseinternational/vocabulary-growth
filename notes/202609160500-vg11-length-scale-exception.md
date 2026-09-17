@@ -1,6 +1,9 @@
 # VG11's GP length scale, and why the convergence exception now names it
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The temporary length-scale exception described here was followed by the [amplitude-prior change to 0.4](202609161440-vg11-eta-sigma-0.4.md). Use the current registered definition and fit diagnostics rather than treating this exception as the standing specification.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 **Date:** 2026-09-16. **Decision, by the study owner, the same day:** record `ell`/`ell_unit` in VG11's hard-tier convergence exception, refit the nine publication models so every signature matches again, and leave the model itself alone. **What this note is:** the failure, what the slow direction is, and what was ruled out. **Nothing here changes a model definition or a prior.**

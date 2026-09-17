@@ -1,6 +1,9 @@
 # Why the study-level terms license pooling the gesture measure with the sign sources — and where the licence stops
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The discussion of `es_01` reflects the evidence available on this date. The [later construct review](202609021903-es01-gesture-construct-revisited.md) revised the comparison between gesture and sign sources. Use the [current source note](../data/vocab_data_es_01.md) for the data definition.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 
 Analysis record, 28 August 2026. [202608271551](202608271551-es01-gesture-construct.md) established that `es_01`'s non-vocal column measures the symbolic-gesture repertoire rather than taught signing, and asserted that `delta_psi` "is what licenses pooling a gesture measure with sign measures at all". This note verifies that claim against the built graph in [`src/vocab_growth/models/common_joint_modality.py`](../src/vocab_growth/models/common_joint_modality.py) and states exactly what the study-level terms guarantee, what they do not, and what follows for reporting. Every code claim below was checked against the current implementation on 2026-08-28. It also corrects one overstatement made in the review discussion of the same date: that the sign sources' per-study associations are "essentially untouched" by `es_01`'s presence (§4.4).

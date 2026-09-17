@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 :::
@@ -305,15 +307,15 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit reaching this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
+The table reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![Pairwise joint posteriors. Strong ridges indicate parameters the data cannot separate — and this is where a trade-off between the correlation and the two child scales would show.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-![Marginal posterior distributions for the fitted parameters, including the correlation. Compare each with its prior figure above: a posterior indistinguishable from its prior has not been informed by the data.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+![Marginal posterior distributions for the fitted parameters, including the correlation. Compare each with its prior figure above: little change from a marginal prior suggests limited learning about that parameter.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
 ### Prior to posterior {#sec-contraction}
 
@@ -421,7 +423,7 @@ render_family_notes()
 
 ## Robustness {#sec-robustness}
 
-A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+Sensitivity variants refit the model under changed assumptions. The table compares their reported quantities with this fit's 89% intervals and records missing or unsuitable comparisons. This is a screen for sensitivity to the tested choices, not proof that all assumptions are harmless.
 
 ```{python}
 from pathlib import Path
@@ -453,7 +455,7 @@ else:
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
+Read the `verdict` column rather than the deltas. A variant marked robust kept the checked summaries within this fit's intervals. This does not establish equivalence or rule out smaller changes that matter for a particular use. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ### Parameter recovery
 
@@ -514,7 +516,7 @@ render_loo_section()
 - **It is one number for the whole pool.** No study-level or subgroup variation in the correlation is estimated, and the pool spans several countries and languages.
 - **The reported population trajectories are VG10's.** Nothing in this model is intended to supersede them, and gate 3 of #224 confirmed it does not on the 2026-08-19 fits: expected words on both outcomes and the production ratio sat inside VG10's own 89% interval at every reported age (382 of 382 checks that day). A material difference here would be something to explain — against the interval widths and the predictive scores — before preferring either model's number, rather than proof that one of them is wrong. What this model does change is the **child-level** intervals, which is what it was built for.
 - **Role: model of record** for the Down syndrome joint understood + spoken estimands from **2026-08-19**, replacing VG10 on the study owner's instruction. VG10 becomes a development step and supplies no reported number.
-- **`rho_uq` recovers; the calibration around it is below nominal, and that is the engine's rather than this model's.** *(Recorded against the 2026-08-19 fit and its recovery run; the Robustness section above shows the current matrix.)* The correlation's truth falls inside the 89% interval in 3 of 3 replicates, with alternating sign (z = +0.36, −0.87, +1.49) and a posterior SD matching this fit's. But two of those replicates were not assessable — their own fits did not converge — and the one that was covers 0.779 of its 131 targets at the 89% level against a nominal 0.89. Read against VG10 at the same tier and replicate count (0.723 and 0.308, also 2 of 3 non-converged), this model is the better of the two on every recovery figure available, which points at the engine and the `test` tier rather than at the correlation — but that is a direction, not a finding, and it should not be quoted as one. Gate 2 of [#224](https://github.com/dseinternational/vocabulary-growth/issues/224) is recorded as **not passed**: it asked for a clean recovery run and did not get one. Two limits are worth stating plainly rather than leaving to be inferred. Three replicates, one of them assessable, cannot estimate 89% coverage at all — the 131 targets in a replicate are correlated with one another, so a single figure of 0.779 is one draw of a statistic whose sampling distribution these data do not pin down. And self-recovery is blind by construction to the two misspecifications this model is most exposed to: the marginal fallback branch on 455 of 1,428 spoken observations, and the absence of any reporter or occasion effect for `rho_uq` to be separated from. Both need reporting-tier replicates and an alternative-DGP recovery, tracked in [#233](https://github.com/dseinternational/vocabulary-growth/issues/233).
+- **The early recovery run was too small to establish calibration.** In the run recorded against the 2026-08-19 fit, only one of three replicate fits converged. Results from the other two cannot establish recovery, and many correlated targets in one replicate are not independent coverage trials. Read the current recovery matrix for the present fit. Recovery under the fitted model also cannot test omitted reporter effects or a misspecified fallback likelihood.
 - **`tau_subj_u` comes back below its truth in every replicate (z = −1.94, −1.24, −1.58 on the 2026-08-19 recovery run) and in every VG10 replicate too.** Six of six across two models, neither of which carries `subject_variance_partition` — which is the mechanism the same bias was attributed to on VG12 ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)). The partition cannot be the whole cause. This is a lead for #225, not a finding of this model's, and six replicates cannot settle it.
 - **The correlation leans high, and the reason is structural rather than incidental.** The model has one place to put any co-movement between a child's two counts — the persistent child effects — because it carries no same-administration, informant or correlated-measurement-error term. Shared reporter tendency is therefore not merely hard to separate from persistent child association; it is not represented at all, and loads onto `rho_uq` by default. The exposure is large: most children in the frame are seen once (the composition table under Data gives the share), and those who carry both counts inform `rho_uq` only through the agreement between two counts on a single questionnaire completed by one parent. VG16's cross-lag reads the child's comprehension from a *different* administration and so avoids that artefact; disattenuated and converted to the correlation scale it implied about +0.24 [0.11, 0.38] against this model's +0.368 [0.287, 0.447] on the 2026-08-19 fits; the findings table above carries this fit's value. The two overlap, but the estimate that is immune to reporter bias is the lower one.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.

@@ -1,10 +1,10 @@
 ---
-title: "Appendix E — Use of AI"
+title: "Use of AI"
 abstract: "*How LLM-based AI tools were used in preparing this report and the safeguards applied to generated content.*"
 ---
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Codex/GPT-5).
+Drafted by an LLM-based AI tool (Codex/GPT-5). Revised with assistance from OpenAI Codex/GPT-6.
 :::
 
 LLM-based AI tools may be used in this project as drafting, coding, editing and review assistants. AI-assisted document sections are labelled near the top of the relevant Markdown or Quarto file, following the repository convention.

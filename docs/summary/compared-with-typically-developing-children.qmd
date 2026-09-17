@@ -13,10 +13,10 @@ Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure onl
 :::
 
 <!--
-Outline (sketch note §9, item 8): the young-age overlay (VG12 understood to 25
+Planned page content (item 8): the young-age overlay (VG12 understood to 25
 months, VG11 spoken to 30), the matched-comprehension comparison in words, and
 why the comparison stops where it does. Whether this page belongs in a
-parent-facing report at all is an owner decision (sketch note §11).
+parent-facing report at all is an owner decision.
 -->
 
 [TODO: the comparison at the ages where both groups are observed.]
