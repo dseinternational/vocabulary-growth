@@ -21,6 +21,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 :::
@@ -303,7 +305,7 @@ style_diagnostics_table(diagnostics)
 
 ![Pairwise joint posteriors. The offset-rate ridge for each outcome, and the ridge between the two outcomes' rates, are what to look for here.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-![Marginal posterior distributions. A posterior indistinguishable from its prior has not been informed by the data.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+![Marginal posterior distributions. Little change from a marginal prior suggests limited learning about that parameter.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
 ### Prior to posterior {#sec-contraction}
 

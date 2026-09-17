@@ -1,125 +1,70 @@
 # Vocabulary growth in children with Down syndrome
 
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6.
+
 > [!WARNING]
-> This is work in progress. All data and models are preliminary.
+> This study is in progress. Models and findings are preliminary.
 
-**This repository hosts an exploratory study of vocabulary development in children with Down syndrome that aims to characterise observed trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. The primary goal of the study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice.**
+This study describes how vocabulary develops in children with Down syndrome. It brings together parent-reported checklist data from several countries to estimate words understood, spoken and signed at different ages, and the variation between children.
 
-## About this study
+The aim is to give families, teachers and practitioners evidence to help interpret vocabulary development. The estimates describe groups of children. They do not set targets for an individual child or show which teaching methods cause better outcomes.
 
-All children with Down syndrome experience delays in language development. By estimating typical trajectories of vocabulary development we can offer families and practitioners insights into expected ranges and rates of progress. These can help to inform teaching goals and methods, and to identify children experiencing more complex or challenging difficulties. This study aims to provide accurate estimates of typical trajectories of word learning and distributions of expected spoken and understood word counts at six monthly intervals for children with Down syndrome aged 12 months to 6 years.
+## Study approach
 
-The project draws together parent-reported vocabulary checklist data - from the MacArthur-Bates CDI and similar instruments - to characterise how comprehension and spoken vocabulary progress with age, and how the two relate over the course of development. By pooling data across studies and languages and analysing it with modern Bayesian methods, we aim to produce clear, interpretable estimates of typical trajectories and the variation around them.
+We fit Bayesian statistical models, which express uncertainty as probability distributions. The models allow vocabulary growth to vary with age and account for differences between studies and children. Joint models describe spoken and signed words as proportions of words understood.
 
-Up-to-date, well-evidenced information about how language develops in young children with Down syndrome matters a great deal in practice. It helps families understand what to expect, and it gives healthcare professionals, speech and language therapists, and teachers a sound basis for setting realistic goals and choosing where to focus teaching and intervention.
+The typically developing comparison data come from Wordbank. All models report on a common 810-word reference scale. Differences between checklists and limited follow-up remain important constraints on interpretation.
 
-### Approach
+The study examines:
 
-We are developing joint, hierarchical Bayesian models of words understood, words signed and words spoken, with a structural decomposition in which spoken and signed vocabulary are modelled as age-varying fractions of understood vocabulary, and Gaussian Processes capture non-linear change with age. We evaluate and fit these models using Bayesian inference to estimate full probability distributions for parameters of interest, using an iterative workflow.
+- Vocabulary counts and rates of growth at different ages.
+- The spread of counts among children of the same age.
+- How much of their understood vocabulary children also say or sign.
+- How these relationships compare with those in typically developing children.
 
-For children with Down syndrome, we are aggregating multiple datasets of parent-reported vocabulary achievement from multiple research groups and countries. For models of typical development, we are using MacArthur-Bates Communicative Development Inventory (MB-CDI) data from the [Wordbank database](https://wordbank.stanford.edu/).
+## Reading the project
 
-### Study outputs
+| Start here                                                   | Purpose                                                             |
+| ------------------------------------------------------------ | ------------------------------------------------------------------- |
+| [Technical report](docs/report/index.qmd)                    | Methods and report chapters; some findings chapters are unfinished. |
+| [Plain-language summary](docs/summary/README.md)             | Unfinished outline for families and practitioners.                  |
+| [Model inventory](docs/models/README.md)                     | Model structures, reporting roles and links to individual reports.  |
+| [Data guide](data/readme.md)                                 | Sources, variables and preparation.                                 |
+| [Notes index](notes/README.md)                               | Dated analyses, decisions and run records.                          |
+| [Code walkthrough](docs/tutorials/model-code-walkthrough.md) | A worked introduction to the model code.                            |
 
-This is an iterative and exploratory study and we are continuing to receive additional data, so possible outputs are still evolving. Currently, these are some of the outputs we hope to deliver.
-
-#### 1. Reliable estimates of growth in vocabulary over time
-
-We are interested in understanding how many words children with Down syndrome learn over time and the rates at which the they learn words at different ages.
-
-<img src="./assets/images/examples/posterior_predictive_median_trend_s_smoothed.png" width=640 alt="Posterior predictive median trend of words understood by children with Down syndrome" />
-
-##### Posterior predictive median trend of words understood by children with Down syndrome. (All estimates are preliminary and subject to change as further data is received and models refined.)
-
-#### 2. Reliable estimates of the spread of vocabulary knowledge at specific ages
-
-In additional to central growth trends, we are interested in understanding the range of vocabulary learning at different ages.
-
-<img src="./assets/images/examples/understood-distributions-preliminary-example.png" width=640 alt="Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months" />
-
-##### Posterior predictive distributions of words understood by children with Down syndrome at 12, 18, 24 and 36 months. (All estimates are preliminary and subject to change as further data is received and models refined.)
-
-#### 3. Reliable estimates of the proportions of words spoken over time
-
-We are interested in the proportion of words understood by children with Down syndrome that they can say, and how this changes over time. We are also interested in how this compares to typically developing children with similar total vocabularies.
-
-#### 4. Reliable estimates of the variation in word learning
-
-We are interested in the extent to which word learning varies between individuals, and exploring the extent to which there is more or less variation among children with Down syndrome when compared to typically developing children.
-
-In the future, we hope to gather additional data to begin to explore possible predictors of differences in word learning between individuals.
-
-### Open and replicable
-
-We are developing, evaluating and iterating our models openly in this repository, where we share all source code and anonymised source data under open licenses.
-
-### Future directions
-
-We welcome partners interested in deepening our understanding of language development for children with Down syndrome. Over time, we may extend this project to explore further datasets and modelling techniques and welcome input from interested partners on how the project might evolve.
-
-When Down Syndrome Education International launches its [LearningTracker app and services](https://www.learningtracker.app/) we expect to make additional parent-reported vocabulary data available to extend this project in the future.
-
-## Contributing
-
-We welcome partners interested in developing and evaluating statistical models, evaluating and interpreting findings, and sharing original data.
-
-- [See our guidelines for contributors](./CONTRIBUTING.md)
+Read numerical results with their fit date, model definition and caveats. Older notes can explain a decision without describing the current data or fit.
 
 ## Getting started
 
-### Clone repositories
-
-In the same directory (perhaps `dseinternational`):
+Clone the repository and install the locked environment from its root:
 
 ```bash
 git clone https://github.com/dseinternational/vocabulary-growth.git
-```
-
-### Prerequisites
-
-#### Fitting models
-
-Python dependencies are managed with [uv](https://docs.astral.sh/uv/), which provisions the interpreter as well as the packages — no separate Python installation is needed. Install it, then, from the repository root:
-
-```bash
-uv sync
-```
-
-This creates `.venv/` from `uv.lock`, so every contributor gets the same resolved environment. Linux, macOS (Apple Silicon) and Windows are all supported natively. See [docs/runbooks/environment-locks.md](docs/runbooks/environment-locks.md) for how the lock is created and refreshed.
-
-On Windows, run in UTF-8 mode — `$env:PYTHONUTF8 = "1"` in PowerShell, `set PYTHONUTF8=1` in `cmd`. The progress output uses `✓` and `·`, which the legacy cp1252 code page cannot encode, and the console library raises `UnicodeEncodeError` instead of degrading, so a fit dies at its first completed stage. PEP 686 makes UTF-8 mode the default from Python 3.15.
-
-#### External tools
-
-Four things are not Python packages, so `uv sync` cannot supply them:
-
-| Tool                                               | Needed for                                                                  | Install                                                                               |
-| -------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [Graphviz](https://graphviz.org/download/) (`dot`) | the model-diagram figure (`gp_model_graph.svg`) each fit writes             | `brew install graphviz` / `apt install graphviz` / `winget install Graphviz.Graphviz` |
-| [Quarto](https://quarto.org/docs/get-started/)     | rendering the per-model reports and the report book                         | platform installer                                                                    |
-| LaTeX                                              | the report's PDF format only — its HTML and DOCX formats need nothing extra | `quarto install tinytex`                                                              |
-| [Node.js](https://nodejs.org/en)                   | spellcheck (CSpell) and Markdown formatting (Prettier)                      | platform installer, then `npm install` in the repository root                         |
-
-The PDF format additionally expects the Source Sans 3 and Monaspace Neon fonts.
-
-### Preparing data
-
-From the repository root:
-
-```bash
+cd vocabulary-growth
+uv sync --locked
 uv run python scripts/prepare_data.py
 ```
 
-`uv run` uses the project environment without activating it. Activate it instead — `source .venv/bin/activate`, or `.venv\Scripts\activate` on Windows — if you would rather call `python` directly.
+`uv` supplies Python and the project packages. The lock supports Linux, Apple Silicon macOS and native Windows. On Windows, set `PYTHONUTF8=1` to display progress symbols correctly. See [environment setup](docs/runbooks/environment-locks.md) for dependency changes and external tools.
 
-## License
+Run a short development fit:
 
-All source code in this repository is licensed under the GNU Affero General Public License v3.0 **(AGPL-3.0-only)**. See `LICENSE`.
+```bash
+uv run python scripts/fit_model.py vg01 --config dev
+```
 
-Some other artifacts are licensed under other licenses:
+Quarto renders reports. Graphviz supplies model diagrams. The report book's PDF format also needs LaTeX and its specified fonts. For a reporting-quality run, follow the [full-refit runbook](docs/runbooks/full-refit.md).
 
-- **Code**: GNU Affero General Public License v3.0 (AGPL-3.0) — see `LICENSE`.
-- **Documentation, reports and papers**: Creative Commons Attribution 4.0 International (CC BY 4.0) — see `docs/LICENSE`.
-- **Data**: Creative Commons Attribution 4.0 International (CC BY 4.0) — see `data/LICENSE` for details.
+For code and documentation checks, see [AGENTS.md](AGENTS.md). Node dependencies are installed with `npm ci`.
 
-AGPL-3.0 requires that if you modify and run this software to provide a network service, you must offer the corresponding source code to users of that service.
+## Contributing
+
+We welcome contributions of data, statistical models, code and interpretation. Read [the contribution guide](CONTRIBUTING.md) before sharing participant data.
+
+## Licences
+
+- Source code uses GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See [LICENSE](LICENSE) and the source headers.
+- Documentation, reports and papers use Creative Commons Attribution 4.0 International (CC BY 4.0). See [docs/LICENSE](docs/LICENSE).
+- Data use CC BY 4.0. See [data/LICENSE](data/LICENSE) and the source records.

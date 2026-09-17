@@ -1,6 +1,9 @@
 # Implementation plan: a child-level random slope (the fix Proposal A1 measures the need for)
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). Historical test plan. VG19 was implemented and evaluated; the gate-results note records the outcomes. It remains a development model. [Follow-up](202608212000-vg19-gates-g2-g4-g5.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!IMPORTANT]

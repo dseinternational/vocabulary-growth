@@ -1,6 +1,9 @@
 # es_01 (Galeote): the gesture column measures symbolic gesture, not taught signing
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). The construct interpretation is superseded. This record is retained because code and later analyses cite its measurements and the correction history. [Follow-up](202609021903-es01-gesture-construct-revisited.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 
 > **Superseded by [202609021903](202609021903-es01-gesture-construct-revisited.md), 2026-09-02 (Claude Code/Fable 5.1).** §1's evidence stands — the definition includes spontaneous gestures, and the typically developing group scores on the column — but the conclusion drawn from it, a _broader_ construct than the taught signing the sign sources record, does not: the definition includes taught signs too, the source uses "signed" and "gestured" interchangeably, and no sign source records what its parents were told a sign is, so the distinction cannot be drawn on either side. §2's factor-of-two bound on the category elimination assumed the affected items are spread evenly across the cells; the eliminated categories are where sign-and-say overlap concentrates, so the artefact is plausibly directional and not bounded by the eliminated share, and §3's "no correction of that size bridges 0.90 to 6–14" is withdrawn. §4's licensing argument and the data-preparation conclusions stand. The report, data documentation and definitions docstring now carry the superseding note's wording.

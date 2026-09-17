@@ -13,7 +13,7 @@ Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure onl
 :::
 
 <!--
-Outline (sketch note §9, item 5): component 6.2 — the gap between words
+Planned page content (item 5): component 6.2 — the gap between words
 understood and words spoken, the production ratio, and that the early
 bottleneck is expressive rather than receptive.
 -->

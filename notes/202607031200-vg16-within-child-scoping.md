@@ -1,6 +1,9 @@
 # VG16 scoping note: within-child cross-lagged receptive → expressive vocabulary
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). Historical design proposal. The implemented lag construction was later corrected; the numerical headline remains subject to validation. [Follow-up](202608231900-vg16-lag-wave-correction.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 
 Status: written 2026-07-03 as a pre-build scoping / sign-off note. **VG16 has

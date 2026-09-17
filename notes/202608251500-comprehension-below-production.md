@@ -1,6 +1,9 @@
 # Comprehension below production: a sixth defect class, and the denominator that nearly got it wrong
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The rule was later extended to compare comprehension with `max(produced, spoken)`, so a spoken count can expose a contradiction when `produced` is missing. It still masks comprehension only, retains equality and does not add signed and spoken counts. See the [implementation record](202609131044-model-review-implementation.md) and [current data guide](../data/readme.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 Study owner's ruling, 2026-08-25. Closes the pipeline half of [#190](https://github.com/dseinternational/vocabulary-growth/issues/190) item C's `uk_01` question and generalises it: an inclusive comprehension field cannot be exceeded by production, so administrations where it is are masked rather than retained and flagged.

@@ -1,112 +1,70 @@
 # Model report house style
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
 
-This is the contract every `docs/models/vgNN/index.qmd` follows. It supersedes the recommendations in [`OUTPUT_TEMPLATE_REVIEW.md`](OUTPUT_TEMPLATE_REVIEW.md), which was written against an earlier state of the templates and is stale in several places (its VG04 anchor recommendation was followed into an error, and its VG13 items are now all implemented).
+Each `docs/models/vgNN/index.qmd` is copied into a fit's output directory and rendered there. The template explains the model; the fit supplies its numbers. This guide replaces the former template-review checklist, which is retained in Git history.
 
-## The governing rule
+## Keep measurements in their source files
 
-**Numbers come from files at render time. Prose carries meaning, not measurements.**
+Read prior settings, fitted quantities, sample sizes and diagnostics at render time. Do not copy them into template prose. Use the shared report cells or display the exported table beside the explanation.
 
-Every model report is a template copied into its fitted output directory and rendered there, so a number typed into the template is a copy of a value that lives somewhere else — in `definitions.py`, or in a CSV the fit writes. Copies drift. A review of all fifteen reports found this same failure repeatedly:
+Prose should explain structure, interpretation and limits. A statement about a fitted direction, such as a positive correlation, also needs current evidence. Generate it from the fit or make it conditional. If a historical result is necessary, name the date and fit so the reader cannot mistake it for a current estimate.
 
-| Report | Claim in prose                        | Truth                                    |
-| ------ | ------------------------------------- | ---------------------------------------- |
-| VG10   | `eta_q ~ HalfNormal(0.20)`, stated 3× | `0.8` since 2026-08-04                   |
-| VG15   | the same, stated 4×                   | `0.8`                                    |
-| VG15   | `q` high anchor `Beta(3,2)`, 2×       | `Beta(4, 1.2)`                           |
-| VG02   | "346 rows"                            | 987, in a table on the same page         |
-| VG14   | uk_02 union "~1.2 pp above"           | −6.7 pp, in a CSV five lines below       |
-| VG14   | signed ratio "0.4–0.5"                | peaks at 0.371                           |
-| VG13   | "the broad baseline `q` priors"       | VG13 is the one model that rejected them |
+## Shared report cells
 
-None of these was careless. Each was correct when written. That is precisely why the fix is structural rather than editorial: **if a number can go stale, it eventually will**, so the template must not hold one.
+The functions in `vocab_growth.report_cells` read the fit's manifest and exported tables. Use `echo: false` and `output: asis` for cells that print Markdown.
 
-Consequences for authors:
+| Purpose                                   | Functions                                                                                                                     |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Sampling, model and reading route         | `render_sampling_banner`, `render_model_at_a_glance`, `render_reading_routes`                                                 |
+| Prior settings and learning from the data | `render_priors_table`, `render_prior_posterior_contraction`                                                                   |
+| Data included in the fit                  | `render_frame_composition`                                                                                                    |
+| Diagnostics                               | `render_diagnostic_verdict`                                                                                                   |
+| Estimates and variation                   | `render_headline_quantities`, `render_variation_table`, `render_expectations_table`, `render_sex_section`                     |
+| Interpretation                            | `render_family_notes`, `render_dispersion_scope`, `render_conditional_production_check`, `render_reference_child_calibration` |
+| Out-of-sample assessment                  | `render_loo_section`                                                                                                          |
 
-- Never type a prior value. Call `render_priors_table()`.
-- Never type a fitted quantity. Call `render_headline_quantities()` / `render_variation_table()`, or embed the CSV.
-- Never type a frame size, study count or age range. Call `render_model_at_a_glance()`.
-- Prose may state **structure** ("this model has no random effects", "signing is modelled as a rise and fall"), **direction** ("comprehension leads production"), and **caveats**. It may not state magnitudes.
-- Where a figure needs a magnitude to be interpretable, put the magnitude in an adjacent table, not in the sentence.
-- Where a historical magnitude must stay in prose — a gate record, an earlier fit's recovery z-scores — date it in the sentence ("on the 2026-08-19 fits"), so that staleness is visible rather than silent. The 2026-09-02 review found a dozen such numbers in Limits sections, one of which that run had already falsified.
+Other shared helpers supply the glossary, convergence caveats and predictive calibration. Follow an existing model template for their imports. Check function signatures in the source before adding a call.
 
-## Shared blocks
+Some report cells read files generated after sampling. `scripts/prior_vs_posterior.py --table --model <key>` writes the prior-to-posterior comparison, and `scripts/emit_factor_correlation.py` writes VG22's implied correlation matrix. Generate these before `--render-only`. A missing-file message is a request for an artefact, not evidence that the check passed.
 
-All in `vocab_growth.report_cells`, all for a cell with `#| echo: false` and `#| output: asis`:
+The bivariate models with child effects share `_bivariate_re_body.qmd`. Keep model-specific claims in each model's page. The reporting pipeline copies shared `_*.qmd` includes beside the rendered template.
 
-| Block                                   | Replaces                                        | Reads                                               |
-| --------------------------------------- | ----------------------------------------------- | --------------------------------------------------- |
-| `render_sampling_banner()`              | the hard-coded `{(chains, draws): label}` table | `fit_manifest.json`                                 |
-| `render_model_at_a_glance()`            | the hand-written glance callout                 | `fit_manifest.json`                                 |
-| `render_priors_table()`                 | hand-written prior prose                        | manifest + `diagnostics.csv`                        |
-| `render_convergence_caveats()`          | a per-template reimplementation of the gate     | `diagnostics_summary.json`                          |
-| `render_headline_quantities()`          | nothing — this is new                           | the summary CSVs                                    |
-| `render_variation_table()`              | nothing — this is new                           | `diagnostics.csv`                                   |
-| `render_glossary([...])`                | nothing — this is new                           | static definitions                                  |
-| `render_calibration_section()`          | _(already in use)_                              | `posterior_predictive_calibration.csv`              |
-| `ppc_count_distribution_gallery()`      | _(already in use)_                              | the count-distribution figures                      |
-| `render_reading_routes(role, ...)`      | nothing — this is new                           | the role the template states                        |
-| `render_family_notes()`                 | nothing — this is new                           | manifest + `diagnostics.csv`                        |
-| `render_expectations_table(...)`        | the raw `posterior_summary*` DataFrame display  | `posterior_summary*` + monthly tables               |
-| `render_diagnostic_verdict()`           | the reader scanning the styled table            | `diagnostics_summary.json` + manifest               |
-| `render_prior_posterior_contraction()`  | "compare each posterior with its prior figure"  | `prior_posterior_contraction.csv`                   |
-| `render_frame_composition()`            | `describe()` plus normality tests               | manifest, then an exact frame rebuild               |
-| `render_dispersion_scope()`             | two $\kappa$ figures with no stated scope       | manifest + contraction + frame rebuild              |
-| `render_conditional_production_check()` | a caption reading the curve as $E[q \mid U]$    | `production_rate_by_understood.csv` + frame rebuild |
-| `render_loo_section()`                  | _(already in use)_                              | `loo_summary.csv`                                   |
+## Report order
 
-The six blocks added on 2026-09-02 came from a review of all twenty templates against a reporting-quality run (`notes/202609021200-report-template-review.md`). Two of them read artefacts a fit does not write and are fail-soft until those exist: `render_prior_posterior_contraction()` reads the per-fit CSV that `scripts/prior_vs_posterior.py --table --model <key>` writes from the trace, and VG22's implied correlation matrix reads `subject_factor_corr.csv` from `scripts/emit_factor_correlation.py`. Run both after a fit and before `--render-only`; each block prints how to produce its file when it is absent.
+1. AI attribution, sampling banner, purpose, model summary and reading routes.
+2. Model diagram and a short glossary of terms used on the page.
+3. Statistical structure, prior settings, rationale and prior predictive checks.
+4. Data composition and descriptive summaries.
+5. Convergence verdict, diagnostics and prior-to-posterior comparison.
+6. Findings, expected trajectories, predictions and monthly tables.
+7. Sensitivity and recovery evidence, predictive calibration and out-of-sample assessment.
+8. Limits on interpretation and use.
 
-`render_dispersion_scope()` was added later the same day, after a reader compared the $\kappa$ figures across VG21 and VG22 and asked whether the differences were a model artefact. They largely are, in three ways the pages did not state: $\kappa_u$ is marginal on the item pool while $\kappa_s$ is conditional on the child's own understood count, so their **levels** are not comparable with each other; $\kappa$ is residual after whatever child structure a model carries, so it is never comparable **across** models; and a two-anchor $\kappa$ can have one end the data never informed while the figure still draws a confident median there (VG22's `kappa_excess_young_s` contracts to -0.23). The block renders immediately above the first $\kappa$ figure on every template that has one, and states all three from the fit's own record. See `notes/202609021620-dispersion-kappa-comparability.md`. **Never write a sentence comparing one $\kappa$ curve's level with another's** — the shared body carried one until that note. `render_conditional_production_check()` followed the same afternoon, after a reader set the by-understood production curves of VG21 and VG22 side by side and read their agreement at 300 words as children in both populations converting comprehension identically at that milestone. The curve is the population ratio at the age the population median reaches $U$, not the share children who understand $U$ words speak (#233); the children give 0.27 and 0.13 where the curves both give 0.4. The block sets the curve beside the observed children at each level. **Never caption the by-understood figure as a statement about children at a comprehension level.** The same afternoon the three figures that plot one outcome against the other were reworked rather than replaced: `understood_vs_spoken` and `production_rate_by_understood` now carry age markers along the population path and the observed children's binned medians beside it, `understood_vs_spoken_predictive` draws its predictive draws as points with the observed administrations rather than as a wedge of lines, and `spoken_given_understood` — a population rate drawn as a straight line to 810 words — is retired. **Any figure whose x axis is comprehension rather than age marks the ages along its path and shows the observed children beside the curve**, through `_draw_age_markers` and `_draw_observed_levels` in `common_bivariate.py`, in the project's default plot styles. See `notes/202609021800-production-ratio-by-understood.md`. The population curve on every page is the **reference child** — zero study and child effects, the child in the average study — and is called that, never the typical or median child: studies are segregated by age, so at a given age it can sit above or below every study sampled there (54 words below the Down syndrome pool's median child at 38 months). Every joint RE page carries `study_fans.png` and `render_reference_child_calibration()` so the reader can see the gap, and milestones are reported for the administration-weighted child as well wherever they are reported for the reference child (`notes/202609021800-production-ratio-by-understood.md`, decision of 2026-09-02).
+Keep these section IDs when changing headings, because reading routes link to them: `sec-priors`, `sec-prior-predictive`, `sec-frame`, `sec-diagnostics`, `sec-findings`, `sec-predictions`, `sec-monthly`, `sec-calibration`, `sec-loo`, `sec-robustness`, `sec-limits` and, on joint pages, `sec-spoken-given-understood`. Put a navigation anchor on a plain wrapping div when a callout cannot carry it.
 
-**The bivariate random-effects family shares one prediction body.** VG10, VG19, VG20 and VG22 transclude `docs/models/_bivariate_re_body.qmd` (`{{< include _bivariate_re_body.qmd >}}`) rather than each carrying a copy: before it existed VG20's template referenced 23 of the 90 artefacts its fit wrote and sent the reader to VG10 — a development step — for the rest. `reporting.stage_report_sources` copies every `docs/models/_*.qmd` into the output directory beside `index.qmd` at fit time and on `--render-only`, because a Quarto include resolves relative to the rendered document. Nothing model-specific belongs in the include.
+## Explain the quantity being shown
 
-**Section anchors are fixed.** The reading-routes block links to `#sec-priors`, `#sec-prior-predictive`, `#sec-frame`, `#sec-diagnostics`, `#sec-findings`, `#sec-predictions`, `#sec-monthly`, `#sec-calibration`, `#sec-loo`, `#sec-robustness`, `#sec-limits` and, on joint pages, `#sec-spoken-given-understood`; a template renames a heading but keeps its id. An id on a callout is a Quarto cross-reference and must carry one of Quarto's own prefixes, so `render_family_notes()` puts its `#sec-one-child` anchor on a plain wrapping div.
+Write for a reader who understands basic arithmetic but may not know statistical terminology. Define a term before relying on it. Use a descriptive caption and explain how each figure answers the model's question. State the interval convention; the default outer and inner intervals contain 89% and 50% of posterior draws, with equal probability in their two tails.
 
-Two of these fixed live defects rather than tidying: the banner told VG08, VG09, VG11, VG12 and VG13 they were "not fitted in reporting mode" when each was fitted at _more_ than the default reporting effort, and the caveats block told VG11 it had cleared a convergence gate it is published under a recorded exception to.
+Distinguish these targets wherever they appear:
 
-## Section skeleton
+- A reference curve sets study and child effects to zero. It need not equal the average or median of the sampled children.
+- A child-averaged estimate integrates over a stated distribution of child effects. Name the source column, such as `p_subject_marginal_*`, when needed to remove ambiguity.
+- A new child's expected trajectory includes uncertainty about persistent child effects.
+- A future observed count also includes variation between assessments. Use this distribution for statements about a child's possible observed score.
 
-1. AI attribution callout
-2. `render_sampling_banner()`
-3. One sentence: what this model asks
-4. `render_model_at_a_glance()`, then `render_reading_routes(role, ...)` with the role the page states — a development step or candidate names the model of record its non-research readers should use instead
-5. Model diagram (`gp_model_graph.svg`)
-6. **How to read this report** — `render_glossary([...])`, collapsed, listing only the terms this model uses; a "Terms specific to this model" callout where the page introduces any
-7. **Statistical model** — structure only
-8. **Priors** — `render_priors_table()`, then the prior figures, then qualitative rationale
-9. **Prior predictive checks** — with an evaluative sentence, not just the figures
-10. **Data** — `render_frame_composition()` first, then descriptives
-11. **Diagnostics** — `render_convergence_caveats()`, `render_diagnostic_verdict()`, the styled table, figures, then `render_prior_posterior_contraction()` under "Prior to posterior"
-12. **Findings** — `render_headline_quantities()`, `render_variation_table()` where applicable
-13. **Posterior predictions** — preceded by `render_family_notes()` on any page a family or practitioner is routed to; `render_expectations_table(outcome)` above each raw summary table; every figure gets one sentence saying what to conclude
-14. **Expected vocabulary by month** — `posterior_summary_monthly_*` / `expected_counts_by_month_*`
-15. **Robustness** — the conditional robustness and recovery cells, on every model of record, reference and candidate
-16. **Predictive calibration** — `render_calibration_section()`
-17. **Out-of-sample prediction** — `render_loo_section()`
-18. **Limits** — what this model must not be used for
+For models with sex as a covariate, the reference curve uses the midpoint on the logit scale. It is not generally the arithmetic average of girls' and boys' expected counts.
 
-## Accessibility
+Explain concentration, $\kappa$, as residual variation at a given expected count. Larger values mean less count variation. Its level depends on the outcome, denominator and other variation already represented in the model. Comparing two concentration curves alone does not establish a difference in total variation between children.
 
-Target reader: an undergraduate science or maths student.
+A curve of production ratio against comprehension can trace the reference child's path through age. It does not, by itself, estimate the spoken share among all children who understand a given number of words. Retain age markers and observed comparisons, and name the target in the caption.
 
-- Any term in `vocab_growth.glossary.GLOSSARY` used in the report goes in that report's `render_glossary` list. An unlisted term passed to it raises, so typos fail the render.
-- Every figure needs a caption that says what it shows, not the filename. `![posterior_kappa](posterior_kappa.png)` is not a caption.
-- State the interval convention wherever intervals appear. The default is an 89% outer and 50% inner equal-tailed interval.
-- $\kappa$ must never appear without the reminder that **larger means less spread**. Reviewers flagged this on nine of fifteen reports.
-- Distinguish **population-level** from **subject-marginal** every time both appear. The summary CSVs carry explicit `p_population_*` and `p_subject_marginal_*` columns, so name the column rather than describing the estimand loosely.
+## Explain what predictive scores assess
 
-## Things that are not the template's fault
+Match the LOO description to the likelihood term held out. For a multi-outcome model, holding out a spoken likelihood term while retaining observed comprehension is a conditional assessment. It is not a forecast of every outcome for a new child. Aggregating terms by administration does not by itself remove outcome information used in denominators or lag predictors.
 
-Some review findings need engine changes, tracked separately:
+VG15's standard LOO excludes the composition likelihoods that identify $\psi$. That score therefore cannot validate the sign-speech association. Lagged models also require checks that prevent the held-out outcome from entering another row's predictor. Use the dedicated child-held-out or forward-scoring procedures for the questions they were designed to answer.
 
-- `ppc_count_distribution_gallery` globs its directory instead of reading the capped table, so a stale figure from an earlier run survives an age-cap change. VG02 publishes a 90-month comprehension figure against an 84-month cap, and it has reached `docs/report/figures/`.
-- `plot_modality_trajectories` takes no cap, so VG14's `p_any` figure runs to 115 months above a table that stops at 84.
-- VG11's output has no `prior_*` figures at all, while its template references three.
-- ~~`expected_counts_by_month_*.csv` and `posterior_summary_monthly_*.csv` are byte-identical~~ — fixed: the figure no longer writes a sidecar, because the caller has already written the same frame under the canonical `posterior_summary_monthly_*` name.
-- The `*_smoothed.csv` sidecars are byte-identical to their unsmoothed originals, so a reader downloading the "smoothed" CSV gets the unsmoothed numbers. Fixed in the writers, but **the artefacts on disk still carry it**: the fix changes plot-stage output, and no model has been through the plot stage since. It clears on the next refit, or on a `regenerate_plots.py` pass for the four models whose traces are `full`.
-- ~~LOO/ELPD is computed on every fit and printed only to the console, while the calibration section points readers to it.~~ — fixed: every fit now writes `loo_summary.csv`, `scripts/emit_loo_summaries.py` backfills it for fits already on disk, and `render_loo_section` prints it into the report's out-of-sample section.
-- LOO's held-out unit is not the same for every model, and the reported prose must match the model it sits under. A univariate fit has one likelihood over administration rows, so its estimate is genuinely leave-one-administration-out. A multi-outcome fit gets one LOO per outcome likelihood, and a row there holds out one likelihood **term**: the spoken and signed likelihoods take the same administration's observed comprehension count as their trial count, so an expressive score is conditional on that observed count and an understood score leaves its own observed value in the expressive denominators. `render_loo_section` branches on the number of rows in the table and says so. What remains outstanding is the estimate itself — an administration-aggregated LOO for the multi-outcome engines, of the kind `scripts/loo_compare.py` already builds as `y_joint` — which needs regenerated outputs and is tracked separately.
-- VG15 excludes both Dirichlet-Multinomial composition likelihoods from LOO, and those are the only terms that identify the association $\psi$, so $\psi$ is not scored by LOO at all. The report cell states this wherever the fit carries `psi` and `conc`.
+See the [model inventory](README.md), [prior guide](PRIORS.md) and [critical-review programme](../runbooks/critical-review.md) for model roles, assumptions and release checks.

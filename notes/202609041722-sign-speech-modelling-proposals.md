@@ -1,6 +1,9 @@
 # Modelling the sign–speech link: a correlated subject block on VG15 first, a sign → speech cross-lag deferred
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). The proposed models are now registered as VG24 and VG25. This note records their motivation; the inventory and model pages describe the current designs. [Follow-up](../docs/models/README.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 
 > [!IMPORTANT]

@@ -1,6 +1,9 @@
 # Fitting the large typically-developing models on 96–128 GB machines
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The projections and launch procedure below are retained as an investigation record. Later measurements and the current operating procedure are in the [full-refit runbook](../docs/runbooks/full-refit.md). Do not use the projected memory peaks below as current requirements, or change the working tree during a reporting fit.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 
 > [!IMPORTANT]

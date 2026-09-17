@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
@@ -265,13 +267,13 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, disclosed above. Adding study effects makes the posterior harder to explore than VG05's, so the effective sample sizes here are the ones to check against that threshold.
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality. Adding study effects makes the posterior harder to explore than VG05's, so the effective sample sizes here are the ones to check against that threshold.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors for the first few parameters. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors for the first few parameters. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters, each with its median and interval. The two between-study scales appear here.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -291,7 +293,7 @@ render_prior_posterior_contraction()
 
 The pair plot is capped so the grid stays legible, and shows only the first few parameters — the understood anchors and the understood GP length-scale and amplitude, together with the leading production-ratio anchors. The between-study scales are not in it, and the individual study offsets appear in no figure in this report, so neither can be inspected there.
 
-Where they can be inspected is the marginal posteriors above and the diagnostics table. Compare each with its prior figure or its row in the priors table: a parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. For the two between-study scales that comparison is the whole question — a posterior pushed away from zero relative to its prior is what "the studies genuinely differ" looks like, and one that merely reproduces the prior would mean the data cannot tell.
+Compare each marginal posterior with its prior and check the diagnostics. For a study-effect scale, a shift away from zero can indicate evidence for between-study variation. Interpret the size and uncertainty, and check prior sensitivity; a positive estimate alone does not establish a meaningful difference between studies.
 
 :::
 
@@ -315,7 +317,7 @@ from vocab_growth.report_cells import render_variation_table
 render_variation_table()
 ```
 
-These are the scales of the study offsets, each restated as an odds multiplier for a study one standard deviation above the average. They are the quantity this model exists to estimate. Whichever of the two is larger identifies where the studies disagree most: a larger comprehension scale would mean they differ mainly in how able their children are, and a larger production-ratio scale would mean they differ in how much children say relative to what they understand — a difference of measurement or of practice as much as of ability.
+These are the scales of the study offsets, expressed as odds multipliers for a study one standard deviation above the zero-effect reference. They describe variation in comprehension and in conversion to speech. Recruitment, language, measurement and other study differences can all contribute; the model does not separate their causes.
 
 Because the offsets are constrained to sum to zero, these scales describe spread around the average study rather than around any one baseline, and the interval on each is in the diagnostics table above.
 
@@ -325,7 +327,7 @@ VG05 is this model with the study effects removed. Comparing the two is worthwhi
 
 VG05 pools every contributing study into a single curve. That pooled curve is weighted by how much data each study brought: a study contributing many children pulls it further than a study contributing few. VG07's population curve is a different estimand. Because the study offsets sum to zero, the curve reported here is the **average study** — each study counted once, whatever its size. If the studies that contributed most of the data sit systematically on one side of the study average, then removing that sample-size weighting moves the reported curve to the other side, and the shift is not evidence that either model fitted badly. It is the two models answering different questions.
 
-Two further consequences follow, and both can be read off the tables in the two reports side by side. First, some of the spread VG05 had to express through its dispersion curves is here attributed to differences between studies instead, so the dispersion rows of the findings tables are not directly comparable between the two models. Second, adding an offset per contributing study on each trajectory, together with the constraint that links them, makes the posterior harder to sample, so the price of the extra structure is paid in effective sample size — compare the diagnostics tables of the two reports, remembering that either fit reaching its page has already cleared the reporting threshold.
+Two further consequences follow, and both can be read off the tables in the two reports side by side. First, some of the spread VG05 had to express through its dispersion curves is here attributed to differences between studies instead, so the dispersion rows of the findings tables are not directly comparable between the two models. Second, adding an offset per contributing study on each trajectory, together with the constraint that links them, makes the posterior harder to sample, so the price of the extra structure is paid in effective sample size — compare the diagnostics tables of the two reports, checking the recorded convergence status for each fit.
 
 Neither model carries repeated-child effects, so neither answers the question of how much _children_ differ. That requires VG20.
 

@@ -1,9 +1,13 @@
 # Preface {.unnumbered}
 
-This report describes a study of vocabulary development in children with Down syndrome. The study aims to characterise trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. Our primary goal is to provide practical information that can accurately inform expectations, intervention and teaching practice.
+::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+:::
 
-We have tried to write this report for a broad audience of families, practitioners and researchers. We cannot avoid statistical and computational details, but we try to explain as much as we can for readers for whom aspects of these may not be familiar. For a more concise overview, a summary report is also available, together with interactive tools for exploring the data and findings at \[TODO: link\].
+This study describes vocabulary development in children with Down syndrome. It examines words understood, spoken and signed, how their counts change with age, and how children differ. The aim is to give families, practitioners and researchers evidence that can inform expectations and teaching.
 
-To contribute to continuing progress, researchers should describe their methods and explain their results in sufficient detail for others to replicate their findings [@korbmacherReplicationCrisisHas2023; @mcelreathReplicationCommunicationPopulation2015]. These descriptions should include source code for statistical analyses that can be run using freely available software [@farrellComputationalModelingCognition2018; @mcelreathStatisticalRethinkingBayesian2020]. This is the goal of this report and the accompanying repository (<https://github.com/dseinternational/vocabulary-growth>).
+This report is a draft. The methods chapters are more developed than the results, discussion and summary. The separate plain-language summary and interactive tools are also unfinished. The repository should not be read as a completed set of practical recommendations.
 
-This study is not fixed in time. As new data becomes available, we anticipate updating our estimates and evolving our models. We will version the study, tagging releases in the repository whenever we publish updated analyses. We hope that "version 1.0" is helpful and of interest to families, practitioners and researchers alike, and welcome feedback, collaboration and contributions to future iterations.
+The report and [source repository](https://github.com/dseinternational/vocabulary-growth) document the data rules, model definitions and checks needed to understand and reproduce the analysis. Reproducible methods include executable source code as well as an account of the assumptions and limitations [@korbmacherReplicationCrisisHas2023; @mcelreathReplicationCommunicationPopulation2015; @farrellComputationalModelingCognition2018].
+
+Future releases may revise the data, models and estimates. Read any numerical result with the version and fit record that produced it.

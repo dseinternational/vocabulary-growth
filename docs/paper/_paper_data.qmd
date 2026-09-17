@@ -1,4 +1,5 @@
 <!--
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
 Data-access helpers for the paper, mirroring the report's `_report_data.qmd`
 over the same curated figure + summary store (docs/report/figures/, synced by
 scripts/sync_report_figures.py). Included via {{< include _paper_data.qmd >}}
@@ -24,7 +25,7 @@ from dse_research_utils.report.data import show_or_pending as _show_or_pending
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 # The paper reads the SAME store as the report — docs/report/figures/ — so the
-# two documents can never quote different fits. Paths are keyed by
+# documents use the same cached sources when rendered together. Paths are keyed by
 # <MODEL_ID>-<config_name> derived from definitions.py so they cannot drift.
 FIG_ROOT = Path("../report/figures")
 _DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
@@ -83,6 +84,10 @@ def comp_row(name, grid_col, grid_val, *, prefix="d"):
     """Row of a comparison table nearest a grid value, or None."""
     df = comp_load(name)
     if df is None or grid_col not in df.columns:
+        return None
+    df = df.dropna(subset=[grid_col])
+    if (df.empty or pd.isna(grid_val)
+            or grid_val < df[grid_col].min() or grid_val > df[grid_col].max()):
         return None
     return df.iloc[int((df[grid_col] - grid_val).abs().argmin())]
 

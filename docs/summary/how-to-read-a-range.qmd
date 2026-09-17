@@ -13,7 +13,7 @@ Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure onl
 :::
 
 <!--
-Outline (sketch note §9, item 2): why one number misleads; what "half of
+Planned page content (item 2): why one number misleads; what "half of
 children" and "1 in 20" mean; the expected-average line and why it is narrow.
 Component 6.1 introduced here at one fixed age.
 -->

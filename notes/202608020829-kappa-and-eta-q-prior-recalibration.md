@@ -1,6 +1,9 @@
 # Dispersion and `q`-GP prior recalibration: `b_kappa_mag`, `kappa_min`, `eta_q`
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). Historical calibration record. Sections 18–23 replace the earlier concentration proposals. Use the prior guide and registered definitions for current settings. [Follow-up](../docs/models/PRIORS.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]
@@ -154,7 +157,7 @@ kappa=KappaPriorParams(
 
 ## 7. Why the production prior stops at the univariate spoken models
 
-The obvious extension is `kappa_s` in the joint models. It does not follow, because `kappa_s` does not govern the same quantity. In the univariate spoken models the likelihood is `BetaBinomial(n = 810, p = p_spoken, kappa)` — exactly what §2 calibrates. In the joint engine the nested spoken likelihood is `BetaBinomial(n = observed understood count, p = q, kappa_s)` ([`common_bivariate.py:688`](../src/vocab_growth/models/common_bivariate.py:688)): the denominator is per-child and varies, and the mean is the production _ratio_, not the spoken proportion. Dispersion on that scale is a different quantity from dispersion of spoken-out-of-810, and the marginal per-age fit does not transfer to it.
+The obvious extension is `kappa_s` in the joint models. It does not follow, because `kappa_s` does not govern the same quantity. In the univariate spoken models the likelihood is `BetaBinomial(n = 810, p = p_spoken, kappa)` — exactly what §2 calibrates. In the joint engine the nested spoken likelihood is `BetaBinomial(n = observed understood count, p = q, kappa_s)` ([`common_bivariate.py:688`](../src/vocab_growth/models/common_bivariate.py)): the denominator is per-child and varies, and the mean is the production _ratio_, not the spoken proportion. Dispersion on that scale is a different quantity from dispersion of spoken-out-of-810, and the marginal per-age fit does not transfer to it.
 
 Extending to `kappa_s` therefore needs its own calibration, on the conditional scale: per-age Beta-Binomial fits of spoken counts against observed understood counts, restricted to the nested rows. That is tractable with the existing data and is the natural next step, but it is not done here and the joint models are left unchanged.
 
@@ -283,7 +286,7 @@ What survives from this section is the diagnosis of the _cause_ — row-wise sub
 ### Consequences
 
 1. **This says nothing against VG11 as specified.** The full pool has 15.9% of children with repeat administrations; the artefact is created by the subsample, not by the model.
-2. **Row-wise subsampling is unsafe for any model with subject random effects** — VG11, VG12, VG13 here, and any future use of `sample_fraction`. Subsampling should draw **subjects and keep all their observations**, which `load_data`'s `sample_fraction` does not currently do ([`data_utils.py:1027`](../src/vocab_growth/data_utils.py:1027)). That is a latent trap in the definitions: VG03 and VG04 ship with `sample_fraction=0.25` and are safe only because they have no subject effects.
+2. **Row-wise subsampling is unsafe for any model with subject random effects** — VG11, VG12, VG13 here, and any future use of `sample_fraction`. Subsampling should draw **subjects and keep all their observations**, which `load_data`'s `sample_fraction` does not currently do ([`data_utils.py:1027`](../src/vocab_growth/data_utils.py)). That is a latent trap in the definitions: VG03 and VG04 ship with `sample_fraction=0.25` and are safe only because they have no subject effects.
 3. **The §10 speculation about a family-wide problem is narrowed.** VG11, VG12 and VG13 were all subsampled, so their diagnostics are uninformative about the models. VG08, VG09, VG10, VG15 and VG16 are Down syndrome models on the full pool, where the artefact cannot apply — their elevated R-hat is a separate, still-open question.
 4. **Decisive confirmation** would be VG11 at `test`, six chains, on the full typically-developing pool. The 10% six-chain fit took 4m 03s, so the full pool is roughly a 40-minute run. A cheaper equivalent is to subsample 10% of _subjects_ rather than rows, preserving replication at the same data volume.
 5. The promoted VG11 `test` fit (R-hat 1.718) is diagnostic evidence, not a usable fit, and its recorded sampling parameters carry 6 chains rather than the registered `test` 4, so it will not revalidate under `--render-only`.

@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
@@ -104,7 +106,7 @@ render_glossary([
 
 ## Statistical model
 
-Words understood are modelled as a bounded count out of the reference inventory. The expected proportion understood, $p_U(a)$, is a smooth function of age: on the logit scale, a straight-line developmental trend plus a Gaussian process term, which lets the curve bend away from the line by as much as the data support and no more.
+Words understood are modelled as a bounded count out of the reference inventory. The expected proportion understood, $p_U(a)$, is a smooth function of age: on the logit scale, a straight-line developmental trend plus a Gaussian process term, which allows smooth departures whose size and shape depend on the priors and data.
 
 Words spoken are **not** given a trajectory of their own. Instead the model estimates the production ratio $q(a)$ — the fraction of understood words a child of that age also says — and derives the spoken proportion as
 
@@ -114,7 +116,7 @@ This is the reparameterisation that shapes everything else in the report. Becaus
 
 The likelihood splits in two according to what each record supports. Where both counts are present and the spoken count does not exceed the understood one, the two outcomes factorise as $P(U)\,P(S \mid U)$: the understood count is Beta-Binomial over the reference inventory, and the spoken count is Beta-Binomial over the _observed_ understood count with mean $q(a)$. Records with no usable understood count, and records where the reported spoken count exceeds the reported understood count, fall back to a Beta-Binomial over the reference inventory with mean $p_U(a)\,q(a)$. Both branches use a Beta-Binomial rather than a Binomial because children of the same age differ from one another far more than a Binomial count would allow, and each outcome's dispersion is itself free to change with age.
 
-Neither trajectory is given a prior on its intercept and slope directly. Priors go instead on the expected proportion at two reference ages — the age anchors — which is a far more interpretable thing to have an opinion about than a value at age zero. One caution on reading them: the anchors parameterise the straight-line component only. The fitted trajectory at a reference age is the anchor plus whatever the Gaussian process adds there, and in this model the process is unconstrained at the anchors — so they are coordinates of the trend, not exact values of the fitted curve at those ages.
+Neither trajectory is given a prior on its intercept and slope directly. Priors go instead on the expected proportion at two reference ages — the age anchors — so the prior can be expressed in terms of vocabulary at those ages. One caution on reading them: the anchors parameterise the straight-line component only. The Gaussian process adds to the anchor on the logit scale before conversion back to a proportion, and in this model the process is unconstrained at the anchors — so they are coordinates of the trend, not exact values of the fitted curve at those ages.
 
 ::: {.callout-important title="What this model does not do"}
 
@@ -244,13 +246,13 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors for the first few parameters. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors for the first few parameters. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters, each with its median and interval.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -270,7 +272,7 @@ render_prior_posterior_contraction()
 
 The pair plot is capped so that the grid stays legible, and shows only the first few parameters — the understood anchors and the understood GP length-scale and amplitude, together with the leading production-ratio anchors. It is the anchor-versus-GP trade-off in comprehension that it is there to reveal: a strong diagonal ridge between an anchor and the GP amplitude would mean the data cannot say whether the curve's level comes from the line or from the bend. The remaining parameters, including both dispersion curves, appear in the trace plot and in the marginal posteriors above, which is where to look for them.
 
-Compare those marginal posteriors with the prior figures earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. That comparison matters most for the production ratio at the high anchor, whose prior is the informative one in this model.
+Compare those marginal posteriors with the prior figures earlier in this report. Little change between a marginal prior and posterior suggests limited learning about that parameter. Check prior sensitivity before relying on it; the data may still inform related parameters or their joint distribution. That comparison matters most for the production ratio at the high anchor, whose prior is the informative one in this model.
 
 :::
 

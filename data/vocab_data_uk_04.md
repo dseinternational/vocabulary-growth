@@ -1,6 +1,9 @@
 # Vocabulary data - UK (4)
 
-[Description to follow]
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+
+This source records understood, spoken and signed counts. The pooled view assigns the 416-item Oxford CDI ceiling. It records no sex and sets `produced` equal to spoken, so that field is not a speech-or-sign union. The modality overlap cannot be recovered from these totals.
 
 ## License
 
