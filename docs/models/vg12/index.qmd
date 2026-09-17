@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
@@ -56,7 +58,7 @@ render_reading_routes('reference', robustness=True, recovery=True)
 
 VG12 is a **reference model**. It exists to give the Down syndrome comprehension models — VG02 without hierarchy, VG20 and the joint models with it — a typically-developing curve to be read against, and it is consumed by the Down-syndrome-versus-typically-developing comparison outputs rather than being an end in itself.
 
-It succeeds **VG04**, which asked the same question of the same population but on a subsample, with no study or child effects, and on an English-only pool. VG12 uses the full pool, adds both kinds of random effect, and widens the language scope, so a difference between the two is not attributable to hierarchy alone. For the same population over a narrow young age window, modelled jointly with spoken vocabulary, see **VG13**; agreement between VG12 and VG13 where their windows overlap is a genuine external check on both, since they use different engines, different windows and different likelihoods.
+VG12 extends VG04 from an English-only subsample to the full selected language pool and adds study and child effects. Differences between their estimates cannot be attributed to hierarchy alone. VG21 estimates comprehension jointly with speech over 8–22 months. Comparing them within their shared range tests sensitivity to model structure on overlapping data; it is not independent validation.
 
 **A reference is not a target.** A typically-developing trajectory describes what typically-developing children in these datasets did. It is a comparison baseline, not a goal against which an individual child with Down syndrome should be judged or an intervention scored.
 
@@ -119,9 +121,9 @@ render_glossary([
 
 ## Statistical model
 
-We model the number of words understood as a bounded count out of the reference inventory. The expected proportion understood is a smooth function of age. On the logit scale that function is a straight-line developmental trend, plus a Gaussian process term that lets the curve bend away from the line by as much as the data support and no more, plus two offsets: one per contributing study and one per child.
+We model the number of words understood as a bounded count out of the reference inventory. The expected proportion understood is a smooth function of age. On the logit scale that function is a straight-line developmental trend, plus a Gaussian process term that allows smooth departures governed by the priors and data and no more, plus two offsets: one per contributing study and one per child.
 
-The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion understood at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. The Gaussian process is anchored at one age between them — every posterior draw of the GP is forced to zero there — which is an identifiability device rather than a claim that development changes at that age: without it the GP level, the intercept and the random effects can trade off against one another freely.
+The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion understood at two reference ages, so the prior can be expressed in terms of vocabulary at those ages. The Gaussian process is anchored at one age between them — every posterior draw of the GP is forced to zero there — which is an identifiability device rather than a claim that development changes at that age: without it the GP level, the intercept and the random effects can trade off against one another freely.
 
 The two random-effect blocks are **not** built the same way, and the difference matters for how they should be read:
 
@@ -293,11 +295,11 @@ style_diagnostics_table(diagnostics)
 
 The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all. A fit reaching this page has therefore either met those thresholds or is published under a recorded exception — and if there is an exception, the block above states it, names the parameter, and gives the reason it was accepted. Read that block before reading anything else on this page.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters, including the study and child scales and the two variance-partition parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -317,7 +319,7 @@ render_prior_posterior_contraction()
 
 The study-effect scale, the child-effect scale and the two variance-partition parameters first; then the GP length-scale and amplitude, and the age-varying dispersion. VG12 exists to use the whole typically-developing pool while absorbing between-dataset variation, so weak behaviour in the hierarchy terms is substantively important rather than merely technical.
 
-Compare the marginal posteriors above with the prior figures earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. That is a live issue for the GP amplitude in this model: it is a recorded, unresolved calibration defect that the amplitude posterior sits close to its prior. Widening the prior was tried and withdrawn, because it cost convergence without buying calibration. The defect is local to a smoothing hyperparameter rather than to a reported developmental quantity, which is why the model is published with it, but a reader should not treat the fitted amplitude as data-driven.
+Compare each marginal posterior with its prior. A small change can indicate limited information about that parameter, but says less about joint or derived quantities. The amplitude and length scale can trade off in describing the same curve. Assess their sensitivity through the fitted trajectories and recovery results as well as through their marginal distributions.
 
 Repeated observations of the same child are uncommon in this pool, which limits how sharply the child scale can be separated from residual dispersion, and is the recorded structural reason this model family strains the energy diagnostic. It is not something a different parameterisation fixes.
 
@@ -371,7 +373,7 @@ render_family_notes()
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — study and child effects set to zero, which is not an average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
 
 This table stops at 25 months. The typically-developing pool has no comprehension observations above that age, so the model's reported comprehension ages are capped there (`report_max_age_understood = 25`, #228) and no row below is extrapolation beyond the observed support. An earlier version of this fit reported query rows to 30 months, which *were* extrapolation; the cap removed them.
 
@@ -443,7 +445,7 @@ monthly
 
 ## Robustness {#sec-robustness}
 
-A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+Sensitivity variants refit the model under changed assumptions. The table compares their reported quantities with this fit's 89% intervals and records missing or unsuitable comparisons. This is a screen for sensitivity to the tested choices, not proof that all assumptions are harmless.
 
 ```{python}
 from pathlib import Path
@@ -475,7 +477,7 @@ else:
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
+Read the `verdict` column rather than the deltas. A variant marked robust kept the checked summaries within this fit's intervals. This does not establish equivalence or rule out smaller changes that matter for a particular use. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ### Parameter recovery
 
@@ -536,9 +538,9 @@ render_loo_section()
 - **The reported ages stop where the observations do.** This pool carries no comprehension above 25 months, and `report_max_age_understood = 25` caps every reported quantity there, so the query grid's 27- and 30-month rows are filtered out rather than extrapolated into. Nothing reported here is beyond the observed support; the limit is that there is no evidence past 25 months at all.
 - **Language and dataset cannot be separated.** The pool spans English, Italian and Spanish (European), and each non-English language enters through a single dataset, so any language effect is reported as between-dataset heterogeneity and cannot be isolated.
 - **The top of the reported range rests on two datasets, and its last month on one.** Four to six of the six retained studies contribute at every age from 8 to 18 months, but only Caselli and Floccia contribute at 19 through 24, and only Floccia at 25 (36 administrations). Nothing here is extrapolation — 25 months is an observed month and the reporting cap stops there — but above 18 months the shape of the trajectory is estimated from two laboratories rather than six, and the model carries study intercepts without study-specific age slopes, so study, language and shape are least separable exactly where the support is thinnest. Counted in `notes/202609062350-td-common-age-support.md`. A study-specific age slope is the structure that would show whether this matters, and no such variant is registered against this model — [#240](https://github.com/dseinternational/vocabulary-growth/issues/240) records it as warranted.
-- **The high anchor is un-normed.** No independent comprehension norm exists at that age; the prior there is regularisation, and its registered sensitivity variant has not been reported.
+- **The high anchor is un-normed.** The high-age anchor is regularisation rather than an independent comprehension norm. Check its sensitivity in the current robustness output.
 - **The GP amplitude is close to its prior.** This is a recorded, unresolved calibration defect. It does not affect the reported developmental quantities directly, but the amplitude itself should not be read as data-driven.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat, and the comprehension forms reach a good deal less of it than the inventory implies.
 - **Repeated measurement is sparse.** Few children in this pool were assessed more than once, which limits how well persistent between-child differences can be separated from residual dispersion, and is the recorded structural reason this model strains the energy diagnostic.
-- **The child scale recovers low.** Refitting this model to data simulated from its own posterior returns the child-effect scale below the value that generated it in every replicate tried, with the truth outside its 89% interval each time. The shared budget recovers well; it is the split between persistent child differences and residual dispersion that is mis-estimated, which is the same sparse-repeated-measurement limitation as the bullet above, showing up as bias rather than as width. Because this scale is the typically-developing side of the between-child contrast with the Down syndrome models, a low bias here overstates that difference — see the caveat in the report's between-child section, and issue [#225](https://github.com/dseinternational/vocabulary-growth/issues/225). Which of two diagnoses this is — the reparameterisation biasing the split, or the split being unidentifiable however it is written — is what the registered `free-scales` variant exists to separate: it reverts to the two free scales this model carried before 2026-08-05 and scores recovery of the child scale against this fit's. It has not been run.
+- **The split between child variation and residual dispersion is uncertain.** The recovery study recorded on 2026-09-03 found low child-scale estimates in its assessed replicates. That result applies to the tested settings and does not by itself establish the bias of every fit. Consult the current recovery matrix and the `free-scales` sensitivity. The population comparison now uses total spread rather than the child-scale component alone; see `notes/202609141600-total-spread-estimand.md`.

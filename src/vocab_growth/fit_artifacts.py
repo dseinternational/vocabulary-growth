@@ -483,22 +483,36 @@ class ConvergenceException:
 #: study-owner decision and belongs in a note, not in a commit message alone.
 CONVERGENCE_EXCEPTIONS: dict[str, ConvergenceException] = {
     "VG11": ConvergenceException(
-        parameters=("g_unit_hsgp_coeffs[4]",),
+        parameters=("ell", "ell_unit", "g_unit_hsgp_coeffs[4]"),
         max_rhat=1.015,
         reason=(
-            "One HSGP basis coefficient of sixteen reached R-hat 1.0125 against "
-            "the 1.01 gate, with the lowest ESS of the sixteen (1,139). Every "
-            "reported quantity converged with margin -- the trajectory and "
-            "dispersion grids peak at R-hat 1.0032 with zero of 500 plot points "
-            "and zero of 8 query points above 1.01 -- and the sampler is healthy "
-            "(16 divergences in 48,000 draws, BFMI 0.359-0.395 on all six "
-            "chains, better than VG12 and VG13, which are published with "
-            "caveats). Individual basis coefficients trade off against one "
-            "another and are weakly identified; the function they sum to is not. "
-            "The basis coefficients are not reported: the GP reaches the report "
-            "through eta (R-hat 1.006) and ell (1.003)."
+            "This model's GP has one slow direction, and it is a nuisance "
+            "direction: the amplitude/length-scale ridge. The GP is "
+            "orthogonalised against the constant and the linear trend, and every "
+            "length scale the prior admits -- 6 to 18 months, which is 0.55 to "
+            "1.64 times the half-width of the 8-30 month domain -- leaves nearly "
+            "the same residual shape, so the data identify the curvature and not "
+            "its split into eta and ell. Measured on the 2026-09-16 fit: "
+            "ell_unit contraction 0.125 against its Beta(3,3) prior, correlation "
+            "+0.32 with eta, and ESS 983 of 36,000 draws, which is the band "
+            "(800-1,600) where the 2026-08-15 family-wide scan found what "
+            "exceedances there are. Every reported quantity converged with "
+            "margin -- 500 plot points and 8 query points at R-hat 1.0028 or "
+            "better, minimum ESS 2,904 -- and the curvature the GP carries is "
+            "determined to about 5 per cent (0.320 logits, 5-95% 0.305-0.335) "
+            "against a total spread of 2.16 logits. The sampler is healthy: 28 "
+            "divergences in 36,000 draws and BFMI 0.36-0.41, better than the "
+            "typically-developing models published with caveats. The 2026-08-15 "
+            "entry covered one HSGP basis coefficient (R-hat 1.0125 then, "
+            "1.0068 in the 2026-09-16 fit) and is kept, because a basis "
+            "coefficient and the length scale are the same ridge seen from two "
+            "sides."
         ),
-        decided="2026-08-15, study owner; provisional, pending a longer refit",
+        decided=(
+            "2026-08-15 (one basis coefficient) and 2026-09-16 (the length "
+            "scale), study owner; see "
+            "notes/202609160500-vg11-length-scale-exception.md"
+        ),
     ),
 }
 

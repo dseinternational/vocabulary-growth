@@ -1,211 +1,133 @@
-# Agent Instructions
+# Agent instructions
 
 > [!NOTE]
 > Maintained with assistance from LLM-based AI tools, including OpenAI Codex/GPT-6.
 
-> **Keep in sync:** This file, `CLAUDE.md`, and `.github/copilot-instructions.md` share the same content. When updating one, update all three.
+Keep this file, `CLAUDE.md` and `.github/copilot-instructions.md` identical. Update all three together.
 
-## Project overview
+## Project and reading guide
 
-This project is an exploratory study of vocabulary development in children with Down syndrome that aims to characterise observed trajectories of word learning, spoken and gestured production, and relationships between words understood and produced. The primary goal of the study is to provide interpretable statistics that can accurately inform expectations, intervention and teaching practice. We evaluate and fit these models using Bayesian inference to estimate full probability distributions for parameters of interest, using an iterative workflow.
+This exploratory study describes vocabulary development in children with Down syndrome. It estimates words understood, spoken and signed, their relationships, and variation between children. The aim is to help families and practitioners interpret patterns of development. These observational models do not establish causes. Their predictive distributions describe a range of possible counts under the model, not a certain course for an individual child.
 
-The Python package `vocab_growth` (in `src/vocab_growth/`) defines a series of PyMC models that are fitted to vocabulary assessment data aggregated from multiple international studies. Reports are authored in Quarto (`.qmd`).
+The Python package is `src/vocab_growth/`. Reports use Quarto (`.qmd`). Start with:
 
-This project depends on a sibling repository, `dseinternational/research`, which provides shared utilities via the `dse_research_utils` package. It is installed from the public git tag `v0.15.1` (see [Environment setup](#environment-setup)); a commented local-dev override in `pyproject.toml` lets you point at a sibling `../research/src/python` checkout instead.
+- [Model inventory](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/README.md) for model structures, reporting roles and registration requirements.
+- [Prior specification](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/PRIORS.md) for the statistical assumptions.
+- [Data guide](https://github.com/dseinternational/vocabulary-growth/blob/main/data/readme.md) and individual source notes for provenance and measurement limits.
+- [Full-refit runbook](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/runbooks/full-refit.md) for fitting, validation and publication.
+- [Notes index](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/README.md) for dated evidence and decisions. A note describes its own data and code revision, not necessarily the current analysis.
 
-## Environment setup
+There are twenty-three registered models: `VG01`-`VG16` and `VG19`-`VG26`, excluding retired VG06. VG17 and VG18 are unregistered exploratory models. Use `MODEL_REGISTRY` and `models.catalogue.CATALOGUE` for the executable model set. The inventory records their reporting roles.
 
-Single-layer [uv](https://docs.astral.sh/uv/) environment (shared across DSE research repos). Create or refresh it with `uv sync`; run anything in it with `uv run …`, which needs no activation.
+## Environment
 
-- **Dependencies**: `pyproject.toml` declares only `dse-research-utils[columnar,graphs,io,jax,notebook,viz]` plus a `dev` dependency group. The scientific stack (`numpy`/`scipy`/`pandas`/`pymc`/`pytensor`/`nutpie`/`arviz`/`preliz`/`xarray`, …) is inherited transitively from the library's own `pyproject.toml`, which is the canonical set of floors — do not restate it here, or the two copies will drift. `nutpie` is deliberately not declared: PyMC auto-selects it as the default NUTS sampler when present.
-- **Python**: provisioned by uv from `.python-version` (3.14). No separate Python installation is needed.
-- **Exact replication**: `uv.lock` pins every package for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable commit of `dse-research-utils`. `uv sync --locked` installs it and fails rather than re-resolving if it is stale. Refresh with `uv lock` only after an intentional dependency change. See `docs/runbooks/environment-locks.md`.
-- **Platforms**: Linux, Apple Silicon macOS and **native Windows** (no WSL — `jaxlib` ships win-amd64 wheels on PyPI). Intel macOS is unsupported upstream: numba publishes no macOS x86_64 wheels. On Windows set `PYTHONUTF8=1`: the progress output uses `✓`/`·`, which cp1252 cannot encode. Since `dse-research-utils` v0.11.2 the shared console relaxes a non-UTF-8 `sys.stdout` to `errors="replace"`, so these degrade to `?` rather than killing a fit at its first completed stage — UTF-8 mode is what renders them properly. CI sets it for the fit job.
-- **Local dev against research**: comment the `dse-research-utils` git entry in `[tool.uv.sources]` and uncomment the `path = "../research/src/python"` override beside it.
-- **GPU**: opt-in overlay (`jax[cuda]`); the locked environment is CPU-only and cross-platform.
-- **Not Python packages** (`uv sync` cannot supply these): the Graphviz `dot` binary (model-diagram figure only — skipped with a warning if absent, so it is the one optional tool); Quarto for report rendering, which bundles its own Pandoc, Dart Sass, Deno and Typst and so needs no separate Pandoc install; a XeLaTeX distribution (`quarto install tinytex`) plus the Source Sans 3 / Monaspace Neon fonts for the report book's `pdf` format only; and Node.js for spellcheck and Markdown formatting. `quarto check` reports what it resolved.
-- **Node dependencies** (spellcheck, formatting): `npm install`.
+Use the [locked uv environment](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/runbooks/environment-locks.md):
 
-## Commands
+```bash
+uv sync --locked
+uv run python scripts/prepare_data.py
+npm ci
+```
 
-### Lint
+`uv` supplies Python from `.python-version` and installs the packages pinned in `uv.lock`. The supported platforms are Linux x86_64 and aarch64, Apple Silicon macOS, and native Windows AMD64. On Windows, set `PYTHONUTF8=1` so progress symbols display correctly.
+
+`pyproject.toml` declares `dse-research-utils[columnar,graphs,io,jax,notebook,viz]`, installed from the public `dseinternational/research` tag. The shared library declares the scientific dependencies. Do not duplicate their version floors here. To use a sibling checkout, follow the commented path override in `[tool.uv.sources]`.
+
+Refresh `uv.lock` only for an intentional dependency change. The lock covers CPU installations; GPU support is a separate, host-specific setup.
+
+Quarto is needed to render reports. The report book's PDF format also needs a XeLaTeX distribution and the Source Sans 3 and Monaspace Neon fonts. Graphviz `dot` supplies model diagrams; a missing binary produces a warning during fitting but leaves the report without that figure. Node.js supplies the documentation tools. Run `quarto check` to inspect the rendering environment.
+
+## Checks
 
 ```bash
 uv run ruff check src/ scripts/ tests/
-```
-
-### Type check
-
-```bash
 uv run mypy
-```
-
-Deliberately narrow: the four modules that _declare_ things — `models/definitions.py`, `models/catalogue.py`, `models/subject_effects.py` and `analysis_frames.py` — listed in `[tool.mypy]`. That is where an annotation quietly disagreeing with the value does real damage, and turning it on found two: `tau_subj_u_sigma` was annotated `float` while three registered models put an object in it, and `TrivariateModelDefinition.kappa_u` said `KappaPriorParams` while VG14 and VG15 both passed the two-anchor form. The PyMC graph code is **not** covered and should not be until these are stable — PyTensor's tensor algebra is not usefully typed, and the noise would bury findings like those two. CI runs it in the lint job, from a `typecheck` dependency group holding mypy alone.
-
-### Test
-
-```bash
-uv run pytest                                  # the fast set (see below)
-uv run pytest -m "slow or not slow"            # everything (the union CI's two test jobs cover)
-uv run pytest -n auto --dist loadfile          # the fast set, in parallel
-uv run pytest tests/test_foo.py                # single file
-uv run pytest tests/test_foo.py::test_bar      # single test
-```
-
-**A bare `pytest` does not run everything.** `addopts` carries `-m 'not slow'`, so the tests that do real sampling, compilation or numerical optimisation are deselected — 301 of the suite's 2,455, spread over thirteen modules. On a 32-core machine the fast set is about a minute and the slow set about two and a half; on CI's four workers the pytest steps are about 1.5 and 4.5 minutes, the second of those on a warm PyTensor compiledir (cold it is over 7 — see the cache in `ci.yml`, which is worth more than any change to the tests themselves). The deselected count is printed on every run. CI covers everything as two parallel jobs — `tests-fast` (`-m "not slow"`) and `tests-slow` (`-m slow`), whose union is the whole suite — and skips both, plus the VG01 smoke fit, when a change touches only documentation (notes, report chapters, Markdown), with two carve-outs that always run everything: the three agent-instruction copies, whose agreement a test compares, and `docs/models/**`, which the fit pipeline copies. Locally, `-m "slow or not slow"` selects everything in one run; use it before pushing anything that touches an engine. It is spelt out rather than an empty `-m ""` because pwsh drops the empty string before pytest sees it, so the same command works on Windows.
-
-`pytest-xdist` is in the `dev` group. The two jobs distribute differently and the reason is worth knowing before changing either. **`tests-fast` uses `--dist loadfile`**: several of its modules have module-scoped fixtures that are themselves fits, and per-test distribution rebuilds them on every worker that draws one of their tests. **`tests-slow` uses `--dist loadgroup`**, because `loadfile` made its wall clock the cost of one file: `test_prior_table_coverage.py` builds 106 graphs, then 45% of that set's CPU, and pinning them to a single worker left the run unable to finish faster than that file (592 s of a 592 s run). Its tests share nothing, so they now spread; the three modules that _do_ share an expensive module-scoped fixture carry a `pytest.mark.xdist_group` and still travel together, and the mark's docstring in each says why. Measured 592 s → 207 s on four workers and 603 s → 118 s on 32; before the change both worker counts gave the same ~600 s, because one file cannot be split. Those local ratios did not transfer: on CI the same change measured 10 m 23 s → 9 m 33 s, 8% rather than 2.9x, and an `-n 4` run on a 32-core workstation is not an `ubuntu-26.04-arm` run — measure a CI claim on CI. That file is no longer the set's largest cost and is out of its slowest fifteen: the 106 builds were never where its time went — `diagnostics_var_names` compiled one PyTensor function per unobserved RV, 75.8 s against 6.4 s to build all twenty-one graphs. Batching that, with the compiledir cache, took CI's slow pytest step from 9 m 33 s to 4 m 16 s. What is left is real sampling, so the next lever is more workers rather than less work. A new slow module needs the mark if two or more of its tests share a module- or session-scoped fixture that fits or compiles; without one it is distributed per test, which is what you want otherwise. See `notes/202609101310-slow-test-distribution.md` and `notes/202609111158-slow-test-cost-was-not-data-preparation.md`.
-
-Two suite-wide behaviours live in `tests/conftest.py`: the matplotlib backend is fixed to Agg before anything imports pyplot, and an autouse fixture silences the fit pipeline's prior-distribution figures and its `describe_all` pass. Both were the bulk of the suite's run time and nothing asserted on either. Mark a test `@pytest.mark.emits_reporting_artefacts` to opt back in — `tests/test_pipeline_reporting_artefacts.py` does, and checks that a real build still produces them. See `notes/202608241530-test-suite-performance.md`.
-
-### Spellcheck (Markdown/Quarto docs)
-
-```bash
+uv run pytest
+uv run pytest -m "slow or not slow"
 npm run spellcheck
+npm run format:check
+python3 tests/test_notes_index.py
 ```
 
-### Format Markdown
+A bare `pytest` runs only tests marked `not slow`. Run the full set before pushing engine changes. For parallel runs, use `-n auto --dist loadfile -m "not slow"` for fast tests and `-n auto --dist loadgroup -m slow` for slow tests. Slow tests sharing an expensive fit or compiled fixture need an `xdist_group` mark so they stay on one worker.
 
-```bash
-npm run format         # rewrite files in place
-npm run format:check   # check only; fails if any file needs formatting (CI)
-```
+`mypy` checks the four declaration modules listed in `pyproject.toml`, not the PyTensor graph code. CI splits fast and slow tests into separate jobs. Changes to agent instructions or `docs/models/` run the full CI checks even if they only edit prose.
 
-Uses Prettier. Configured in `.prettierrc.json`; ignore patterns in `.prettierignore`. `proseWrap: "preserve"` so existing line breaks are kept; tables are auto-aligned.
+The test fixtures use Matplotlib's Agg backend and suppress routine reporting figures. Mark a test `emits_reporting_artefacts` when it needs to check those outputs. Prepare the data before tests in a fresh checkout; the database and merged CSV are generated files.
 
-### Prepare data
+Use `npm run format` to apply Markdown formatting. Prettier preserves prose line breaks. Write each paragraph on one line, with blank lines between paragraphs. Use British English; the spelling configuration is `.cspell.config.yaml`.
+
+## Data preparation
 
 ```bash
 uv run python scripts/prepare_data.py
-```
-
-This merges CSV datasets from `data/` into `data/vocab_data_merged.csv` and a DuckDB database at `data/vocabulary.duckdb`.
-
-One source is generated rather than committed by hand:
-
-```bash
 uv run python scripts/build_us01_source.py --verify
 ```
 
-This derives `data/vocab_data_us_01.csv` (the Edgin Down syndrome cohort, `us_01`) from the item-level contributor files in the public `langcog/wordbank` repository, with a provenance manifest. It is not read from `data/wordbank_administration_data.csv`, because Wordbank's by-child download page age-truncates every administration to its instrument's registered window (345 Down syndrome administrations reduced to 194) and cannot separate the four all-blank administrations it scores as zeros. `--verify` checks the in-window rows against the export as a multiset. See [`data/vocab_data_us_01.md`](data/vocab_data_us_01.md). The export is still the source for the typically-developing pool, for which the age filter is appropriate.
+The first command merges source CSVs into `data/vocab_data_merged.csv` and `data/vocabulary.duckdb`. The second rebuilds the Edgin Down syndrome source from item-level Wordbank contributor files and verifies in-window rows against the export. See [the source record](https://github.com/dseinternational/vocabulary-growth/blob/main/data/vocab_data_us_01.md). The Wordbank by-child export remains the source for the typically developing pool.
 
-### Fit a model
+Both data loaders sort rows before masking. Preserve this deterministic order because `analysis_frame_hash` includes row order. `vocab_growth.analysis_frames` rebuilds each model's prepared frame without fitting it.
 
-```bash
-uv run python scripts/fit_model.py <model_id> [--config <config>] [--render | --render-only] [--upload] [--output-dir <dir>] [--trace-persistence <tier>]
-```
+Before changing a data exclusion, read its governing constant's docstring in `data_utils.py` and the source note. In particular:
 
-- `model_id`: one of `vg01`, `vg02`, `vg03`, `vg04`, `vg05`, `vg07`, `vg08`, `vg09`, `vg10`, `vg11`, `vg12`, `vg13`, `vg14`, `vg15`, `vg16`, `vg19`, `vg20`, `vg21`, `vg22`, `vg23`, `vg24`, `vg25`, `vg26`, or `all`. `all` is derived from `MODEL_REGISTRY` rather than from this list, so it always covers every registered model.
-- `--config`: sampling configuration — `dev` (fast, for development), `test`, or `rep` (full reporting quality). Defaults to `dev`.
-- `--render`: render the Quarto model output after the completed fit is atomically promoted. A rendering failure leaves the fit complete and available for a later `--render-only` retry.
-- `--render-only`: validate and render an existing compatible fit without sampling again.
-- `--upload`: upload model output to Azure Blob Storage via AzCopy. Requires `DSERESEARCH_BLOB_CONTAINER_URL` environment variable set to the target container URL.
-- `--output-dir`: root directory for model output. Overrides the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable; both fall back to the repository-local `output/`.
-- `--trace-persistence`: how much of the trace to keep in `trace.nc` — `full` (default), `compact`, or `minimal`. Overrides the `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE` environment variable. It changes nothing about the posterior. Since 2026-08-23 the observation-sized deterministics (`f_obs`, `p_obs`, `kappa_obs`, their per-outcome counterparts and the concatenated `*_all` grids) are not sampled at any tier: the engines' `sample` stage gives `pm.sample` the `var_names` from `fit_artifacts.sampled_variable_names`, so nutpie never evaluates or stores them — the graph and the draws are unchanged, nothing in the fit pipeline read them, and storing them was what made fit memory scale as `n_obs × draws`. The trace records what was left out in its posterior attributes and the manifest under `artefacts.trace.not_sampled`; a reader that needs one rebuilds the model and recomputes it with `vocab_growth.posterior_recompute` (as `scripts/loso_compare.py` does), and `scripts/kfold_loso.py` and `scripts/wave_forward_score.py`, which read them across every draw of their own fold fits, ask `sample()` to store them. `compact` therefore now drops only the duplicated scaled random effects, which are recomputable from the raw draws and the scales (the 9.8 GB → 3.2 GB measurement on VG10 dates from when the observation-sized variables were still stored). `minimal` additionally drops the stored `log_likelihood` and `posterior_predictive`, which is a real trade rather than a free saving: their consumers run during the fit, but recomputing LOO or a new predictive view later then needs a refit, and `loso_compare.py`, `regenerate_plots.py` and parameter-recovery scoring all need a `full` fit and refuse a compacted one up front, before reading the trace. The tier actually written is recorded in `fit_manifest.json` under `artefacts.trace`, so a missing variable can be told from a truncated file, and fits made before the setting existed are treated as `full`. See `notes/202608081445-trace-persistence-tiers.md`.
+- Down syndrome administrations above a form's registered age window are admitted. An early-vocabulary form can be appropriate for an older child.
+- Comprehension below production is checked against `max(produced, spoken)`, not `spoken + signed`. Speech and signing overlap. Only comprehension is masked, and equality is retained.
+- `ie_02` uses DSE Checklists 1 and 2. It remains on the 810 reference scale with its own 476-word form ceiling. It is not a complete DSE form. The equivalent partial baseline wave in `ie_01` is masked.
+- The typically developing language scope is part of each model definition. The hierarchical reference models include English, Italian and Spanish (European); VG03 and VG04 remain English-only.
 
-- `--nutpie-backend`: which compiler nutpie evaluates the log-density with — `numba` (default, and what every fit of record used) or `jax`. Overrides the `DSE_VOCAB_GROWTH_NUTPIE_BACKEND` environment variable. It changes nothing about the posterior, so it is recorded in the fit manifest's `runtime` block rather than compared as a sampling parameter. It exists for one documented case (#289 task 4.1): nutpie assembles the gradient by concatenating one array per free variable in a single call, and on linux-aarch64 numba's `np_concatenate` over VG15 `fallback-dispersion`'s 44 free variables failed in LLVM register allocation, where the model of record's 42 compiled; on win-amd64, where the project's fits run, both compile and draw under either backend, and the arm was fitted under numba (2026-09-06). Upstream nutpie still concatenates in one call, so `--nutpie-backend jax` remains the escape hatch for that arm on a linux-aarch64 host. `fit_sensitivity.py` takes the same flag.
-
-Output (traces, figures, summary tables) is written to `<output-root>/models/<model_name>/`. The output root is resolved (highest precedence first) from `--output-dir`, then the `DSE_VOCAB_GROWTH_OUTPUT_DIR` environment variable, then the repository-local `output/` default — so reporting-quality runs can redirect the multi-gigabyte traces to another volume without changing the layout (on the fitting workstation, `DSE_VOCAB_GROWTH_OUTPUT_DIR` is set machine-wide to `D:\output\vocabulary-growth`). `fit_model.py`, `fit_sensitivity.py`, `sync_report_figures.py`, and `upload.py` all honour the same resolution (`vocab_growth.environment.output_root`), and the disk preflight prints the resolved root. The report figure cache (`docs/report/figures/`, below) always stays in the checkout.
-
-### Run parameter-recovery checks
+## Fitting and reporting
 
 ```bash
-uv run python scripts/fit_recovery.py <model|headline|all> [--config <config>] [--replicates <n>] [--truth posterior|prior] [--set-truth <name>=<value>] [--simulate-only | --fit-only | --compare-only] [--output-dir <dir>]
+uv run python scripts/fit_model.py vg20 --config dev
+uv run python scripts/fit_model.py vg20 --config rep --render
+uv run python scripts/fit_model.py vg20 --config rep --render-only
 ```
 
-Simulates a dataset from a model at a known parameter draw, refits the model to it with the engine's own pipeline, and scores the recovered posterior against the truth. `headline` is `vg20`, `vg12`, `vg15`; `all` is every model `recovery.spec.supported_models()` returns, today `vg07`-`vg13`, `vg15`, `vg16` and `vg19`-`vg26`; the six it excludes carry their reason in `recovery.spec.UNSUPPORTED_REASONS` (VG01-VG05 and VG14, all descriptive baselines superseded by the models built on them). VG16 was a seventh until 2026-09-11, on the ground that its cross-lag predictor is a function of the outcome and so needs wave-by-wave simulation; measurement did not support it. The simulator already rebuilds between stages, and VG16's lag reads `understood` (drawn in stage 0) while entering `y_s_obs` (stage 1), so the lag was already recomputed from the simulated parent before the draw that uses it. `recovery.spec.single_pass_is_sound` now derives that from the stage order instead of asserting it, the wave loop it selects exists for the case where a predictor reads a **same-stage** outcome, which VG25 is the first registered model to need (its lag reads `signed`, drawn beside the `spoken` it shifts, so the loop is selected for it rather than declared), and a guard checks on every run that each row was drawn under the predictor the finished frame reproduces. The two are checked to partition `MODEL_REGISTRY`, so read them there rather than trusting a list here. Truth defaults to the model of record's posterior (requires a fitted model of record); `--truth prior` needs no trace but tests parameter settings far from the reported regime. `--set-truth <name>=<value>` (repeatable) sets a named **free** variable in the truth draw instead of taking the value it held, which is what a designed recovery cell needs — #297 check 4 and #242 item 6 both ask for a cross-lag coefficient recovered at `(beta = 0, rho != 0)`, `(beta != 0, rho = 0)` and both nonzero, and only the third is a draw. Reported quantities are deterministics recomputed from the graph _after_ the settings, so a setting reaches everything downstream of it and naming a deterministic is refused rather than silently undone; a correlation is therefore set through the packed Cholesky factor the block actually samples (`subject_re=independent` zeroes the correlations and keeps the scales). Settings name the run's own simulation directory, fit and matrix, so two cells never share either. Recovery fits land in `<output-root>/models/<model_id>-<config>-recovery-rNN/` and never touch a model of record; tables land in `<output-root>/comparisons/recovery/`. A replicate is only assessed if its fit's convergence is confirmed. See `docs/runbooks/parameter-recovery.md`, including what a handful of replicates can and cannot establish.
+Use `--help` for the full interface and the [runbook](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/runbooks/full-refit.md) for a reporting run. `all` takes its model set from the registry. `dev` is the default; `test` and `rep` provide longer sampling runs. A render failure leaves a completed fit available for `--render-only`.
 
-### Prepare report figures
+Output goes to `<output-root>/models/<model-name>/`. The root is chosen from `--output-dir`, then `DSE_VOCAB_GROWTH_OUTPUT_DIR`, then the checkout's `output/`. Fit, sensitivity, sync and upload commands use this same rule. The report cache always stays at `docs/report/figures/`.
+
+`--trace-persistence` accepts `full` (default), `compact` or `minimal`, overriding `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE`. Observation-sized deterministic arrays are omitted at every tier and can be rebuilt with `posterior_recompute`. `compact` also omits scaled random effects; `minimal` additionally omits log likelihood and posterior predictive draws. These choices do not change the posterior, but recovery scoring, `loso_compare.py` and `regenerate_plots.py` require `full`. Check downstream needs before reducing storage. The manifest records omissions under `artefacts.trace`.
+
+`--nutpie-backend` selects `numba` (default) or `jax`, overriding `DSE_VOCAB_GROWTH_NUTPIE_BACKEND`. JAX is the fallback for the documented VG15 `fallback-dispersion` compilation failure on Linux aarch64. The backend is recorded as runtime information.
+
+For parameter recovery, see the [recovery runbook](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/runbooks/parameter-recovery.md):
 
 ```bash
-uv run python scripts/prepare_report_figures.py [descriptives] [illustrations] [priors] [pending] [--draws <n>] [--seed <n>]
+uv run python scripts/fit_recovery.py headline --config test --replicates 3
 ```
 
-Writes everything the Quarto report needs that is _not_ fitted model output, so all of it can be regenerated at any time: `descriptives` (per-study summary tables and observed-data figures, into `docs/descriptive/figures/` for the standalone descriptive report and mirrored into `docs/report/figures/descriptives/`; needs `prepare_data.py` to have run), `illustrations` (the introduction's Bayesian-updating and Binomial-versus-Beta-Binomial figures, into `docs/report/figures/`), `priors` (the methods chapter's prior-trajectory and GP-anchoring figures, simulated from the registered definitions' own priors, into `docs/report/figures/methods/`), and `pending` (a labelled placeholder for every figure a chapter references that is still absent, so a render never fails on a missing file). With no stage named, all four run in that order. The figure code lives in `vocab_growth.descriptive` and `vocab_growth.report_illustrations`. None of it is validated by `sync_report_figures.py`, which covers fit artefacts only; run this after `prepare_data.py`, and again after any figure sync, before rendering.
+`headline` selects VG20, VG12 and VG15. `all` uses `recovery.spec.supported_models()`; excluded models have reasons in `UNSUPPORTED_REASONS`. Posterior truth requires an existing fit; `--truth prior` does not. `--set-truth NAME=VALUE` sets a free variable before derived quantities are recomputed. VG16 is supported. VG25 requires simulation in wave order because its lag reads a same-stage outcome. Score only converged replicates, and do not treat a few replicates as a coverage guarantee.
 
-### Sync report figures
+Prepare report assets in this order:
 
 ```bash
-uv run python scripts/sync_report_figures.py [--config <config>] [--output-dir <dir>]
+uv run python scripts/sync_report_figures.py --config rep
+uv run python scripts/prepare_report_figures.py
 ```
 
-Validates the model definition, sampling configuration, raw-data fingerprint, exact prepared-frame hash, complete lifecycle state, reporting quality, clean fit provenance and rendered model report before atomically replacing cached plots (`.svg`/`.png`) and summary tables (`.csv`) from the output root's `models/` and `comparisons/` in `docs/report/figures/` (gitignored), which is the only source the Quarto report reads. Comparison outputs are validated too, against the `comparison_manifest.json` their generating script writes: a contributing fit that has been refitted since the comparison was generated fails the sync, and comparison files that no manifest entry claims are reported as warnings. Every script that writes into the comparisons root now records an entry -- `ComparisonOutputs` snapshots the directory so the claim is derived from the run rather than from a hand-maintained list, a comparison with no contributing fit (`pool_descriptives.py` describes the pool; `kfold_loso.py` and `wave_forward_score.py` fit their own folds) records the raw-data fingerprint instead, and the three scripts that legitimately record nothing carry their reason in `comparisons_provenance.MANIFEST_EXEMPT_SCRIPTS`, which `tests/test_comparison_manifest_coverage.py` pins. `--allow-provisional` keeps lifecycle/model/sampling checks for local dev/test work while relaxing publication provenance, the executable-code signature, the prepared-frame check and comparison provenance. Traces (`.nc`) are excluded. Run after fitting models or regenerating comparisons, before rendering the report.
+Sync validates fits and comparison manifests before replacing cached plots and tables. It does not copy traces. `--allow-provisional` relaxes publication checks for local inspection only. The preparation command generates observed-data summaries, illustrations, prior figures and labelled placeholders for missing figures. A rendered placeholder is not a completed result.
 
-## Architecture
+## Fit compatibility and provenance
 
-### Data pipeline
+These checks answer different questions. Do not replace one with another:
 
-1. Raw study data lives in `data/` as CSVs (one per study, e.g. `vocab_data_uk_01.csv`).
-2. `scripts/prepare_data.py` merges and harmonises them into a DuckDB database with a unified `vocab_combined` view.
-3. Model code loads data via `vocab_growth.data_utils.load_combined_data()`.
+- The serialised definition records graph, data, reporting and identity fields. Every difference fails validation unless a checked `fit_identity.BACKFILL_DEFAULTS` entry establishes that an absent field had exactly the recorded default behaviour.
+- The prepared-frame hash checks the actual rows and values used by a model. A matching frame can excuse a changed raw-data fingerprint, because another population's input may have changed without affecting this model.
+- The executable-code signature hashes the package's Python AST, excluding comments and docstrings, and records numerical library versions. Resume, sync and publication enforce it. Rendering and provisional sync do not. `expected_implementation=None` means the signature is not checked.
+- Lifecycle, sampling quality and clean provenance checks determine whether a fit is complete and suitable for publication.
 
-Both loader paths return rows in a **deterministic order** (sorted on every column before the masking rules run). Nothing statistical depends on it — the likelihoods are order-invariant, and the sort changes the order only, not the content — but the fit manifest records `data.analysis_frame_hash`, an exact hash of the prepared frame including its row order, and that hash is what tells a stale posterior from a current one. The loader queries carry no `ORDER BY`, so without the sort the hash followed the DuckDB scan order and could not be recomputed for validation. Every registered model's prepared frame can be rebuilt outside a fit through `vocab_growth.analysis_frames`, which is how `fit_model.py`, `sync_report_figures.py` and `compare_models.py` now check that a fit's frame still matches the one the current loader rules produce. Every **other** script that opens a stored trace goes through `vocab_growth.fit_consumers`, which makes the same check (registered definition, raw-data fingerprint, exact frame hash -- deliberately not the publication apparatus, so an edit to a plot helper does not stop a script reading a fit back) and offers one shared `--allow-stale-fit` override that announces what it overrode. The two scripts that read a trace and are _not_ expected to validate carry their reason in `fit_consumers.EXEMPT_CONSUMERS`; `tests/test_fit_consumer_coverage.py` fails when a new trace-reading script appears in neither camp. A change to a masking or exclusion rule therefore invalidates fitted output even though the raw CSVs are untouched, which is the point: the raw-data fingerprint alone cannot see rule changes, because the rules run in Python after the CSVs are read. The converse holds too: since 2026-08-31 a matching frame hash **excuses** a raw-data fingerprint mismatch, because the fingerprint hashes every CSV in `data/` while a model consumes the raw data only through its own prepared frame — so new data for one population (say, a new Down syndrome study CSV) no longer stales the other population's fits; the fingerprint stays a hard failure wherever the frame hash is unavailable or also differs.
+Trace-reading scripts use `fit_consumers`, which checks definitions and data compatibility. Its explicit `--allow-stale-fit` override reports what it bypassed. New trace consumers and comparison writers must join the relevant coverage registries or record a justified exemption. Comparison manifests link outputs to their contributing fits or input-data fingerprint.
 
-Separately from the definition, every fit records an **executable-code signature** (`vocab_growth.models.implementation_identity`): the AST of every Python module in the package, hashed with comments, docstrings and whitespace stripped, plus the installed versions of the numerical libraries (`pymc`, `pytensor`, `numpy`, `scipy`, `pandas`, `arviz`, `nutpie`, `dse-research-utils`). The scope is deliberately wide, so _where_ it is enforced is the part that has to be narrow: `fit_validation_kwargs` asks for it under `resume`, `sync` and `publish` (and their `-with-caveats` variants) and **not** under `render` or `provisional-sync` -- otherwise editing a plot helper would make every existing fit unrenderable and would break `--allow-provisional` in exactly the checkout it exists to serve. `validate_fit_output` never infers it: `expected_implementation=None` means _not checked_, like every other `expected_*` argument, so `loso_compare.py` and the recovery harness keep reading a model of record back without it. A mismatch names the modules and libraries that moved, because the message is what a reporting-quality refit gets decided on. A fit with no recorded signature is unverifiable rather than assumed current, so publishing one requires a refit.
+## Model code
 
-The definition itself is compared **field by field through a classified payload** (`vocab_growth.models.fit_identity`), not by raw dictionary equality. Every field of every registered definition class is classified as graph-affecting, data-affecting, reporting or identity; the classification is complete (a test checks it against the registry) and fails closed (an unclassified field is treated as graph-affecting). **Every difference is still fatal**, reporting and identity ones included — what the classification adds is a failure message saying what kind of thing moved, and one documented excuse: `BACKFILL_DEFAULTS` names fields whose _absence_ from an older manifest is equivalent to a stated value, which is a claim that every fit made before that field existed behaved exactly as a fit with the field set to it. Without that mechanism, adding a field with a default invalidates every historical fit of its dataclass even when the default reproduces what those fits did — the constraint that pushed VG19's child slope and Proposal A1's age-varying scale into a scalar field holding an object, and VG20's correlation and VG22's factor onto sibling subclasses. The registry holds ten entries. Two are from #266 finding 8 — `spoken_fallback` and `spoken_fallback_kappa_sigma` on the trivariate and joint definitions, so VG14 and VG15 could run the sensitivity the bivariate models have had since #240 without invalidating every VG14 and VG15 fit ever made for a field whose default is what those fits already did. The third is `include_same_day_disagreements` on the bivariate and joint definitions (#289 task 4.3), a loader switch whose entry must equal the loader's own default, because every fit made before the field existed called the loader without the argument. The fourth is `lag_same_form_only` on the bivariate definition (#242), which VG16's same-form sensitivity needs and which twelve bivariate models would otherwise be restaled by; it is read through one `getattr` default that a test asserts on the call site's own source. The fifth is `exclude_studies` on the joint definitions (#297 check 5), the same kind checked the same way, and additionally verified on the fits themselves: the VG15 and VG24 fits of record validate with it and fail without it, and the frame hash the three joint models share did not move when it was added. Being keyed by bare name, it also covers the bivariate class's `exclude_studies`, added 2026-08-25 without an entry; that half rests on commit history rather than a call site and excuses no live fit. The sixth is `sign_lag_same_form_only` on VG25's class, checked through its shared reader. The seventh to ninth arrived on 2026-09-13 and are checked the same way, against the readers every engine uses: `sex_effect_sigma` and `sex_known_only` (#324), which moved onto the definition classes the reporting models instantiate when sex became a covariate, and `study_age_slope_sigma` (#240 item 5), a per-study age-slope sensitivity. They matter for the development steps that keep the defaults, whose existing fits would otherwise fail on a field that changes nothing about them. The tenth, `mask_dse_short_form_comprehension` (2026-09-15), is the loader-switch kind again, checked against `load_data`'s signature like `include_same_day_disagreements`. `fit_identity.py`'s comment above the registry is the worked precedent: it shows the claim each entry makes being _checked_ rather than asserted — the fallback entries through the `getattr` default the engine reads, the loader entry against `load_data`'s signature in `tests/test_fit_identity.py` — which is what a further entry has to do. A new entry belongs with the change that adds the field it excuses. Whether a _reporting-only_ difference should stop a fit being published is a separate decision and has not been made — a changed `ages_query` leaves the stored query outputs describing ages the report no longer asks for.
+Model wrappers select a definition and dispatch to a shared engine. Definitions belong in `models/definitions.py`; engine and reporting declarations belong in `models/catalogue.py`. Keep engine identity out of the serialised statistical definition. See the inventory's registration checklist before adding a model.
 
-The Down syndrome pool masks or drops several documented defect classes by default, each with a reinstatement flag for sensitivity analysis: partial administrations, duplicated outcome columns, implausible production (near-ceiling and longitudinal-collapse signatures), production counts contradicted by a same-day administration on another form, administrations given below their form's lowest registered age, children recorded only at their form's ceiling, and comprehension counts that fall below the child's own production count. Read the governing constant's docstring before reinstating any of them. One DSE source is deliberately **not** masked: `ie_02` administered Checklists 1 + 2 only, and since 2026-09-15 it stays on the 810 scale as a short form with its own 476-word ceiling (`DSE_SHORT_FORM_CEILINGS`), while `ie_01`'s baseline wave, the same instrument subset, is masked as partial. The form-ceiling guard therefore drops its one retained administration above 476, it is not DSE-native, and the `ie02-comprehension-masked` arm on VG10, VG15 and VG20 checks what keeping its comprehension counts carries. Two are worth knowing about even if you never touch them: administrations _above_ a form's age window are deliberately **admitted**, because for a Down syndrome cohort an early-vocabulary form given to an older child is developmentally appropriate and those rows are `us_01`'s only comprehension observations between 19 and 27 months; and the ceiling-saturated preparation batch is identified by `CEILING_ONLY_CHILD_STUDIES` on the _provenance_ criterion that the affected children have no non-ceiling record, because age and count together cannot separate it from a legitimately able older child. A third is worth knowing because its denominator is easy to get wrong: the comprehension-below-production rule compares `understood` against the greatest recorded lower bound on production, `max(produced, spoken)`, not against `spoken + signed`. The two modalities overlap wherever a child both says and signs a word, so the sum overstates distinct production badly (`uk_07`: 77 of 82 rows) and would flag 85 administrations instead of 9. The maximum is what lets it test a row whose `produced` was never recorded (one `uk_02` record, #236); `signed` is not a term, because four sources record `produced` as the spoken count alone. It masks the comprehension count only, keeps the row, and keeps equality — a child who produces everything they understand is legitimate.
+The engines expose `build_model_graph` separately from reporting. Shared helpers prepare observations, child and study effects, age functions and likelihoods. Most outcomes use a Beta-Binomial likelihood; signing cross-tabulations use a Dirichlet-Multinomial. Do not assume all engines use the same study reference or prediction target.
 
-The typically-developing reference pool is drawn from Wordbank and scoped by language. It defaults to `ENGLISH_LANGUAGES`; the hierarchical models (VG11, VG12, VG13) use `ENGLISH_AND_ROMANCE_LANGUAGES`, adding Italian and Spanish (European) so the Down-syndrome-versus-typically-developing comparison spans several languages on both sides — the Down syndrome pool is already a quarter non-English. VG03/VG04 stay English-only: they carry no random effects to absorb between-language variation. The scope is a model-definition field (`td_languages`), so it is part of the model graph and changing it requires a refit. Admission criteria and the two measurement checks are on `ROMANCE_LANGUAGES` in `src/vocab_growth/models/definitions.py`.
+Use `reporting_ages` and `intervals` for reporting policy. The reporting models include sex as a covariate; the inventory explains its coding and interpretation. Read model-specific caveats before editing a report or interpreting a quantity.
 
-### Model structure
-
-Each model is a self-contained module in `src/vocab_growth/models/model_vgNN.py`. All follow the same pattern:
-
-- A `ModelConfiguration` dataclass defines the prior distributions and model hyperparameters.
-- A `ModelFitContext` dataclass carries state through the fitting pipeline.
-- A top-level `fit(config)` function orchestrates the full pipeline: data prep → model build → prior predictive checks → MCMC sampling → diagnostics → posterior predictive → summary → plots → report.
-- Models use **PyMC** with the **nutpie** sampler and **HSGP** (Hilbert-Space Gaussian Process) approximations for scalable nonparametric mean functions.
-- The likelihood is **Beta-Binomial** with age-varying dispersion.
-- The models whose numbers are reported carry **sex as a covariate** (girls `+1/2`, boys `-1/2`, a child of unrecorded sex `0`; no row dropped), so every fit of them writes by-sex tables beside the sex-balanced population trajectories (#324). The design, including why the joint engine's coefficients enter the cross-tab compositions, is in `docs/models/README.md` under "Sex as a covariate".
-
-The full, canonical list of models -- each model's population, outcome, structure, and purpose -- is maintained in `docs/models/README.md`. Treat that inventory as the single source of truth: consult it for the current set of models, and update it whenever a model is added, removed, or changed.
-
-There are currently twenty-three registered models (`VG01`-`VG16` and `VG19`-`VG26`, with retired `VG06` omitted and `VG17`/`VG18` taken by the exploratory sign-group modules, which live in `src/vocab_growth/models/exploratory/` and whose output is explicitly not validatable), spanning the Down syndrome and typically-developing populations across single-outcome, joint (understood + spoken), signing (understood + spoken + signed), cross-lag, correlated-random-effect, child-slope and low-rank-factor structures.
-
-### Registering a model
-
-Registering a model takes two entries in the _model code_: the statistical definition in `definitions.py` (added to `MODEL_REGISTRY`) and a `RegisteredModel` record in `src/vocab_growth/models/catalogue.py` naming the engine that fits it. Those two are what the engine dispatch and every per-model hook derive from — but they are not the whole registration job: `docs/models/README.md` carries the full checklist, including the report template that must exist before the first fit and the pinned test sets. Everything per-model that is not part of the statistical definition -- the analysis-frame builder, the prior-predictive hook and its calling convention, the plot hook, the pipeline stage factory, the wrapper module and the report template -- follows from that record. `FRAME_BUILDERS`, `regenerate_plots.py`'s engine tables, `prior_predictive_audit.py`'s dispatch, both sensitivity scripts' runner map and `recovery/spec.py`'s stage factory are all derived from it, so there is no second model-ID list to update.
-
-The catalogue is deliberately **outside** the serialised statistical definition. A fit is validated by comparing the manifest's recorded definition field for field, so adding a field to a definition dataclass invalidates every existing fit of that class; engine identity and the reporting hooks must be free to change without a refit. The executable-code signature (below) is a **separate** check with a separate reach: it is asked for only by `resume` and the publication paths, so an engine or reporting change still leaves an existing fit renderable and provisionally syncable, and stops it being syndicated into the report as though the code had not moved. Engine identity is **declared, not inferred from the definition class**: VG05 and VG07 share `BivariateModelDefinition` and run on different engines. `tests/test_model_catalogue.py` pins every declaration against the code it describes -- the wrapper's own import, each hook's signature, the report template's existence -- and `tests/test_report_cells.py` pins that every sampled parameter family is either rendered in the priors table or exempt with a recorded reason. Before the catalogue existed the same engine assignment was written in seven places and three of them were wrong at once (issue #273, `notes/202608311230-model-catalogue.md`).
-
-### Shared utilities (`dse_research_utils`)
-
-Plotting styles, sampling configurations, MCMC diagnostics, and reporting helpers come from the sibling `research` repository. Import paths start with `dse_research_utils.*`.
-
-### Reports
-
-Quarto documents in `docs/models/vgNN/index.qmd` render model-specific reports. These embed Python code cells that load fitted output.
-
-## Conventions
-
-### AI tool attribution
-
-Content drafted or generated with the help of an LLM-based AI tool **must** carry a clearly visible label identifying the tool, placed at the top of the content. Substitute the actual tool and model that produced it — replace `Claude Code/Opus 4.8` with whichever assistant was used (for example, `GitHub Copilot`).
-
-For GitHub-rendered content — Markdown files, pull request and issue descriptions, and comments on pull requests and issues — use a GitHub-flavoured Markdown alert:
-
-> [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
-
-For Quarto documents (`.qmd`), GitHub alert syntax does not render, so use a Quarto callout block instead:
-
-```
-::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
-:::
-```
-
-This requirement applies to:
-
-- Document drafts (Markdown and Quarto `.qmd`)
-- Pull request descriptions
-- Issue descriptions
-- Comments on pull requests
-- Comments on issues
-
-### File headers
+## Contribution conventions
 
 Every Python source file starts with:
 
@@ -214,20 +136,21 @@ Every Python source file starts with:
 # SPDX-License-Identifier: AGPL-3.0-or-later
 ```
 
-### Code style
+Use Ruff for Python style and import ordering. `E501` and `E741` are intentionally ignored. Notebooks use Jupytext percent-format `.py` files; `.ipynb` files are gitignored.
 
-- **Ruff** for linting and import sorting (config in `pyproject.toml`).
-- `E501` (line length) and `E741` (ambiguous variable names) are intentionally ignored — mathematical/statistical variable names like `X`, `y`, `p`, `f`, `eta`, `kappa`, `ell` are standard and expected.
-- Notebooks use **Jupytext** percent format (paired `.ipynb` + `.py`). The `.ipynb` files are gitignored; only the `.py` percent-format files are committed.
+Use Conventional Commits, such as `docs(report): clarify predictive intervals`. Put issue-closing references in the commit body or pull-request description.
 
-### Spelling
+AI-assisted documents, pull requests, issues and comments must identify the actual tool and model near the top. Use a GitHub note for Markdown:
 
-CSpell is configured in `.cspell.config.yaml` (British English). Custom allowed words are in `config/spellcheck/allow-en.txt`.
+> [!NOTE]
+> Drafted or revised with assistance from OpenAI Codex/GPT-6.
 
-### Commit messages
+Use a Quarto callout in `.qmd` files:
 
-Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/): a `<type>(optional scope): <summary>` subject line in the imperative mood, with any detail and rationale in the body. Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`. Examples: `feat(vg16): add a within-child cross-lag`, `fix(data): tolerate a missing nz_01 source CSV`, `docs(report): add the words-understood-spoken chapter`. Reference the issue a commit or pull request closes (`Closes #123`) in the body or pull-request description.
+```text
+::: {.callout-note}
+Drafted or revised with assistance from OpenAI Codex/GPT-6.
+:::
+```
 
-### Writing Markdown
-
-When generating Markdown — `notes/` entries and documents, and especially pull request and issue descriptions and comments — do not insert superfluous line breaks. Write each paragraph as one continuous line and let it reflow; do not hard-wrap prose at a fixed column, and avoid stray blank lines. Prettier is configured with `proseWrap: "preserve"`, so it will **not** rewrap prose for you, and pull-request / issue text is not run through Prettier at all — hard-wrapped paragraphs therefore render as awkward mid-sentence breaks on GitHub and stay that way.
+Keep attribution concise and preserve earlier attribution when revising a document.

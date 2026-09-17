@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 4.8, revised with Claude Code/Opus 5).
 :::
@@ -54,11 +56,11 @@ render_reading_routes('development', instead='VG20')
 
 ::: {.callout-important title="What is fitted here, and how to read the coefficient"}
 
-**One model is fitted.** VG16 as registered uses the **population-relative** baseline: a child's earlier comprehension is measured against the population-and-study expectation for their age at that visit. There is one registered definition, one fit, and one trace, and everything reported on this page comes from it. A _within-child_ alternative — measuring the same child against their own estimated comprehension level instead — has been run off the record, at a lower sampling tier and with no fitted artefact in this output directory; it is discussed under [The within-child alternative](#sec-within-child) and its figures are deliberately not quoted here.
+VG16 uses the population-relative baseline. Its definition measures earlier comprehension against the age-and-study expectation. A within-child baseline is supported by the graph and has been explored separately, but it is not a registered VG16 sensitivity variant. Do not transfer findings from an exploratory fit to the fit named on this page.
 
 **The lag construction was corrected on 2026-08-23** ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)). The previous implementation assigned lag sources row by row, so which of two same-recorded-age checklist rows carried the lag depended on arbitrary tie order and 66 spoken observations lost their lag to it. Sources are now assigned per complete child-age administration wave. Fits made before the correction — including the previously quoted `+0.203` — used a different, defective predictor and are quotable only as historical values with that provenance.
 
-**Read $\beta$ as a history-conditioned mixture, mostly between-child.** The population-relative baseline does not subtract a child's own persistent level, so the coefficient mixes _this child is ahead of themselves today_ with _this child is generally ahead of other children_ — and it can also stand in for a persistent comprehension-conversion correlation that this model's independent child effects cannot express (VG20 estimates that correlation directly). The defensible reading is conditional: **under this model's structure and its observed measurement history, children who stood further ahead receptively at an earlier visit are expected to convert more of what they understand into speech**. VG16 alone does not establish a within-child dynamic, a causal mechanism or a causal direction, and how much of the signal is between-child versus within-child has not been separated by a purpose-built comparison. See `notes/202608231714-vg16-statistical-model-review.md` §4.1.
+**The coefficient mixes between-child and within-child differences.** The population-relative baseline does not subtract each child's persistent level. A positive coefficient would associate earlier above-reference comprehension with greater later conversion to speech, conditional on the model and observed history. It could also reflect a persistent comprehension-conversion correlation, which VG20 estimates directly. VG16 alone does not establish a within-child effect or causal direction. See `notes/202608231714-vg16-statistical-model-review.md`.
 
 :::
 
@@ -269,7 +271,7 @@ Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ a
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend may move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior on the understood GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -279,7 +281,7 @@ Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ a
 
 ### Production ratio
 
-![How far apart in age two points must be before the production ratio may move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior on the production-ratio GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -385,15 +387,15 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit reaching this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
+The table reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![Pairwise joint posteriors for the prioritised parameters: the cross-lag coefficient first, then the child and study scales it competes with. Strong ridges indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure above: a posterior indistinguishable from its prior has not been informed by the data.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure above: little change from a marginal prior suggests limited learning about that parameter.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
 ### Prior to posterior {#sec-contraction}
 
@@ -470,9 +472,9 @@ Take two children of the same age, seen at a previous visit some months earlier.
 3. **Convert to a rate.** Find the population production ratio at the current age in the [Production ratio](#sec-production-ratio) table below, take its logit, add the shift from step 2, and convert back. The difference between the two ratios is the difference in the fraction of understood words spoken.
 4. **Convert to words.** Multiply each ratio by the number of words the child understands. The difference is the extra words spoken that the cross-lag accounts for.
 
-Two things that step deliberately leaves out. Child B almost certainly also _understands_ more words than child A, so their spoken advantage has two sources: a bigger store of words, and a better conversion rate. The cross-lag is only the second. And because $q$ approaches its ceiling at older ages, the same $\beta$ buys fewer extra words the older the children are — a ceiling effect, not evidence that the association weakens.
+This calculation holds current comprehension and the other model terms fixed. Children can also differ in those terms. The effect of a fixed logit shift on the spoken proportion is greatest near the middle of the probability range and smaller near either boundary; converting it to words also depends on the current understood count.
 
-The full decomposition of a spoken-vocabulary gap into those two channels, worked at several ages with intervals, is in `notes/202608151120-vg16-cross-lag-quantified.md` §4.
+The numerical decomposition in `notes/202608151120-vg16-cross-lag-quantified.md` predates the lag-wave correction and is superseded. Use draws from a compatible current fit for a worked numerical example.
 
 :::
 
@@ -514,7 +516,7 @@ The attributed mechanism was then independently ruled out by simulation from thi
 
 :::
 
-No within-child fit is a model of record. There is one registered definition and one trace, and the within-child figures referred to above come from an off-record experiment script run at a lower sampling tier with no artefact in this output directory. They are not quoted numerically here for that reason, and they should not be quoted as estimates anywhere: the correct summary of that contrast is "positive-signed, imprecise, not distinguishable from zero — and not shown to be negligible". Registering the within-child baseline as a real sensitivity variant, fitting it at reporting quality and reporting the posterior probability inside a pre-specified negligible-effect interval would make the contrast quotable; that has not been done.
+VG16 remains a development model. A numerical within-child comparison needs a registered variant, compatible fitted outputs and its own convergence assessment. The older exploratory run does not establish a zero or negligible within-child effect; that also requires a stated threshold for practical importance.
 
 One further caution on the contrast itself. In one simulation with a known within-child truth, estimating the within-child coefficient jointly with the rest of the model inflated it. That is a caution against quoting the off-record figure as an estimate — but it is a different parameterisation from the registered model, so it establishes neither the direction of bias in the headline estimator nor anything about whether the within-child effect is real, and it does not convert the interval's failure to exclude zero into evidence of absence.
 
@@ -540,7 +542,7 @@ The joint-trajectory figures below are **subject-marginal**; the production-rati
 
 ![The same subject-marginal predictive trajectories with an inner 50% and an outer 89% equal-tailed interval on each outcome.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
-Conclude that the two curves separate early and stay separated across the whole reported range, and that the outer bands are wide enough that a child well inside one is unremarkable.
+Read the expected trajectories and predictive bands separately. The bands describe the fitted count distribution and are not screening thresholds.
 
 ### Production ratio {#sec-production-ratio}
 
@@ -570,7 +572,7 @@ That table is the production ratio at the query ages, with an inner 50% and an o
 
 ![The expected difference in word counts between understanding and production, against age. It rises to a peak and then closes.](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
-Conclude that the gap is a phase rather than a permanent state: it widens through the preschool years, peaks, and then narrows as the production ratio climbs. The peak and its age are in the headline table above.
+The gap is a difference between reference curves. Its peak and uncertainty are in the findings table; they do not establish a common developmental phase for individual children.
 
 ### Words understood versus words spoken
 
@@ -578,7 +580,7 @@ Conclude that the gap is a phase rather than a permanent state: it widens throug
 
 ![The same pairing as **subject-marginal predictive counts**, so the spread here includes between-child variation that the population-level figure excludes.](understood_vs_spoken_predictive.png){#fig-understood-vs-spoken-predictive .lightbox fig-align="left"}
 
-Conclude from the pair that the relation between the two vocabularies is not a fixed proportion — the curves bend upward, so each additional understood word converts to speech at a higher rate later than earlier.
+The path relates expected comprehension and speech across ages. Its slope does not measure the effect of teaching or learning one more word.
 
 ## Posterior predictions -- words understood
 
@@ -613,7 +615,7 @@ render_dispersion_scope()
 
 ![How the understood dispersion parameter changes with age, with uncertainty intervals.](posterior_kappa_u.png){#fig-kappa-u .lightbox fig-align="left"}
 
-Lower $\kappa$ means **greater** between-child variability relative to the mean; higher means less. Read this as _falling $\kappa$ = children becoming more spread out_, and conclude that residual spread grows with age even after each child's own level is accounted for. Dispersion is also why the cross-lag's predictor is noisy: a comprehension count at an earlier wave is a single draw from a distribution this wide, which is why its measurement error matters for reading $\beta$ (see [Findings](#the-cross-lag-coefficient)).
+At fixed mean and denominator, lower $\kappa$ means more residual count variation after the model's study and child terms. It is not total between-child spread. Noise in an earlier comprehension count also enters the lag predictor, so its effect on the coefficient needs a separate assessment.
 
 ## Posterior predictions -- words spoken
 
@@ -640,7 +642,7 @@ Same column convention as the understood table. This one runs to a later age, fo
 
 ![How the spoken dispersion parameter changes with age, with uncertainty intervals. Again, falling $\kappa$ means children becoming more spread out.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
 
-Conclude that spoken vocabulary starts near the floor and stays there far longer than comprehension does before accelerating — the delay, not the eventual level, is the finding, and it is the phenomenon the cross-lag interrogates.
+Compare the speech and comprehension curves within their supported ranges. Their separation describes the fitted age pattern, not a causal delay explained by the lag coefficient.
 
 ## Predictive calibration {#sec-calibration}
 
@@ -658,7 +660,7 @@ render_calibration_section()
 
 ::: {.callout-important title="What leave-one-out can and cannot mean for this model"}
 
-The cross-lag makes earlier observed understood counts part of later spoken predictors, and that breaks the usual reading of pointwise leave-one-out. **Understood LOO is not computed for this model** ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)): leaving an understood observation's likelihood term out does not remove that count from the later spoken terms it predicts through $x^{\text{lag}}$, so the score would still condition on the held-out outcome — and the Pareto-$k$ diagnostic checks the importance-sampling approximation, not this leakage, so it cannot flag it. The spoken score below is prediction of a spoken count **conditional on the child's observed understood history** (and, on the conditional branch, the same administration's understood count). That is a defined and useful target, but it is not unconditional new-observation prediction, and it is not comparable with the two-outcome totals other models report. A grouped forward-chaining or held-out-child sequential score is the registered replacement, and `scripts/wave_forward_score.py` is it: children are split into folds, each fold child's administrations after their first leave the likelihood, and the later waves are scored against the same model with the coefficient removed. **It has not been run at reporting quality**, so nothing on this page rests on it yet.
+The cross-lag makes earlier observed understood counts part of later spoken predictors, and that breaks the usual reading of pointwise leave-one-out. **Understood LOO is not computed for this model** ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)): leaving an understood observation's likelihood term out does not remove that count from the later spoken terms it predicts through $x^{\text{lag}}$, so the score would still condition on the held-out outcome — and the Pareto-$k$ diagnostic checks the importance-sampling approximation, not this leakage, so it cannot flag it. The spoken score below is prediction of a spoken count **conditional on the child's observed understood history** (and, on the conditional branch, the same administration's understood count). That is a defined and useful target, but it is not unconditional new-observation prediction, and it is not comparable with the two-outcome totals other models report. A grouped forward-chaining or held-out-child sequential score is the registered replacement, and `scripts/wave_forward_score.py` is it: children are split into folds, each fold child's administrations after their first leave the likelihood, and the later waves are scored against the same model with the coefficient removed. Consult the recorded scoring run before drawing a conclusion about later-wave prediction.
 
 :::
 
@@ -676,10 +678,10 @@ render_loo_section()
 - **Not causal, not an intervention estimate, and not an established temporal direction.** The cross-lag is a prospective association under this model's structure and measurement history. It does not license the claim that raising comprehension would produce the conversion gain, and it does not by itself establish that earlier comprehension drives later conversion rather than both expressing a stable trait correlation.
 - **A mixture, not a within-child effect.** The population-relative baseline does not isolate a child's own temporary deviation, so $\beta$ blends between-child standing with within-child movement — and can proxy a persistent comprehension-conversion correlation the independent child effects cannot express. How much is within-child is **undetermined**: the off-record within-child interval includes zero and values larger than the headline, and no equivalence bound was defined.
 - **Measurement error in the predictor has no proven direction of bias here.** Classical attenuation towards zero is plausible but its conditions are not established for this clipped, heteroscedastic predictor in a nonlinear multilevel model. The fitted value is neither a proven floor nor a corrected estimate of the association with true standing.
-- **A persistent link remains that this model cannot express.** With the cross-lag fitted, the realised understood and production-ratio child effects still correlate. The two random-effect blocks have independent priors and no correlation parameter, so the model has nowhere else to put that association — the correlated random-effect structure that expresses it directly is [VG20](../vg20/index.qmd), and a correlated-random-effects-plus-lag comparison is registered in [#242](https://github.com/dseinternational/vocabulary-growth/issues/242).
-- **Only one baseline is a model of record.** The within-child contrast is off-record and lower-tier; nothing on this page should be read as a reporting-quality within-child estimate.
-- **One constant coefficient averages over heterogeneous gaps, studies and checklist-form transitions.** The audited gaps run from 1 to 28 months with no gap interaction or decay, so the estimate is a design-weighted average over this frame's particular interval distribution, not a general earlier-to-later parameter; some supporting rows also change checklist form between the source and current waves, a transition the study intercepts cannot absorb. Gap, leave-one-study-out, same-form and boundary sensitivities are registered but not yet fitted.
+- **A persistent link remains that this model cannot express.** With the cross-lag fitted, the realised understood and production-ratio child effects still correlate. The two random-effect blocks have independent priors and no correlation parameter, so the model has nowhere else to put that association — the correlated random-effect structure that expresses it directly is [VG20](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg20/index.qmd), and a correlated-random-effects-plus-lag comparison is registered in [#242](https://github.com/dseinternational/vocabulary-growth/issues/242).
+- **The within-child comparison needs its own assessment.** A different baseline changes the meaning of the coefficient. Check its fit quality and uncertainty rather than transferring conclusions from this model.
+- **One constant coefficient averages over heterogeneous gaps, studies and checklist-form transitions.** The audited gaps run from 1 to 28 months with no gap interaction or decay, so the estimate is a design-weighted average over this frame's particular interval distribution, not a general earlier-to-later parameter; some supporting rows also change checklist form between the source and current waves, a transition the study intercepts cannot absorb. Gap, leave-one-study-out, same-form and boundary sensitivities are registered; their current status belongs in the robustness matrix.
 - **Identification rests on an available-case assumption, and the coefficient's population is narrower than the model's** (@sec-crosslag-def). $\beta$ is estimated from 473 administrations of 248 children in 8 of the 15 studies — `us_01` and `it_01` supply half of them — at target ages of typically two to four years (median 33 months, IQR 24–47) over intervals of typically five to seven months, and only from children whose earlier comprehension was measured. Seven studies contribute nothing. The missingness that produces this is almost entirely structural, but the choice of form is not made on age alone: in the three studies that switch, the comprehension-less form goes to the children with larger spoken vocabularies at the same age, so the supporting subset is not a random sample of the pool. The direction of any resulting bias is not established, and no restriction that would test it has been fitted ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242); counts in `notes/202609071000-vg16-available-case-audit.md`).
-- **Wave-sequential validation is built but has not been run; recovery does not exist.** Understood LOO is suppressed for the reason above. The sequential score that replaces it now exists (`scripts/wave_forward_score.py`, 2026-09-07) and has not been run at reporting quality, so this model still carries no generalisation evidence. Positive-truth recovery is further off: the generic harness cannot simulate this model, because its predictor is a function of the outcome, and the wave-by-wave simulator that would is unbuilt. Both are gates in [#242](https://github.com/dseinternational/vocabulary-growth/issues/242).
+- **Recovery and sequential prediction checks are implemented.** The recovery harness supports VG16 and rebuilds its predictor from simulated comprehension before drawing speech. `scripts/wave_forward_score.py` evaluates later waves against the same model with the lag coefficient removed. The existence of either procedure is not evidence that a fit passed it. Consult compatible outputs and `notes/202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md`.
 - **Beyond the high anchor the production ratio does not extrapolate — it is held level** (@sec-clamp), so quantities at the very top of the reported range are a levelled-off mean moved by the flexible term alone.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat. The lag inherits it: every prior count enters as a logit against the same 810-word inventory, an assumption the registered same-form and DSE-native sensitivities exist to probe.

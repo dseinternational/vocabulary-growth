@@ -13,18 +13,18 @@ placeholder that stands in for the static figure on the site.
 # Words understood
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure and one worked sentence.
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Revised by OpenAI Codex/GPT-6. Outline with one worked example.
 :::
 
 <!--
-Outline (sketch note §9, item 3): component 6.1, understood; number-bearing
+Planned page content (item 3): component 6.1, understood; number-bearing
 sentences at 2, 3, 4 and 5 years. Nothing below is typed: every number is a
-helper call, exported with a binding the site component refreshes live.
+helper call. Live refresh through a site component remains unimplemented.
 -->
 
-At `{python} years_months(36)`, half of the children in these studies understood `{python} interval_at(36, "understood")` of the `{python} N_WORDS` words on the list, and the middle estimate is `{python} median_at(36, "understood")` words. About `{python} one_in_below(36, "understood", 50)` understood fewer than 50.
+For a child aged `{python} years_months(36)` drawn from the modelled population, the model places half its predicted counts `{python} interval_at(36, "understood")` words on the `{python} N_WORDS`-word reference scale. The middle estimate is `{python} median_at(36, "understood")` words. The model predicts 50 words or fewer for about `{python} one_in_below(36, "understood", 50)` such children.
 
-[TODO: the same at 2, 4 and 5 years, and the 1-in-20 tails via `interval_at(age, "understood", 0.89)`.]
+[TODO: the same at 2, 4 and 5 years, and the 89% predictive range via `interval_at(age, "understood", 0.89)`.]
 
 ::: {.content-visible when-format="gfm"}
 <div data-chart-id="0.0.0/charts/vocabulary-growth/words-by-age" data-chart-outcome="understood">
@@ -33,7 +33,7 @@ Please enable JavaScript to explore how many words children understand at each a
 :::
 
 ::: {.content-visible unless-format="gfm"}
-![Words understood by age: the expected count for a child not in the data, with its 50% and 89% bands, from the model of record.](../report/figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/expected_counts_by_month_u){#fig-words-understood}
+![Words understood by age: the reference expected count with 50% and 89% uncertainty bands; the separate dashed outline shows the individual-count predictive interval.](../report/figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/expected_counts_by_month_u){#fig-words-understood}
 :::
 
 <!-- Reporting cap: comprehension is reported to `{python} cap("understood")` months (vocab_growth.reporting_ages). -->

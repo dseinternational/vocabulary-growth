@@ -618,10 +618,10 @@ faithfully described. Two concrete discrepancies, both verified against the code
    good state — but it should be fixed so the reports do not describe a superseded
    prior.
 
-2. **TD understood anchors: `OUTPUT_TEMPLATE_REVIEW.md` is stale, `PRIORS.md` is right.**
+2. **TD understood anchors: the former template review (retained in Git history) is stale, `PRIORS.md` is right.**
    That review note quotes VG04/VG12 low/high understood anchors as
    `Beta(1,20)` / `Beta(1.5,1.1)`. The code (`definitions.py`) uses
-   `Beta(1.2,8)` / `Beta(1.3,1.3)`, matching `PRIORS.md`. `OUTPUT_TEMPLATE_REVIEW.md`
+   `Beta(1.2,8)` / `Beta(1.3,1.3)`, matching `PRIORS.md`. the former template review (retained in Git history)
    is a self-described working note, so this is low-stakes, but it is stale.
 
 Two documentation-currency issues I could not fully resolve from code alone and

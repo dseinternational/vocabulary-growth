@@ -1,5 +1,8 @@
 # VG09: Structural options for q-trajectory diagnostics
 
+> [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). This proposal was tested and led to the anchored model. Use the model inventory for current priors and roles. [Follow-up](202605141200-vg09b-findings.md).
+
 Date: 2026-05-13
 
 > **Note:** This document was generated with assistance from an AI model (Claude, Anthropic) and should be independently verified.

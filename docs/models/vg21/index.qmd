@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
@@ -56,7 +58,7 @@ render_reading_routes('reference', joint=True, robustness=True)
 
 VG21 is a **reference model**. It exists to give the Down syndrome joint models — VG05 without hierarchy, VG20 with it — a typically-developing comprehension-and-production picture to be read against, and it supersedes the retired VG06.
 
-Its relatives are worth knowing before reading any figure here. **VG04** asks the comprehension question of the same population with no study or child effects, on a subsample and an English-only pool; **VG03** is its spoken-vocabulary counterpart. **VG12** asks the comprehension question with both kinds of random effect, on the full pool, over a much wider age range. VG12 is the direct comparison for this model: where the two windows overlap, they should agree, and because they use different engines, different age ranges and different likelihoods, agreement between them is a genuine external check rather than a restatement. Disagreement with VG04 in the same region is expected and informative in the other direction — VG04 carries no hierarchy, so between-study differences reach its curve as though they were between-child differences.
+VG03 and VG04 provide single-level spoken and understood baselines on English-only subsamples. VG12 estimates comprehension with study and child effects over a wider range. Agreement with VG12 within shared support is a check across model specifications fitted to overlapping data, not independent validation.
 
 **A reference is not a target.** A typically-developing trajectory describes what typically-developing children in these datasets did. It is a comparison baseline, not a goal against which an individual child with Down syndrome should be judged or an intervention scored.
 
@@ -169,7 +171,7 @@ VG21 is the one model in the family that **rejected** the shared bivariate produ
 
 That baseline is tuned to the much older and wider Down syndrome age window. Applied to a young typically-developing population it sits far above the ratio these children actually show, and because spoken vocabulary is the product of the understood trajectory and the ratio, the two errors compound: the prior predicted spoken vocabularies several times larger than anything observed. VG21 therefore uses window-appropriate anchors set at or just below the floor implied by published norms — the ratio of median production to median comprehension in the norming data — rather than the family default. The priors table above gives the settings; `docs/models/PRIORS.md` records their derivation.
 
-The GP amplitude on $q$ is a second deliberate departure. The family widened it because the logit of $q$ is S-shaped across the full Down syndrome age range and the GP is the only term that can carry that curvature. Over this model's 8–22-month window only the bottom limb of that S is in view, so the amplitude prior is narrowed to `eta_q_sigma = 0.5` from the Down syndrome models' 0.8 — though not as far as VG13 and VG23 narrow it over their shorter window (0.2). **This is the one model in the family whose $q$ amplitude does press against its prior**: the posterior sits at the 76th percentile, where every other model in the family sits between the 29th and the 57th, and it is the only young-window model whose amplitude contracts appreciably away from its prior (0.13, against 0.004 for VG13 and 0.008 for VG23). So the wider window does buy curvature the shorter one cannot see, and the reported $q$ band here is limited by the prior rather than merely consistent with it — widening `eta_q_sigma` is the registered sensitivity worth running. A reader comparing this model's $q$ band against a Down syndrome model's should know the two amplitudes differ substantially, and in which direction.
+VG21 uses a wider production-ratio GP amplitude prior than VG13 because it covers a wider age range. The prior table gives the exact setting. Inspect the current posterior and sensitivity results before attributing an apparent difference in curvature to the population or to the prior.
 
 :::
 
@@ -301,7 +303,7 @@ The table above reports, for each parameter, whether the chains agree with one a
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters, including the study and child scales, the GP hyperparameters and the dispersion terms.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -333,7 +335,7 @@ The parameters to watch here are the two study-effect scales, the anchored GP hy
 
 **The hierarchy terms are the weakest part of the fit and still clear the gate.** The lowest effective sample sizes and the highest R-hat values in the diagnostics table sit on the study-effect scales rather than on the trajectory parameters — which is what the sparse-replication problem above predicts — but they sit inside the thresholds, and the caveat block above states whether any exception was needed.
 
-**If the Gaussian processes come back close to inert, that is a limit on what this model can detect rather than evidence of linearity.** Read the amplitude and length-scale rows of the contraction table above. VG13's were barely moved, and if this fit's contractions are near zero the same reading applies here: the shared length-scale prior spans roughly 6–18 months against a fourteen-month window, and the anchored GP is additionally stripped of the components that mimic its mean's basis, so the model has little effective capacity to bend inside the frame in the first place — a shorter-length-scale experiment left the length scale prior-driven while costing divergences (`notes/202608060900-three-prior-conflicts.md`). The defensible reading would therefore be that curvature was **not identified** under this graph: straight lines on the logit scale describe these data adequately over this window, but the fit does not demonstrate that the trajectories are straight, and the GP's inertness must not be quoted as evidence for it. Four more months than VG13 brings more of the production-ratio S-curve into the frame, which is why this model widens the production-ratio GP amplitude relative to VG13's (both values are in the two models' priors tables) — so the amplitude has room to move here in a way it did not there, and an inert GP would be more informative than it was under the narrower window. It follows that the anchor priors are load-bearing, which is why the production-ratio anchor discussion above matters.
+A small fitted Gaussian-process contribution does not establish that the underlying developmental curve is linear. Its apparent size depends on the amplitude and length-scale priors, the projection constraints and the age window. Check the current contraction table and sensitivity fits. Limited change in a marginal distribution alone does not show that curvature is absent.
 
 :::
 
@@ -363,7 +365,7 @@ Read them with three things in mind. **The plotted population curves are the ave
 
 ::: {.callout-note title="Sensitivity variants"}
 
-One sensitivity variant is registered against VG21 itself — `vague-anchors`, added on 2026-08-25 (`ec10ee8`), which widens both high age anchors exactly as VG13's `window-22-vague-anchors` does but directly on this model. **It has never been fitted**, so it contributes no evidence here. The evidence the promotion rests on therefore still comes from its predecessor: `window-22`, `window-25` and `window-22-vague-anchors` are registered on VG13 and the first two were fitted on 2026-08-20 at VG13's own reporting settings, which is what the promotion rests on — `window-22-vague-anchors` widened both high slope anchors in the direction that would have reopened the DS/TD gap and moved P(TD>DS) by at most 0.0085 anywhere on the grid. What has **not** been carried across is `single-admin`, which retains one administration per child with the child effects removed. Given that repeated administrations are the mechanism behind both the child scales and the energy caveat, it is the variant most worth registering here next. **Nothing in this report is a result from any variant.**
+Registered variants include wider anchors and study-specific age slopes. The registry is the current list, and the robustness matrix below records which compatible comparisons are available. VG13's earlier window experiments supported the choice of 8–22 months, but do not substitute for checks on the current VG21 fit.
 
 :::
 
@@ -382,7 +384,7 @@ render_family_notes()
 ![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
-![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are uncertainty intervals on the zero-effect population trajectory — the typical (median) child in the typical study, which on the count scale is not the same thing as the average across children — not the range individual children occupy; for that, read the predictive figures and the monthly tables.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are uncertainty intervals on the zero-effect population trajectory — study and child effects set to zero, which is not an average across children — not the range individual children occupy; for that, read the predictive figures and the monthly tables.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ::: {.callout-warning title="Age restriction: what it costs, and what it buys"}
 
@@ -586,9 +588,9 @@ monthly_s
 
 ## Robustness {#sec-robustness}
 
-A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+Sensitivity variants refit the model under changed assumptions. The table compares their reported quantities with this fit's 89% intervals and records missing or unsuitable comparisons. This is a screen for sensitivity to the tested choices, not proof that all assumptions are harmless.
 
-VG21's one registered variant, `vague-anchors`, has never been fitted, so it appears in no matrix. The evidence the window-22 promotion rests on is VG13's registered `window-*` variants, so the matrix shown is **VG13's**.
+The table uses VG21's own sensitivity output. Historical VG13 window comparisons are recorded in `notes/202608211100-window-22-adopted.md`.
 
 ```{python}
 from pathlib import Path
@@ -606,7 +608,7 @@ def comparison_path(name):
     return None
 
 
-robustness_path = comparison_path("sensitivity/robustness_matrix_vg13.csv")
+robustness_path = comparison_path("sensitivity/robustness_matrix_vg21.csv")
 if robustness_path is None:
     display(Markdown(
         "_The sensitivity comparison has not been computed into this output root, "
@@ -620,7 +622,7 @@ else:
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
+Read the `verdict` column rather than the deltas. A variant marked robust kept the checked summaries within this fit's intervals. This does not establish equivalence or rule out smaller changes that matter for a particular use. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ## By sex {#sec-sex}
 
@@ -666,7 +668,7 @@ Read any over-coverage here alongside the between-child scales in the Findings s
 - **The population curves are the average study.** They are not the curves of any contributing dataset, and the study composition is not constant across the window.
 - **Language and dataset cannot be separated.** The pool spans English, Italian and Spanish (European), and each non-English language enters through a single dataset, so any language effect is reported as between-dataset heterogeneity and cannot be isolated.
 - **Interval bounds are the weakest numbers on this page**, wherever the diagnostics section reports an energy shortfall — as it does for this fit, on every chain. Medians are then the most reliable summaries and the outer interval endpoints the least.
-- **The Gaussian processes are close to inert.** The anchor priors are therefore doing more of the work than in the wider-window models, and the registered sensitivity variant that would test this has not been run.
+- **The curve can depend on anchor priors.** Assess that dependence using the current prior/posterior and wider-anchor sensitivity outputs, not a fixed description of an earlier fit.
 - **$q(a)$ is a conversion proportion, not a mechanism.** It does not say that raising a child's comprehension would raise their production by the corresponding amount.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat, and both contributing forms reach well under its top.
 - **Repeated measurement is sparse.** Most children contribute a single administration, which limits how well persistent between-child differences can be separated from residual dispersion.

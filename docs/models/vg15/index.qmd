@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 
 Conditional composition correction by OpenAI Codex/GPT-6 (2026-09-05).
@@ -136,13 +138,13 @@ $$
 \pi_\text{both} = C(r, q; \psi), \quad \pi_\text{sign-only} = r - \pi_\text{both}, \quad \pi_\text{speak-only} = q - \pi_\text{both}, \quad \pi_\text{neither} = 1 - r - q + \pi_\text{both}.
 $$
 
-$\psi = 1$ is independence, where $\pi_\text{both} = r\,q$ — the assumption [VG14](../vg14/index.qmd) has to make. $\psi > 1$ is positive association: a word is signed and spoken together more often than independence predicts. The **data-identified total expressive vocabulary** is then the union, counting a word the child both signs and says exactly once:
+$\psi = 1$ is independence, where $\pi_\text{both} = r\,q$ — the assumption [VG14](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg14/index.qmd) has to make. $\psi > 1$ is positive association: a word is signed and spoken together more often than independence predicts. The **data-identified total expressive vocabulary** is then the union, counting a word the child both signs and says exactly once:
 
 $$
 p_\text{any}(a) = p_U(a)\,\bigl(r(a) + q(a) - \pi_\text{both}(a)\bigr),
 $$
 
-which sits _below_ VG14's independence upper bound $p_U\bigl(1-(1-r)(1-q)\bigr)$ whenever $\psi>1$, because more overlap means fewer distinct words.
+which sits _below_ the independence calculation $p_U\bigl(1-(1-r)(1-q)\bigr)$ whenever $\psi>1$, because more overlap means fewer distinct words.
 
 **Study random intercepts** sit on all three trajectories at the observation level, so the reported age curves are separated from study composition — which is what made VG14's signed peak uninterpretable. **Subject random intercepts** are added on all three as well, non-centred, so repeated measurements of the same child are not treated as independent observations **in the three marginal likelihoods**. The composition likelihood is the deliberate exception, described two paragraphs below: repeated cross-tabulation visits by the same child enter it as conditionally independent rows. With a third level term on each predictor, each Gaussian process is additionally **anchored to pass through zero at the reference age for every draw** (the age is in the model-at-a-glance box), which removes the redundancy that otherwise lets the linear term, the Gaussian process and the random effects all encode the same overall level. The reported population-level curves set every random effect to zero.
 
@@ -185,13 +187,13 @@ The signed peak's prior is placed on its **position between the outer signed anc
 
 :::
 
-The understood anchors are inherited from the bivariate lineage: a strong floor expectation at the low anchor and a broad high anchor, so the dataset the later level. The production-ratio anchors are the shared Down syndrome joint-family priors, common to VG05, VG07–VG10 and VG14–VG16; the low one is centred on an independent typically-developing estimate of the same ratio in infancy, while the high one carries no independent Down syndrome source. Stabilisation of the production-ratio decomposition comes from the per-draw Gaussian-process anchor rather than from a data-informed anchor.
+The understood anchors are inherited from the bivariate lineage: a strong floor expectation at the low anchor and a broad high anchor, so the data can inform the later level. The production-ratio anchors are the shared Down syndrome joint-family priors, common to VG05, VG07–VG10 and VG14–VG16; the low one is centred on an independent typically-developing estimate of the same ratio in infancy, while the high one carries no independent Down syndrome source. Stabilisation of the production-ratio decomposition comes from the per-draw Gaussian-process anchor rather than from a data-informed anchor.
 
 Two priors are **data-informed regularisation rather than independent external evidence**, and both should be carried into sensitivity checks. The `log_psi` prior is weakly positive rather than centred on independence; the priors table gives the prior probability that $\psi$ exceeds 1, which is the number to compare each study's posterior against. The between-study scale of the association, `tau_psi`, is wider than the other three study scales because the _measured_ heterogeneity between the cross-tabulation sources is wider — the scale was set from association statistics computed on the same cells the model then fits. It is the single most consequential prior in the model, since only four studies inform $\psi$, and it is the one with dedicated `tau-psi-narrow` / `tau-psi-wide` sensitivity variants on disk.
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend may move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior on the understood GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -201,7 +203,7 @@ Two priors are **data-informed regularisation rather than independent external e
 
 ### Production ratio
 
-![How far apart in age two points must be before the production ratio may move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior on the production-ratio GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -213,9 +215,9 @@ Two priors are **data-informed regularisation rather than independent external e
 
 The signed mean is a three-anchor "tent": priors on the signed ratio at a young, a peak and an old reference age, joined by two logit-linear segments meeting at the peak and clamped flat outside, so the prior median is itself a hill — a signing rise and then a decline — rather than a flat line or a monotone slope. The Gaussian process carries smooth departures around it.
 
-**Where the peak sits is estimated here, and that is one of the things VG15 adds over VG14.** In VG14 the tent's apex is pinned at the middle anchor age, so "signing peaks at about three years" was a statement about where a knot had been placed rather than a finding. VG15 gives the peak's position between the outer anchors its own prior and samples it; the fitted value is reported under [Findings](#findings).
+VG15 estimates the middle-anchor age, while VG14 fixes it. This knot controls where the two trend segments meet. It need not be the age of the full signed-ratio maximum, because the anchor levels are uncertain and the GP can shift the curve. Signed counts can peak at another age because comprehension also changes.
 
-![How far apart in age two points must be before the signed trend may move independently.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
+![Prior on the signed GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the tent mean, on the logit scale.](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
 
@@ -233,7 +235,7 @@ Study and child random-intercept scales are half-normal on the logit scale, at t
 
 This is the only model carrying both dispersion parameterisations, which the priors table records. Understood and spoken share VG09's frame and specification, so both take the two-anchor form, with the prior placed on $\kappa$ at two reference ages. The signed ratio has no calibration — nothing estimates a signing dispersion on this frame — and stays on the earlier intercept-and-slope form.
 
-The two anchored blocks are **conditional** estimates: this model carries study and child random intercepts, so their $\kappa$ describes what is left over once a child's own level is known, not how much children differ. The Down syndrome joint frame is the thinnest the calibration covers, and on it the estimator recovers a known $\kappa$ with a one-directional downward bias, so the prior medians are lower bounds corrected upward by the measured bias, and the prior widths are wider than anywhere else in the family. See `docs/models/PRIORS.md`.
+The anchored concentrations describe residual variation after study and child terms. Their calibration used the project's data and simulations, including checks for finite-sample bias. A bias correction is not a guaranteed bound on the true concentration. Read the calibration record and sensitivity results in `docs/models/PRIORS.md`.
 
 ![Prior on the floor of the understood dispersion parameter.](kappa_min_u_dist.png){#fig-kappa-min-u .lightbox fig-align="left"}
 
@@ -422,13 +424,13 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, which would be disclosed immediately above. Nothing is disclosed above, so this fit cleared them.
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality. so this fit cleared them.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors for the prioritised parameters, including the association and the concentration. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors for the prioritised parameters, including the association and the concentration. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the sampled and derived parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -627,11 +629,11 @@ $\psi$ is the **sign–speech odds ratio**, and it answers one question: take a 
 
 - $\psi = 1$ means no: signing and saying would be unrelated, which is the assumption VG14 has to make.
 - $\psi > 1$ means a word a child signs is **more** likely to be one they also say.
-- $\psi < 1$ would mean signing substitutes for speech word by word.
+- $\psi < 1$ means less overlap than independence at the same margins. It does not establish that signing suppresses or replaces speech.
 
 It is an _odds ratio_, so its size has a direct reading: among the words a child understands, the odds of being able to say a word are $\psi$ times higher for words they can also sign than for words they cannot. $\psi = 2$ would mean twice the odds; $\psi = 1$ would mean the two carry no information about each other.
 
-The pooled estimate is firmly above 1, so **at the population level signing and speaking travel together at the level of individual words**. That matters for any total-expressive figure: a positive association means the two sets **overlap more** than independence implies, so the union — the number of _distinct_ words a child can express — is **smaller** than the independence formula gives. This is why VG14's total is an upper bound and this model's is not.
+Read the posterior probability and interval for $\psi$ against its prior. At fixed margins, $\psi>1$ implies more overlap and a smaller union than independence; $\psi<1$ reverses that comparison. A pooled association does not establish the effect of teaching signs or a shared association in every study.
 
 ![Posterior distribution of the sign–speech association. Mass to the right of 1 is evidence of positive association.](psi_posterior.png){#fig-psi .lightbox fig-align="left"}
 
@@ -649,9 +651,9 @@ psi_study = pd.read_csv("posterior_summary_psi_study.csv")
 psi_study
 ```
 
-**This table, not the pooled value above it, is the primary read.** The four sources disagree, and not marginally: the largest per-study estimate is a multiple of the smallest. In two of them a signed word is several times more likely than chance to also be spoken; in another the association is clear but weaker; and in one it is barely distinguishable from independence — its interval covers 1, and its `P_psi_gt_1` is close to the _prior_ probability of positive association printed in the priors table. That study is not the smallest: read its row against the support table above, where it contributes more children than the other three sources combined. This is therefore a **precise near-null**, not an uninformative one — evidence of no association in that cohort rather than absence of evidence.
+Read the study-specific estimates and their uncertainty alongside the pooled value and each study's support. An interval containing 1 is not enough to establish a negligible association. A claim of practical equivalence needs a defined range and its posterior probability.
 
-The between-study scale of the association is in the variation table above. It is large enough that a fifth study could plausibly land far outside the range of the four, so the pooled value should be read as the centre of a wide distribution rather than as a consensus any single source supports.
+The variation table describes the spread of study associations under the hierarchy. Predicting a new study requires that spread as well as uncertainty in the pooled centre.
 
 ::: {.callout-important title="Every quantity below this section uses the pooled association"}
 
@@ -663,13 +665,13 @@ The four-cell composition, the total expressive vocabulary, the uplift table and
 
 The sources may not be measuring the same behaviour, but that is not established. `es_01`'s non-vocal column is defined, in Galeote's own words, as gestures that "when properly taught or spontaneously learnt, substitute specific lexical items", so it includes spontaneous symbolic gesture alongside taught signs; its authors use *signed* and *gestured* interchangeably; and the "signs" columns of `uk_02`, `uk_07` and `nz_01` carry no recorded definition, so whether they were ticked more narrowly is unknown. If the weakest association in the table above is the gestural cohort, one reading is that taught signs travel with speech word by word — the same lexical items being trained in both modalities — while a gesture is available for a word the child cannot yet say and dropped once they can. A second, mechanical reading needs no construct difference at all: the source eliminated eleven of its form's 21 word categories from the gesture data, among them the early concrete nouns where sign-and-say overlap concentrates, and if the supplied totals carry that elimination a word signed and said in those categories is recorded as spoken only, which deflates the odds ratio toward independence. See `notes/202609021903-es01-gesture-construct-revisited.md`.
 
-Both are hypotheses this model was not designed to test, and both are confounded with language, country and instrument. Neither turns on how the children were taught, which no source records. They are stated because the alternative — reporting a pooled average as though the sources agreed — would hide the most interesting thing in the data. Age has been excluded as the explanation (see the note linked above); construct and category coverage have not been, and the category question is checkable against `uk_07`'s item-level deposit and with the author.
+Both are hypotheses this model was not designed to test, and both are confounded with language, country and instrument. Neither turns on how the children were taught, which no source records. They are stated because the alternative — reporting a pooled average as though the sources agreed — would hide the most interesting thing in the data. The recorded age analysis did not explain the observed study contrast, but it cannot rule out every age effect. Construct and category coverage remain possible explanations.
 
 :::
 
 ## Within-understood composition
 
-Every word a child understands sits in exactly one of four states: they can **sign it only**, **both sign and say it**, **say it only**, or **neither**. This section shows those four as fractions of comprehension over age — words migrating from sign into speech.
+Every word a child understands sits in exactly one of four states: they can **sign it only**, **both sign and say it**, **say it only**, or **neither**. This section shows those four as fractions of comprehension over age. The age pattern does not track individual words moving between states.
 
 ::: {.callout-note title="What identifies psi, and over what ages"}
 
@@ -681,15 +683,15 @@ Earlier versions of this page warned that the composition was an extrapolation o
 
 ![The four sign/speech states as fractions of comprehension, against age. The four curves sum to one at every age.](four_cell_composition.png){#fig-composition .lightbox fig-align="left"}
 
-Read this figure as the migration of words from one state to another: the sign-only share rises and then falls as words move into the sign-and-speech and speak-only states, while the "neither" share shrinks throughout. The sign-only share peaks earlier than any of the word-count quantities below — see the callout on that difference.
+These are expected category shares at each age. Changes across ages do not show that the same words or children moved between categories. The sign-only share and count can peak at different ages because the understood total also changes.
 
 ## Total expressive vocabulary (data-identified) {#total-expressive-vocabulary-data-identified}
 
-The data-identified total against VG14's independence upper bound. With a positive association the identified total sits **below** the bound, and the gap between them is exactly the overlap VG14 assumed away.
+This figure compares the total under the fitted association with the total obtained by setting that association to independence at the same margins. Their difference measures the effect of that assumption within this fit; it is not a causal effect of signing.
 
-![The data-identified total expressive vocabulary against the independence upper bound.](p_any_identified_vs_bound.png){#fig-p-any .lightbox fig-align="left"}
+![Total expressive vocabulary under the fitted association and under independence. Independence is a comparison assumption, not a general upper bound.](p_any_identified_vs_bound.png){#fig-p-any .lightbox fig-align="left"}
 
-The table below carries both quantities: `Ey_any_median` is the identified total in words, `Ey_any_indep_median` the independence bound at the same age. Comparing the two columns sizes the cost of VG14's assumption directly, and the honest summary is that it is real but modest. The two are closest at the youngest and oldest ages and furthest apart in the middle of the range, where signing is at its height and there is most overlap to be double-counted. VG14's larger problem was never $\psi$; it was the absence of study and child random effects.
+The table gives the fitted total in `Ey_any_median` and the independence comparison in `Ey_any_indep_median`. Assess their difference with the uncertainty and age support. This comparison holds the margins fixed; it does not capture all structural differences between VG14 and VG15.
 
 ```{python}
 summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
@@ -791,7 +793,7 @@ Only one of those orderings is forced. Because sign-only words are the share mul
 
 ::: {.callout-important title="This is a population trajectory, not an intervention effect"}
 
-Nothing here says signing _causes_ the speech that follows it. These are population-level curves for a cohort in which signing was taught — often precisely because a child was not yet talking. The closest this project comes to the follow-up question is [`notes/202608160930`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608160930-early-signing-and-later-speech.md), which finds that _how much_ a child signs relative to their comprehension does positively predict later spoken vocabulary, while _whether_ they sign at all cannot be identified in these data — signing is very nearly a study-level property here. That is an association, under a selection bias that runs downwards, not evidence that teaching signs raises speech.
+These curves do not estimate the effect of teaching signs. The [earlier descriptive study](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608160930-early-signing-and-later-speech.md) examined an association with later speech; VG25 adds a model for an earlier-signing predictor. Neither randomises sign use, and the direction of selection bias is not established.
 
 :::
 
@@ -842,7 +844,7 @@ monthly_sign
 
 ## Robustness {#sec-robustness}
 
-A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+Sensitivity variants refit the model under changed assumptions. The table compares their reported quantities with this fit's 89% intervals and records missing or unsuitable comparisons. This is a screen for sensitivity to the tested choices, not proof that all assumptions are harmless.
 
 ```{python}
 from pathlib import Path
@@ -874,7 +876,7 @@ else:
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
+Read the `verdict` column rather than the deltas. A variant marked robust kept the checked summaries within this fit's intervals. This does not establish equivalence or rule out smaller changes that matter for a particular use. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ### Parameter recovery
 

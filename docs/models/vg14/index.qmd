@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
 :::
@@ -54,7 +56,7 @@ render_reading_routes('development', instead='VG15')
 
 ::: {.callout-important title="Superseded: read VG15 instead for any total-expressive number"}
 
-**VG14 is a development step, not a source for reported numbers.** The study owner confirmed on 2026-08-06 that it is wholly replaced by [VG15](../vg15/index.qmd) for reporting; see the role table in [the model inventory](../README.md). VG15 supplies everything VG14 does — including this model's independence-based total, which VG15 emits alongside its own as `p_any_indep` — on a better-specified model. This page is retained to show how the signing structure was built.
+**VG14 is a development step, not a source for reported numbers.** The study owner confirmed on 2026-08-06 that it is wholly replaced by [VG15](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg15/index.qmd) for reporting; see the role table in [the model inventory](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/README.md). VG15 supplies everything VG14 does — including this model's independence-based total, which VG15 emits alongside its own as `p_any_indep` — on a better-specified model. This page is retained to show how the signing structure was built.
 
 VG14 differs from VG15 in two ways, and the second matters more than the first:
 
@@ -154,14 +156,14 @@ $$
 
 Read the bracket as _one minus the chance the word is neither signed nor spoken_. Multiplying $(1-r)$ by $(1-q)$ is only valid if knowing a word is signed tells you nothing about whether it is also spoken — that is what **conditional independence given age** means here, and it is the assumption VG14 has to make, because nothing in this model measures the overlap.
 
-In reality a word is often signed _before_ it is spoken, so the two are **positively associated**: a word a child signs is more likely than chance to be a word they also say. Positive association means the two sets overlap _more_ than independence implies, and because overlap is counted once, the true union is **smaller**. So $p_\text{any}$ here is an **upper bound**, not an estimate.
+At fixed $r$ and $q$, the fraction expressed by either modality lies between $\max(r,q)$ and $\min(1,r+q)$. Independence gives $r+q-rq$, which lies between those bounds. Greater overlap lowers the union; less overlap raises it. Signing a word before saying it does not establish the direction of association at a single age. VG14 does not estimate that association, so its total is an independence-based estimate, not a general upper bound.
 
 The arithmetic is easiest to see at one age. The table below is computed at render time from this fit's own $r$ and $q$ tables, at the age where the signed ratio is largest.
 
 ```{python}
 #| echo: false
 #| output: asis
-# Worked example of the independence over-count, computed from this fit's own
+# Worked example of the independence assumption, computed from this fit's own
 # summary tables rather than typed, so it cannot drift from the fitted model.
 _r = pd.read_csv("posterior_summary_r.csv")
 _q = pd.read_csv("posterior_summary_q.csv")
@@ -171,6 +173,7 @@ _r_at = float(_peak["r_median"])
 _q_at = float(_q.loc[(_q["age_months"] - _age).abs().idxmin(), "q_median"])
 _indep = 1 - (1 - _r_at) * (1 - _q_at)
 _max_overlap = max(_r_at, _q_at)
+_min_overlap = min(1, _r_at + _q_at)
 
 print(f"Of every 100 words a child understands at {_age:.0f} months, the fitted medians say:")
 print()
@@ -179,12 +182,13 @@ print("| --- | --- |")
 print(f"| Signed, $r$ | {100 * _r_at:.0f} |")
 print(f"| Spoken, $q$ | {100 * _q_at:.0f} |")
 print(f"| Expressed either way, **assuming independence** | {100 * _indep:.0f} |")
-print(f"| Expressed either way, **if every signed word were also spoken** | {100 * _max_overlap:.0f} |")
+print(f"| Expressed either way, maximum possible overlap | {100 * _max_overlap:.0f} |")
+print(f"| Expressed either way, minimum possible overlap | {100 * _min_overlap:.0f} |")
 print()
 print(
-    ": The truth lies somewhere between the last two rows: independence takes the "
-    "top of that range, complete overlap the bottom. VG15 measures where in the "
-    "range it actually falls, and finds it below the independence value."
+    ": These calculations use the marginal medians of r and q to illustrate "
+    "the bounds. They are not posterior summaries of the union. VG15 estimates "
+    "the association and propagates its uncertainty into the total."
 )
 ```
 
@@ -198,7 +202,7 @@ from vocab_growth.report_cells import render_priors_table
 render_priors_table()
 ```
 
-The understood and production-ratio priors follow the baseline Down syndrome joint structure: a strong floor expectation at the low age anchor, a deliberately broad high anchor so the dataset the later level, and Gaussian-process priors permitting smooth departures from the anchor-defined trend.
+The understood and production-ratio priors follow the baseline Down syndrome joint structure: a strong floor expectation at the low age anchor, a deliberately broad high anchor so the data can inform the later level, and Gaussian-process priors permitting smooth departures from the anchor-defined trend.
 
 Dispersion is handled in two different ways in this one model, which the table above records. Understood and spoken take the **two-anchor** form, where the prior is placed on $\kappa$ at two reference ages rather than as an intercept and slope, so each prior is directly comparable with a per-age dispersion estimate. The signed block stays on the earlier **intercept-and-slope** form, deliberately: nothing in the calibration exercise estimates a signing dispersion on this frame, so there is no anchored prior to move to. See `docs/models/PRIORS.md`.
 
@@ -214,7 +218,7 @@ The empirical signed fraction of understood words is a **hump** — near zero in
 
 **In VG14 the peak age is fixed by construction, not estimated.** The tent's apex sits at the middle anchor age listed in the priors table, and the model estimates only how high the hump is, not when it occurs. VG15 samples the peak position instead, which is one of the things it adds. Any statement about _when_ signing peaks that rests on this page is a statement about where a knot was placed.
 
-![How far apart in age two points must be before the signed trend may move independently.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
+![Prior on the signed GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the tent mean, on the logit scale.](eta_sign_dist.png){#fig-eta-sign .lightbox fig-align="left"}
 
@@ -226,7 +230,7 @@ The empirical signed fraction of understood words is a **hump** — near zero in
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend may move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior on the understood GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -236,7 +240,7 @@ The empirical signed fraction of understood words is a **hump** — near zero in
 
 ### Production ratio
 
-![How far apart in age two points must be before the production ratio may move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior on the production-ratio GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -393,13 +397,13 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, which would be disclosed immediately above. Nothing is disclosed above, so this fit cleared them.
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality. so this fit cleared them.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the sampled and derived parameters, including the two segment slopes of the signed tent.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -417,7 +421,7 @@ render_prior_posterior_contraction()
 
 ::: {.callout-note title="What to watch in this model"}
 
-The sparse signing pathway is the diagnostic pressure point: the signed Gaussian-process length-scale and amplitude, the signed dispersion, and any pair-plot ridge showing the signed level, the signed Gaussian process and dispersion trading off against one another. Compare the marginal posteriors above with the prior figures earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it restates the prior rather than the evidence — which for the signed Gaussian process means the fitted signed curve is closer to the three-anchor tent prior than to a shape the data chose.
+Check the signed Gaussian-process length scale and amplitude, dispersion, and trade-offs between them. If their marginal posteriors change little from the priors, assess sensitivity before treating the fitted shape as a data-supported feature. The anchor prior also shapes the signed curve.
 
 :::
 
@@ -453,11 +457,11 @@ Read this as the ordering the whole model is built around: comprehension leads t
 
 ::: {.callout-important title="Superseded quantity — do not quote"}
 
-Everything in this section is the independence-based **upper bound** described at the top of this page, from a model with no random effects. VG15's `posterior_summary_p_any.csv` reports the data-identified total, and reports this bound beside it for comparison. Quote VG15.
+This section assumes independence between signing and speaking within the understood set. VG15 estimates their association and is the reporting source for total expressive vocabulary. Use its fitted total and uncertainty rather than VG14's independence calculation.
 
 :::
 
-![Expected vocabulary by modality, including the derived total-expressive quantity. The total curve is an independence upper bound. Each curve stops at its own quantity's reporting cap; the total, a ratio of understood built from the signed ratio, stops at the tighter of the comprehension and signing caps.](modality_trajectories.png){#fig-modality .lightbox fig-align="left"}
+![Expected vocabulary by modality, including the derived total-expressive quantity. The total curve assumes independence between the two modalities. Each curve stops at its own quantity's reporting cap; the total, a ratio of understood built from the signed ratio, stops at the tighter of the comprehension and signing caps.](modality_trajectories.png){#fig-modality .lightbox fig-align="left"}
 
 The table below is the same quantity at the query ages. Its `Ey_any_*` columns are word counts on the reference inventory under the independence assumption; they are an over-count, and they are the columns most likely to be copied out of this page by mistake.
 
@@ -499,7 +503,7 @@ summary_q
 
 ## Signed ratio
 
-The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ is the fraction of understood words that are signed at each age. The robust, supersession-proof finding here is the **shape**: signing rises from near zero in infancy to a substantial fraction of comprehension in the preschool years, then recedes as words move into speech. Children sign words they understand but cannot yet say — signing is a _bridge_, not an early modality that simply fades. The height of that peak, and the ratio at every age, are in the table below; do not take a magnitude from the prose.
+The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ describes signing relative to comprehension along the reference trajectory. Its shape depends on the data and the three-anchor prior. A rise and fall across ages does not establish that individual children replace signs with speech. Use VG15 for reported magnitudes.
 
 ::: {.callout-warning title="The peak age is asserted, and the decline is study-confounded"}
 
@@ -711,7 +715,7 @@ The count of signed words does **not** peak at the same age as the signed _ratio
 
 ## Robustness {#sec-robustness}
 
-A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+Sensitivity variants refit the model under changed assumptions. The table compares their reported quantities with this fit's 89% intervals and records missing or unsuitable comparisons. This is a screen for sensitivity to the tested choices, not proof that all assumptions are harmless.
 
 ```{python}
 from pathlib import Path
@@ -743,7 +747,7 @@ else:
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
+Read the `verdict` column rather than the deltas. A variant marked robust kept the checked summaries within this fit's intervals. This does not establish equivalence or rule out smaller changes that matter for a particular use. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ## Predictive calibration {#sec-calibration}
 
@@ -774,7 +778,7 @@ render_loo_section()
 - **No hierarchy.** No study effects and no repeated-child effects, so the age curves absorb source composition and the uncertainty is not a fair estimate of uncertainty about a new child.
 - **The dispersion priors were calibrated for a different graph.** The anchored $\kappa$ blocks are the conditional (random-effects) calibration shared with VG09/VG10/VG15/VG16/VG20; VG14's marginal dispersion is a different estimand, and a calibration matching this graph would sit far lower. See the priors section.
 - **The likelihood is a pragmatic composite, not exact marginalisation.** Rows with a usable understood count use a conditional ratio likelihood and rows without fall back to a marginal one, and both share a single dispersion curve per outcome — but a conditional ratio and its marginal product do not generally share a Beta-Binomial dispersion, so the two row types mix generative variance meanings.
-- **$p_\text{any}$ is an upper bound, not an estimate.** It assumes signing and speaking are independent within a child; they are not.
+- **The total assumes independence.** VG14 cannot determine how much signed and spoken vocabulary overlap. Its total is not a general upper or lower bound; VG15 estimates the association.
 - **The signed peak age is a knot, not a finding.** It is fixed at the middle anchor by construction.
 - **Signing rests on a minority of the studies and thins sharply with age.** See the support tables above before quoting anything at the edges of the range.
 - **The independence check rests on one study.** It reads `uk_02` only, over a narrow age window; `uk_07`, `es_01` and `nz_01` also carry cross-tabulations with materially different associations, so this is a uk_02-specific check, not a general validation of conditional independence. VG15 identifies the association from all four.

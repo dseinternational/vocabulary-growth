@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 :::
@@ -315,15 +317,15 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit reaching this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
+The table reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
 ![Pairwise joint posteriors. Strong ridges indicate parameters the data cannot separate — and this is where a trade-off between the loading directions and the four child scales would show.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
-![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure above: a posterior indistinguishable from its prior has not been informed by the data — which for the four never-identified loading magnitudes (see Priors) is the expected result rather than a warning.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
+![Marginal posterior distributions for the fitted parameters. Compare each with its prior figure above: little change from a marginal prior suggests limited learning about that parameter — the likelihood does not identify loading magnitudes that cancel under row normalisation (see Priors).](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
 ### Prior to posterior {#sec-contraction}
 
@@ -479,7 +481,7 @@ render_family_notes()
 
 ## Robustness {#sec-robustness}
 
-A conclusion that depends on one arbitrary modelling choice is not a conclusion. Registered sensitivity variants refit this model with a single deliberate change and compare the reported quantities against this fit's own 89% intervals; the comparison harness records a verdict per variant and declines to give one where the comparison is not sound. The table is read from the harness's own output, and says so when none has been computed into this output root.
+Sensitivity variants refit the model under changed assumptions. The table compares their reported quantities with this fit's 89% intervals and records missing or unsuitable comparisons. This is a screen for sensitivity to the tested choices, not proof that all assumptions are harmless.
 
 ```{python}
 from pathlib import Path
@@ -511,7 +513,7 @@ else:
     display(robustness[[c for c in wanted if c in robustness.columns]])
 ```
 
-Read the `verdict` column rather than the deltas. A variant marked robust moved nothing outside this fit's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
+Read the `verdict` column rather than the deltas. A variant marked robust kept the checked summaries within this fit's intervals. This does not establish equivalence or rule out smaller changes that matter for a particular use. A variant marked **sensitive** did, and is a live caveat on the quantities it names wherever the two fits disagree. Rows whose `status` records no fit have not been run, and a row marked `stale-baseline` was scored against a model of record that has since been refitted -- its `baseline_fit_utc` names the baseline it actually used, and its verdict should not be read beside the others until it is recomputed.
 
 ### Parameter recovery
 
@@ -555,7 +557,7 @@ render_loo_section()
 - **This is not a causal claim.** The factor describes how four persistent child-level quantities line up in this pool. It licenses no statement about what would happen if a child's comprehension were raised.
 - **The child block varies with age; the headline correlation is read at one age.** Each child's effects include rates, so the between-child covariance — and every implied correlation — changes with age by construction. $\rho_{uq}$ as reported is the level–level correlation **at the 36-month reference age**, not a constant of the model and not an average over ages.
 - **It is one structure for the whole pool.** No study-level or subgroup variation in the loadings is estimated, and the pool spans several countries and languages.
-- **The prior on $\rho_{uq}$ is designed; the other five implied correlations are not.** The level–level correlation is sampled under $\mathrm{LKJ}(2)$, matching VG20's, so that comparison is between models rather than between priors. The remaining five correlations carry whatever the unit-row geometry induces — the flat $\mathrm{LKJ}(1)$ marginal — and two loading magnitudes never enter the likelihood and inflate the convergence-gate parameter set, down from four; the Priors section says why they are kept. The rest of the rank family has not yet been refitted under the designed prior, so the rank comparison below still mixes priors until it is — tracked in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
+- **Matching one correlation prior does not match the whole joint prior.** The level-level correlation uses the same LKJ(2) marginal as VG20. Other correlations depend on the factor construction. Use comparisons with compatible prior settings and consult the resolved gate in `notes/202609091200-vg20-vg22-gate-resolved.md`.
 - **The rank is declared, not inferred.** The data cannot choose between ranks 2 and 3, and on the 2026-08-24 fits the two disagreed on the spoken child-slope scale — 0.348 (sd 0.047) against 0.576 (sd 0.066), about 2.8 combined standard errors — so any reading about how differently children's spoken trajectories steepen is rank-conditional. Intercept-level quantities agree closely across both.
 - **The reported population trajectories are VG10's to check against, not to supersede.** VG22 is gated against VG10: any movement in the reported population trajectories is a red flag rather than a benefit, and what this model changes is the child-level structure.
 - **Provenance.** Registered 2026-08-23. The rank-2 and rank-3 fits recorded against the induced prior on 2026-08-24 — the numbers the rank comparison in this report's Statistical-model section quotes — are historical and were made under a prior this page no longer uses; the sampling banner and diagnostics above describe the fit actually shown. **The model of record for the Down syndrome joint understood + spoken estimands remains VG20**; this model supplies no reported headline number.

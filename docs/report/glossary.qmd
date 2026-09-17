@@ -1,7 +1,7 @@
 # Glossary {.unnumbered}
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
+Drafted with assistance from OpenAI Codex/GPT-5; revised by OpenAI Codex/GPT-6.
 :::
 
 **Age anchor**
@@ -32,7 +32,7 @@ Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
 : An interval containing a stated proportion of the posterior probability for a parameter or derived quantity, conditional on the model, priors, and data.
 
 **Data fingerprint**
-: A cryptographic hash summarising the exact model input. If the input changes, its fingerprint changes, allowing stale output to be detected.
+: A hash of the source data files used to detect changes. The separate analysis-frame hash records the prepared rows and values a model actually uses, including their order.
 
 **Divergent transition**
 : A warning that the NUTS sampler could not accurately follow part of the posterior geometry. Divergences are one of the two soft-tier convergence checks: a reporting fit that records any is marked with a sampling caveat and its interval bounds read with extra caution, rather than being discarded.
@@ -53,7 +53,7 @@ Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
 : A probability model for the observed data given parameter values. It describes how candidate parameter values would generate observations.
 
 **Link function**
-: A transformation connecting a model's unrestricted linear predictor to the scale of the expected outcome. The logistic link maps real numbers to proportions between zero and one.
+: A transformation connecting a model's unrestricted linear predictor to the scale of the expected outcome. Here the logit maps a proportion to the real-number scale; its inverse, the logistic function, maps the model predictor back to a proportion.
 
 **Logit**
 : The transformation $\log\{p/(1-p)\}$ of a proportion $p$. Its inverse is the logistic function.
@@ -92,7 +92,7 @@ Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5).
 : Re-running an analysis from recorded data, code, model definitions, settings, software versions, and random-number behaviour. Replication is stronger than merely finding an existing output file.
 
 **R-hat ($\hat{R}$)**
-: A diagnostic comparing variation within and between chains. Values close to one are necessary evidence that chains explored the same posterior distribution; reporting fits require $\hat{R}\leq1.01$ for every sampled parameter element.
+: A diagnostic comparing variation within and between chains. Values close to one support agreement between chains but do not prove convergence. The usual reporting threshold is $\hat{R}\leq1.01$ for every screened parameter element, subject to explicitly documented exceptions.
 
 **Sensitivity analysis**
 : A planned alternative fit that changes an assumption or data decision to determine whether an important conclusion depends on it.

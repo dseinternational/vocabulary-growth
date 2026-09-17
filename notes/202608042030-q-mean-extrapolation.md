@@ -1,6 +1,9 @@
 # The mean extrapolates past the data: clamping above the high anchor
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). The later decision clamps the spoken-share trend only. The old family-wide clamp proposal and reporting-age work list are superseded. [Follow-up](202608141200-clamp-q-only.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!WARNING]

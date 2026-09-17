@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
@@ -121,14 +123,14 @@ render_glossary([
 
 Two outcomes are modelled together. Words understood is a bounded count out of the reference inventory with a Beta-Binomial likelihood. Words spoken is modelled _through_ comprehension rather than beside it: where a row carries a usable understood count, spoken words are drawn conditionally on it, $S \mid U \sim \operatorname{BetaBinomial}(U, q, \kappa_S)$, so $q$ is the fraction of the words a child understands that the same child also says. Rows without a usable understood count fall back to a marginal likelihood against the full reference inventory, and the same dispersion parameter governs both branches on two different denominators.
 
-On the logit scale, comprehension and the production ratio each follow a straight-line developmental trend plus a Gaussian process term that lets the curve bend away from the line by as much as the data support:
+On the logit scale, comprehension and the production ratio each follow a straight-line developmental trend plus a Gaussian process term that allows smooth departures governed by the priors and data:
 
 $$f_U(a, s, i) = \text{intercept}_U + \text{slope}_U \cdot a_z + g_U(a) + \delta_U[s] + \delta^{\text{subj}}_U[i]$$
 $$h(a, s) = \text{intercept}_q + \text{slope}_q \cdot a_z + g_q(a) + \delta_q[s]$$
 
 Reading the symbols: $a$ is age and $a_z$ is age standardised to mean zero and unit standard deviation across the fitted frame; $s$ indexes the contributing study and $i$ the individual child; $g_U$ and $g_q$ are the Gaussian process terms, so "intercept plus slope" is the trend and $g$ is the wiggle around it. $f_U$ is the logit of the expected proportion understood, $p_U = \operatorname{sigmoid}(f_U)$, and $h$ is the logit of the production ratio, $q = \operatorname{sigmoid}(h)$. Expected spoken proportion is the product, $p_S = p_U \cdot q$.
 
-Neither trend line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages — an opinion about vocabulary at an age is something a reader can hold, an intercept at age zero is not. One caution on reading them: the anchors parameterise the straight-line component only. The fitted trajectory at a reference age is the anchor plus whatever the Gaussian process adds there, and in this model the process is unconstrained at the anchors — so they are coordinates of the trend, not exact values of the fitted curve at those ages. A second caution, which VG05 and VG07 state and this report has not: the understood anchors and the high production-ratio anchor are calibrated against this project's own frame rather than against independent Down syndrome norms — data-informed regularisation, not external evidence — so posterior agreement with them is partly by construction and is not independent corroboration. Every Down syndrome model from VG05 to VG22 carries these same anchor values, so the caution applies identically across the lineage; the registered broad-anchor sensitivities are what would test it.
+Neither trend line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages — an opinion about vocabulary at an age is something a reader can hold, an intercept at age zero is not. One caution on reading them: the anchors parameterise the straight-line component only. The Gaussian process adds to the anchor on the logit scale before conversion back to a proportion, and in this model the process is unconstrained at the anchors — so they are coordinates of the trend, not exact values of the fitted curve at those ages. A second caution, which VG05 and VG07 state and this report has not: the understood anchors and the high production-ratio anchor are calibrated against this project's own frame rather than against independent Down syndrome norms — data-informed regularisation, not external evidence — so posterior agreement with them is partly by construction and is not independent corroboration. Every Down syndrome model from VG05 to VG22 carries these same anchor values, so the caution applies identically across the lineage; the registered broad-anchor sensitivities are what would test it.
 
 ### The two levels of grouping
 
@@ -145,7 +147,7 @@ Many children in the pool contribute more than one administration. Without a chi
 
 The same age curve can be drawn two ways, and they differ by roughly an order of magnitude in width. Every figure caption below states which one it is.
 
-- **Population-level** sets every random effect to zero: a conditional zero-effect trajectory — approximately the **median** child in the average study, not the average of children's curves, because the inverse-logit link is nonlinear. Its interval carries uncertainty about that reference trajectory only. This is what the production ratio, the comprehension–production gap, the expected-count curves, the age derivatives and the dispersion curves show, and it is what the `p_population_*` and `Ey_population_*` columns of the summary tables report. The unprefixed historical `p_*` and `Ey_*` columns carry the same population-level meaning.
+- **Population-level** sets every random effect to zero: a conditional zero-effect trajectory — a reference with study and child effects set to zero, not the average of children's curves. Its interval carries uncertainty about that reference trajectory only. This is what the production ratio, the comprehension–production gap, the expected-count curves, the age derivatives and the dispersion curves show, and it is what the `p_population_*` and `Ey_population_*` columns of the summary tables report. The unprefixed historical `p_*` and `Ey_*` columns carry the same population-level meaning.
 - **Subject-marginal** draws a fresh child's random effect for every posterior draw and keeps that one child across the whole age grid. It answers _where would one more, unseen child fall?_ and is much wider. This is what the joint trajectory figures, the predictive ratio and predictive scatter, and every posterior predictive count artefact (PMF, CDF, count distributions, median trends) show, and it is what the `Y_*`, `P(Y<=k)`, `p_subject_marginal_*` and `Ey_subject_marginal_*` columns report.
 
 Confusing the two is the single easiest way to misread this report: the population band answers a question about a group average, and only the subject-marginal band answers a question about a child.
@@ -206,7 +208,7 @@ VG08 keeps the **legacy** dispersion parameterisation, in which $\kappa$ has a f
 
 ## Prior predictive checks {#sec-prior-predictive}
 
-These simulate trajectories from the priors alone, before the data are seen. One scope limit must be read first: the figures below are **population mean functions** — they set the study and child effects to zero and draw no Beta-Binomial counts, so no between-study, between-child or count-level variation appears in them, and they cannot validate the random-effect scales, the dispersion priors, or the plausibility of simulated child spread. Read them as a plausibility test on the mean structure, with three criteria: young children should usually sit near the floor on both outcomes; older trajectories should not be forced towards the ceiling; and the production ratio should be free to rise across development without being pinned near zero or near one. A prior that fails any of these would be shaping the answer rather than permitting it.
+These figures draw reference curves from the priors without conditioning on the likelihood. Study and child effects are set to zero and no count noise is drawn, so they assess the mean structure only. Check whether their levels and shapes are plausible for the age range. Separate simulations are needed to assess the random-effect scales, dispersion and individual count distributions. Some priors were calibrated on the same data; these are not independent validation figures.
 
 ### Prior samples — words understood
 
@@ -282,9 +284,9 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter — including the random-effect elements, which the table itself does not list — before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds, or carries a recorded exception disclosed above.
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level — a "hairy caterpillar" — with no drift and no chain sitting apart from the others.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
@@ -308,7 +310,7 @@ render_prior_posterior_contraction()
 
 @fig-pair is capped at the number of panels that stay legible, so it shows only the first few parameters: the two understood anchors, the understood GP length-scale and amplitude, and the two production-ratio anchors. That is a useful subset — the anchors and the GP terms are exactly the parameters that can trade off against one another, and a ridge between an anchor and the GP amplitude would mean the level and the wiggle are not separately identified. The random-effect scales and the dispersion parameters are **not** in this figure; read them from the diagnostics table and @fig-trace instead.
 
-For @fig-posterior, compare each marginal with its prior figure earlier in this report. A parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior.
+For @fig-posterior, compare each marginal with its prior figure earlier in this report. Little change between a marginal prior and posterior suggests limited learning about that parameter. Check prior sensitivity before relying on it; the data may still inform related parameters or their joint distribution.
 
 :::
 
@@ -381,7 +383,7 @@ summary_q
 
 ![The **population-level** difference between expected words understood and expected words spoken.](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
-The gap is the number of words the reference child — every random effect at zero, approximately the median child — understands but does not yet say. Whether it widens, peaks and closes, or stays open is a substantive claim about development, and it is one of the quantities on which this model and VG09 disagree — a further reason to take neither as final. The headline table above gives its peak and the age at which the peak falls.
+The gap is the number of words the reference child with every random effect set to zero understands but does not yet say. Whether it widens, peaks and closes, or stays open is a substantive claim about development, and it is one of the quantities on which this model and VG09 disagree — a further reason to take neither as final. The headline table above gives its peak and the age at which the peak falls.
 
 ### Words understood versus words spoken
 

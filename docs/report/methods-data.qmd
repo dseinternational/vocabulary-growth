@@ -2,6 +2,11 @@
 abstract: "*Vocabulary checklists are widely used to gather parents' observations of their children's vocabulary development. We combine data from multiple sources using a variety of checklist forms to create a large pooled dataset for analysis.*"
 ---
 
+::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+Drafted in part by an LLM-based AI tool (Claude Code/Fable 5).
+:::
+
 # Data {#sec-data}
 
 Vocabulary checklists present lists of words that children are expected to learn during the early stages of language development.
@@ -16,7 +21,7 @@ The models chapter (@sec-reference-inventory) says that what checklist counts ca
 
 All studies assessed vocabulary using word checklists. Where respondent information was available, the checklist was completed by a parent or other caregiver, who recorded whether their child understood, said, signed or otherwise expressed each listed word. Parent-reported Communicative Development Inventory (CDI) scores have shown good validity for children with Down syndrome [@millerValidityParentReport1995].
 
-Most instruments were versions or adaptations of the MacArthur-Bates CDI [@fensonMacArthurCommunicativeDevelopment1993; @marchmanMacArthurBatesCommunicativeDevelopment2023]. The three DSE Vocabulary Checklists hold 810 printed words plus blank spaces for a child's own name and other personal words, so a count can exceed 810; some studies used only the first one or two checklists. Several forms were adapted to record signing or symbolic gestures [@galeoteDevelopmentVocabularySpanish2011]. @tbl-instruments lists every form in the pool, the outcomes it recorded and the studies that used it.
+Most instruments were versions or adaptations of the MacArthur-Bates CDI [@fensonMacArthurCommunicativeDevelopment1993; @marchmanMacArthurBatesCommunicativeDevelopment2023]. The three DSE Vocabulary Checklists hold 810 printed words plus blank spaces for a child's own name and other personal words, so a count can exceed 810; some studies used only the first one or two checklists. Several forms were adapted to record signing or symbolic gestures [@galeoteDevelopmentVocabularySpanish2011]. @tbl-instruments lists every form in the pool, the outcomes it recorded and the studies that used it. The [data source notes](../../data/readme.md) record the known measurement details of each source.
 
 | Form | Items | Outcomes recorded | Studies |
 |:-----|------:|:------------------|:--------|
@@ -76,7 +81,7 @@ This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Co
 
 [**CHECK**]
 
-This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Communicative Development Inventory (CDI), using both the Words and Gestures and Words and Sentences forms [@marchmanMacArthurBatesCommunicativeDevelopment2023; @fensonMacArthurCommunicativeDevelopment1993].  The data were collected through several research projects at The Sarah Duffen Centre, a joint initiative of the University of Portsmouth and Down Syndrome Education International (then the Portsmouth Down's Syndrome Trust). Parents were provided with the form appropriate for their child's age. In many instances, adapted versions were used. In addition to the standard "understands" and "understands and says" options, the adapted Words and Gestures forms added an option to indicate if the child "signs" the word. The adapted Words and Sentences forms (which usually only include "says") added "understands" and "signs" as options. Each word takes one response, so a child's words understood are the words marked "understands", "understands and says" or "signs" together; no Words and Sentences form in the data supplied marks any word "understands", so this study's comprehension counts come from the Words and Gestures forms alone. Participants were 218 children with Down syndrome between 1 and 9 years of age, including 102 girls and 116 boys. Words and Sentences was completed by 154 participants and Words and Gestures was completed by 64 participants. The families participating lived in the five closest counties to Portsmouth -- Hampshire, West Sussex, Surrey, Dorset and Wiltshire.
+This study (Le Prevost, 2000, unpublished) collected data using the MacArthur Communicative Development Inventory (CDI), using both the Words and Gestures and Words and Sentences forms [@marchmanMacArthurBatesCommunicativeDevelopment2023; @fensonMacArthurCommunicativeDevelopment1993].  The data were collected through several research projects at The Sarah Duffen Centre, a joint initiative of the University of Portsmouth and Down Syndrome Education International (then the Portsmouth Down's Syndrome Trust). Parents were provided with the form appropriate for their child's age. In many instances, adapted versions were used. In addition to the standard "understands" and "understands and says" options, the adapted Words and Gestures forms added an option to indicate if the child "signs" the word. The adapted Words and Sentences forms (which usually only include "says") added "understands" and "signs" as options. Each word takes one response, so a child's words understood are the words marked "understands", "understands and says" or "signs" together; no Words and Sentences form in the data supplied marks any word "understands", so this study's comprehension counts come from the Words and Gestures forms alone. Participants were 218 children with Down syndrome between 1 and 9 years of age, including 102 girls and 116 boys. Words and Sentences was completed by 154 participants and Words and Gestures was completed by 64 participants. The families participating lived in the five closest counties to Portsmouth: Hampshire, West Sussex, Surrey, Dorset and Wiltshire.
 
 ### The development of vocabulary in Spanish children with Down syndrome: comprehension, production, and gestures (es_01)
 
@@ -239,7 +244,7 @@ print_wide_table(
 
 ## Vocabulary by age {#sec-vocabulary-by-age}
 
-The two figures below show every observation in the pooled Down syndrome data, coloured by study, against the pooled interquartile band (25th to 75th percentile) for each 6-month age bin holding at least five observations. They cover the pool's full age range deliberately: beyond about 72 months, coverage rests on a couple of studies, which is why the results are reported to 72 months.
+The two figures below show every observation in the pooled Down syndrome data, coloured by study, against the pooled interquartile band (25th to 75th percentile) for each 6-month age bin holding at least five observations. They cover the pool's full age range deliberately: beyond about 72 months, coverage rests on a couple of studies, so coverage should be checked before interpreting older ages. Reporting limits differ by outcome (@sec-models-of-record).
 
 ![Words understood by age in the pooled Down syndrome data, coloured by study, against the pooled interquartile band.](figures/descriptives/observations_age_understood_ds){#fig-obs-understood-ds .lightbox}
 
@@ -255,7 +260,7 @@ The typically developing reference pool is too dense for a scatter, with hundred
 
 Many children are measured more than once, and their within-child trajectories motivate the models' child-level random effects (@sec-randomeffects). In the figures below each line joins one child's visits on one checklist form, drawn against the pooled median, mean and interquartile range for that age window, computed over all observations, single-visit children included. Lines are linked **within form only**: a child measured on two forms at one visit, or moved between forms, records counts on different item inventories, and joining those would draw a change of measurement scale as development.
 
-The Down syndrome figures cover the 8 to 72 month reporting window. Individual trajectories fan widely around the pooled centre: same-age children span an order of magnitude in vocabulary, and individual slopes vary far more than the median slope does.
+The Down syndrome figures cover the 8 to 72 month display window. Individual trajectories fan widely around the pooled centre: same-age children span an order of magnitude in vocabulary, and individual slopes vary far more than the median slope does. Differences between the lines can reflect child differences, assessment variation and study effects. A change between visits is not, by itself, an estimate of a child's underlying learning rate.
 
 ![Words understood by age: repeated measures in the pooled Down syndrome data, coloured by study, against the pooled median (solid), mean (dashed) and interquartile band.](figures/descriptives/repeat_measures_age_understood_ds){#fig-rm-understood-ds .lightbox}
 

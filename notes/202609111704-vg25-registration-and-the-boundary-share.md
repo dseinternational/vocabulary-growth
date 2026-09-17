@@ -1,7 +1,13 @@
 # VG25 registered: the sign → speech cross-lag, and the boundary share that changed a default
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). The initial cross-tabulation lag design is superseded. The registered lag now enters the spoken marginal only. [Follow-up](202609151930-vg25-lag-out-of-the-cells.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+
+> [!WARNING]
+> **Superseded in one decision, 2026-09-15.** The lag no longer enters the cross-tab compositions. §3's argument for letting it in rested on the predictor being a fixed covariate, which holds for the population baseline only; under the registered within-child baseline the first `rep` fit was bimodal (`beta_sign_lag` +0.69 / −0.50, max R-hat 1.61), and many-chain probes found one mode once the lag stayed on the spoken marginal. The support figures below are the cells scope's. See [202609151930](202609151930-vg25-lag-out-of-the-cells.md). The rest of this record stands as written.
 
 > [!IMPORTANT]
 > Registration record for [#297](https://github.com/dseinternational/vocabulary-growth/issues/297). No model has been fitted. Every count below is measured on the 2026-09-11 frame (1,708 rows, 943 children) by building VG25's real graph; the reproduction script is inline in §3. No fit of record was touched.

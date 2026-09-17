@@ -1,596 +1,101 @@
-# Prior rationale and review notes
-
-<!-- cspell:words conc -->
+# Prior rationale and review
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (OpenAI Codex/GPT-5; "Evidence base" section and
-> prior–norm comparison by Claude Code/Opus 4.8; dispersion and random-effect
-> scale sections by Claude Code/Opus 5; anchor-binding note by Claude
-> Code/Fable 5).
+> Drafted with assistance from OpenAI Codex/GPT-5 and Claude Code. Revised by OpenAI Codex/GPT-6.
 
-> [!WARNING]
-> This is a working document for issue 89, last reviewed on 2026-07-01. It
-> records the current prior inventory, first-pass interpretation, review
-> questions, and a first pass at the external evidence base. It is not yet the
-> final prior rationale for the technical report.
+Priors describe plausible parameter values before fitting. Some use external studies; others were calibrated on this project's data or chosen to stabilise estimation. Those are different sources of information and should be named wherever a prior matters to a conclusion.
 
-## Purpose
-
-This document reviews the priors used across the `vocab_growth` model family and
-records why they are currently considered plausible, useful, or in need of
-further sensitivity checking.
-
-The goal is not to make every prior broad. The goal is to make each prior:
-
-- interpretable on the observable vocabulary scale;
-- explicit about whether it is developmental, computational, or data-informed;
-- checked through prior predictive simulation;
-- tested for sensitivity where the data are sparse or the parameter is weakly
-  identified.
-
-The fuller publication-ready discussion will live in the technical report. This
-file is the working review ledger.
+This guide explains the prior families and their main limits. Exact current settings are in [definitions.py](../../src/vocab_growth/models/definitions.py), including shared constants and inherited values. For a completed fit, its manifest and rendered prior table record what it actually used. This guide does not maintain a second numerical specification.
 
 ## Where the priors live
 
-The model-specific prior choices are defined in
-[`src/vocab_growth/models/definitions.py`](../../src/vocab_growth/models/definitions.py).
-The common engines turn those definitions into PyMC variables:
+The [model inventory](README.md) lists structures and reporting roles. Shared engines and `gp_utils.py` turn definitions into PyMC variables. `report_cells.render_priors_table()` displays the priors from a fit's record, and `tests/test_prior_table_coverage.py` checks coverage.
 
-- univariate models: [`common.py`](../../src/vocab_growth/models/common.py);
-- univariate study-random-effect models:
-  [`common_univariate_re.py`](../../src/vocab_growth/models/common_univariate_re.py);
-- bivariate models: [`common_bivariate.py`](../../src/vocab_growth/models/common_bivariate.py);
-- bivariate random-effect models:
-  [`common_bivariate_re.py`](../../src/vocab_growth/models/common_bivariate_re.py);
-- trivariate signing model:
-  [`common_trivariate.py`](../../src/vocab_growth/models/common_trivariate.py);
-- joint sign/speech model:
-  [`common_joint_modality.py`](../../src/vocab_growth/models/common_joint_modality.py).
-
-The current model list and lineage are maintained in
-[`docs/models/README.md`](README.md). That inventory is the source of truth for
-which models this review must cover.
-
-## Model coverage
-
-| Model            | Population | Outcomes                     | Prior features to review                                                                                           |
-| ---------------- | ---------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| VG01             | DS         | spoken                       | Single-outcome spoken anchors, GP, kappa.                                                                          |
-| VG02             | DS         | understood                   | Single-outcome understood anchors, GP, kappa.                                                                      |
-| VG03             | TD         | spoken                       | TD spoken anchors, GP, kappa, subsampling.                                                                         |
-| VG04             | TD         | understood                   | TD understood anchors, GP, kappa, subsampling.                                                                     |
-| VG05             | DS         | understood + spoken          | Understood anchors, production-ratio `q` anchors, GP, kappa.                                                       |
-| VG06 _(retired)_ | TD         | understood + spoken          | TD understood anchors, `q` anchors, GP, kappa, subsampling; retained here only as historical prior context.        |
-| VG07             | DS         | understood + spoken          | VG05 plus study random-effect scales.                                                                              |
-| VG08             | DS         | understood + spoken          | VG07 plus subject random effects on understood.                                                                    |
-| VG09             | DS         | understood + spoken          | VG08 plus subject random effects on `q`; diagnostic ridge motivates VG10.                                          |
-| VG10             | DS         | understood + spoken          | VG09 plus per-draw GP anchoring at a reference age (Option D).                                                     |
-| VG11             | TD         | spoken                       | VG03 plus study random effects, full TD data, GP anchoring.                                                        |
-| VG12             | TD         | understood                   | VG04 plus study random effects, full TD data, GP anchoring.                                                        |
-| VG13             | TD         | understood + spoken          | Young TD bivariate model, study random effects, GP anchoring.                                                      |
-| VG14             | DS         | understood + spoken + signed | Adds signed ratio `r`, sign GP, sign kappa, signing-data decisions.                                                |
-| VG15             | DS         | understood + spoken + signed | VG14 plus `psi`, Dirichlet-Multinomial concentration, study and subject random effects, VG10 stabilisation.        |
-| VG16             | DS         | understood + spoken          | VG09 plus prior-understood cross-lag coefficient `beta_lag`; uses the same main prior families plus the lag prior. |
+Use the registered definition when simulating or calibrating a prior. A loader's default language scope, age window or study filter may differ from the model's. The [TD calibration correction](../../notes/202609062330-vg11-vg13-calibration-regenerated.md) records a case where the estimator used an English-only frame for multilingual models.
 
 ## Prior families
 
 ### TD and DS prior differences
 
-The TD and DS models do not use fundamentally different prior systems. Most of
-the model machinery is shared:
-
-- GP length-scale and amplitude priors are the same for TD and DS, except for the
-  DS-only signing models.
-- Beta-Binomial `kappa` priors are the same.
-- Study and subject random-effect scale priors are the same where those effects
-  exist.
-- Baseline `q(a) = P(speak | understood)` priors are the same across the DS joint
-  models (VG05, VG07-VG10, VG14-VG16); young-TD VG13 uses lower anchors.
-
-The main TD/DS differences are concentrated in the anchor ages and in a few
-anchor distributions:
-
-| Prior area            | DS                                                                                                 | TD                                                                            | Interpretation                                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Anchor ages           | Usually 24 and 84 months.                                                                          | Usually 12 and 26 months; VG13 uses 10 and 16 months.                         | Priors are placed over different developmental windows.                                                            |
-| Spoken low anchor     | `Beta(1, 25)` at 24 months in VG01.                                                                | `Beta(1, 30)` at 12 months in VG03/VG11.                                      | Both concentrate near the floor after the young-age prior-predictive recalibration.                                |
-| Understood low anchor | `Beta(1, 7)` at 24 months in VG02; `Beta(1.5, 8)` in the DS joint models.                          | `Beta(1.2, 8)` at 12 months in VG04/VG12; `Beta(1, 15)` at 10 months in VG13. | The TD understood low anchor was recalibrated up off the floor (TD comprehension is already substantial young).    |
-| High anchor           | `Beta(2, 1.5)` at 84 months in VG01/VG02; `Beta(3, 1.3)` in the DS joint models.                   | Usually `Beta(1.3, 1.3)` at 26 months; VG13 uses `Beta(2, 6)` at 16 months.   | The TD high anchors were softened toward the middle from a more optimistic prior; DS high-age priors remain broad. |
-| Baseline `q` anchors  | `Beta(2, 12)` low and `Beta(4, 1.2)` high across the DS joint models (VG05, VG07-VG10, VG14-VG16). | `Beta(1, 10)` low and `Beta(2, 7)` high in VG13.                              | Weakly-informative; VG13's young-TD production ratio sits lower still.                                             |
-| Signing priors        | DS-only in VG14/VG15.                                                                              | Not modelled.                                                                 | There is no TD signing counterpart.                                                                                |
-
-Review notes:
-
-- DS/TD comparisons are not prior-symmetric at the anchor level. The asymmetry is
-  mainly developmental: the priors are anchored at different ages because the
-  observed developmental windows differ.
-- The strongest substantive asymmetry is that TD high-age anchors are mildly
-  optimistic by 26 months, while DS high-age anchors remain very broad at 84
-  months.
-- This should be stated plainly in the technical report so readers do not
-  mistake the shared machinery for fully identical prior assumptions.
+The populations share modelling tools, not identical priors. They have different age ranges, anchor levels and some dispersion and random-effect specifications. Even equal parameter values can imply different prior predictions under different age domains. Compare the resulting vocabulary counts and curves, not just distribution names.
 
 ### Anchor priors
 
-For univariate trajectories, the linear trend is anchored by expected vocabulary
-proportions at two ages. For joint models, the understood trajectory `p_U(a)` is
-anchored in the same way, and the spoken production ratio
-`q(a) = P(speak | understood)` has its own pair of anchors.
+The broad comprehension or spoken trajectory is specified by proportions at two reference ages, joined on the logit scale. Joint models also give the spoken share of comprehension, `q`, its own anchors. Multiplying a direct vocabulary proportion by 810 gives an expected count on the reference scale. Multiplying `q` by 810 does not give a spoken count; it must also be multiplied by the understood proportion.
 
-The anchors are probabilities. For direct vocabulary trajectories, multiplying
-by 810 gives the expected number of words out of the common reference inventory.
-For `q`, the anchor is a fraction of understood words, so it should not be read
-as a direct word count without also considering `p_U(a)`.
+An anchor parameter describes the trend component. A Gaussian process adds departures from that trend. A per-draw GP anchor makes the correction zero at one reference age, not at both trend anchors. In an unanchored model, the full-curve prior at a trend anchor is widened by the GP. Interpret prior plots as the combined model.
 
-How exactly the anchors bind differs by engine. In every model they
-parameterise the logit-linear **trend**; the fitted trajectory adds a GP
-deviation on top. The random-effects and joint engines orthogonalise the GP
-against the trend's basis and pin it to zero at a reference age, so their
-anchors also fix the full trajectory's level there. The plain univariate
-engine (VG01-VG04) does neither: its GP is unconstrained at the anchor ages,
-so `p_slope_low` and `p_slope_hi` are coordinates of the trend component only,
-and the induced prior on the full trajectory at a reference age is the anchor
-prior widened by the GP's prior deviation. The observable interpretations
-below are therefore exact for the trend, and approximate for the fitted curve
-in those four models.
+The DS comprehension anchors and the older DS spoken-share anchor were calibrated using the project's own data. They are regularisation, not independent developmental norms. The rationale and changes are recorded in the [comprehension review](../../notes/202608041216-ds-understood-trajectory-prior.md) and [spoken-share review](../../notes/202608041730-ds-spoken-q-trajectory-prior.md).
 
-| Prior use                             | Models                     | Distribution     | Observable interpretation                                              |
-| ------------------------------------- | -------------------------- | ---------------- | ---------------------------------------------------------------------- |
-| Low-age DS spoken anchor              | VG01                       | `Beta(1, 25)`    | Median 0.027, 5-95% 0.002-0.113, or about 22 words median out of 810.  |
-| Low-age TD spoken anchor              | VG03, VG11                 | `Beta(1, 30)`    | Median 0.023, 5-95% 0.002-0.095, or about 19 words median out of 810.  |
-| Low-age DS understood anchor (single) | VG02                       | `Beta(1, 7)`     | Median 0.094, 5-95% 0.007-0.348, or about 76 words median out of 810.  |
-| Low-age DS understood anchor (joint)  | VG05, VG07-VG10, VG14-VG16 | `Beta(1.5, 8)`   | Median 0.134, 5-95% 0.021-0.378, or about 108 words median out of 810. |
-| Low-age TD understood anchor          | VG04, VG12                 | `Beta(1.2, 8)`   | Median 0.104, 5-95% 0.011-0.341, or about 84 words median out of 810.  |
-| Low-age young-TD understood anchor    | VG13                       | `Beta(1, 15)`    | Median 0.045, 5-95% 0.003-0.181, or about 36 words median out of 810.  |
-| High-age DS single anchor (VG01/VG02) | VG01, VG02                 | `Beta(2, 1.5)`   | Median 0.586, 5-95% 0.168-0.924, or about 475 words median out of 810. |
-| High-age DS understood anchor (joint) | VG05, VG07-VG10, VG14-VG16 | `Beta(3, 1.3)`   | Median 0.730, 5-95% 0.321-0.963, or about 592 words median out of 810. |
-| High-age TD single/U anchor           | VG03, VG04, VG11, VG12     | `Beta(1.3, 1.3)` | Median 0.500, 5-95% 0.079-0.921, or about 405 words median out of 810. |
-| High-age young-TD understood anchor   | VG13                       | `Beta(2, 6)`     | Median 0.228, 5-95% 0.053-0.521, or about 185 words median out of 810. |
-| DS-joint low-age `q` anchor           | VG05, VG07-VG10, VG14-VG16 | `Beta(2, 12)`    | Median 0.126, 5-95% 0.028-0.316 of understood words.                   |
-| Young-TD low-age `q` anchor           | VG13                       | `Beta(1, 10)`    | Median 0.067, 5-95% 0.005-0.259 of understood words.                   |
-| DS-joint high-age `q` anchor          | VG05, VG07-VG10, VG14-VG16 | `Beta(4, 1.2)`   | Median 0.805, 5-95% 0.438-0.978 of understood words.                   |
-| Young-TD high-age `q` anchor          | VG13                       | `Beta(2, 7)`     | Median 0.201, 5-95% 0.046-0.471 of understood words.                   |
-
-Review notes:
-
-- The low-age direct trajectory anchors encode strong floor expectations, which
-  are scientifically plausible but should be checked against prior predictive
-  counts at the youngest queried ages.
-- The high-age DS anchors at 84 months are deliberately broad — `Beta(2, 1.5)` on
-  VG01/VG02, `Beta(3, 1.3)` on the joint models — because no independent DS CDI
-  cohort reaches that age. Both keep wide tails so the prior declares neither low
-  nor high later vocabulary impossible, but either can interact with the GP and
-  random effects in sparse age regions. The joint value was raised from
-  `Beta(2, 1.5)` on 2026-08-04; see "DS anchor priors vs independent cohorts".
-- The DS-joint `q` anchors are weakly-informative and encode only the
-  developmental direction (few understood words spoken early, a majority by school
-  age). `q_low` is centred at the independent TD `q(~12mo) ≈ 0.12`; `q_high` has no
-  independent DS source, so it is deliberately broad (5-95% ~0.25-0.90) and lets
-  the dataset the 84-month level.
-- These replace the earlier `Beta(3, 22)` / `Beta(20, 4)` anchors, which were read
-  off the VG07 posterior and then propagated across the DS-joint family — using a
-  model's own posterior (fit to the same DS data) to set its prior. That
-  prior-data double-dipping is removed; the `Beta(20, 4)` high anchor in particular
-  was the tightest prior in the family with no independent basis. The history is
-  documented in
-  [`notes/202605131500-vg09-structural-options.md`](../../notes/202605131500-vg09-structural-options.md).
+The older TD comprehension anchor also lacks a corresponding CDI comprehension norm. Words & Sentences records production; the loader excludes its production-proxy comprehension values. A reported normative median should not be treated as a prior on an individual child's score.
 
 ### Mean extrapolation above the high anchor
 
-The two-anchor trajectories place priors on the expected proportion at a low and a
-high reference age and join them with a logit-linear segment. For the Down syndrome
-models that segment is fitted between 24 and 84 months but _evaluated_ over a GP
-domain running to **115 months**, so roughly a quarter of the domain — and 3.2% of
-spoken rows — is extrapolation that no prior constrains. On the logit scale a line climbing several
-logits between the anchors saturates there. In VG10 the fitted `q` mean alone reaches
-**0.993 at 115 months**, with P(mean > 0.99) = 0.90 across the posterior, against a
-realised 0.842; the GP is left spending −3.3 logits correcting the mean's asymptote
-while sitting idle (+0.08) at 48 months, where the data actually are. Understood shows
-the same defect about three times milder.
+A logit-linear trend can approach near-total production when extended beyond the observed ages. The DS joint models use `CLAMP_Q_ONLY` to level the spoken-share trend above its upper anchor while leaving comprehension's trend unclamped. The transition is smooth; the high-anchor parameter is therefore not exactly the clamped mean evaluated at that age.
 
-**Implemented 2026-08-04:** `clamp_mean_above_hi_anchor` levels the mean off above the
-high anchor, with the GP's orthogonalisation basis using the same coordinate (see
-[`gp_utils.trend_and_gp`](../../src/vocab_growth/models/gp_utils.py)). It is switched on
-for VG05, VG07-VG10 and VG14-VG16.
-
-The transition is a **soft** minimum rather than `min(z, sb_z)`. A hard minimum is
-continuous but kinks at the anchor, and the fitted curve inherits an elbow — in the
-first VG10 refit it made the spoken trajectory briefly non-monotone (428.6 words at
-84.3 months dipping to 426.6 at 85.6), which is not acceptable in a growth-curve
-figure. The rounding is scale-free (sharpness set from the anchor span) and confined to
-roughly ±4 months of the anchor; at 96 and 115 months the soft and hard forms are
-identical, so the extrapolation fix is fully retained.
-
-The clamp is deliberately **one-sided**. Below the low anchor the line still
-extrapolates, and does so accurately — VG10's `q` at 12 months is 0.019 by
-extrapolation against a fitted 0.022 — whereas clamping there would pin young-age
-values at the 24-month level, a larger error than the one being corrected. Between the
-anchors nothing else changes, so every anchor prior in this document keeps its
-calibration. The one caveat is that smoothing costs exactness at the high anchor:
-`p_slope_hi` is now the mean at that age less `slope · log(2) / beta`, which on the DS
-grid moves the implied `q(84)` from 0.9402 to 0.9363. Flat is not claimed to be true —
-the realised `q` keeps rising slowly — but a GP adds a gentle rise onto a flat mean far
-more cheaply than it subtracts a large fall from a saturating one, and where there is no
-data a flat continuation is a better default than an assertion of near-total
-production. Prior median `q` at 115 months falls from 0.963 to 0.811, and P(`q` > 0.99)
-from 0.294 to 0.051.
-
-VG01 and VG02 share the same anchors and domain and therefore the same defect; they are
-built from `UnivariateModelDefinition`, which does not yet carry the field, and are
-recorded as an open item in
-[`notes/202608042030-q-mean-extrapolation.md`](../../notes/202608042030-q-mean-extrapolation.md).
-VG11-VG13 are unaffected: their domains extend only two to four months past their high
-anchors.
+The GP can still depart from the levelled trend. Clamping does not establish that older-age predictions are supported by data. See the [clamp correction](../../notes/202608141200-clamp-q-only.md) and `gp_utils.trend_and_gp`.
 
 ### Reported age range for comprehension
 
-The clamp fixes what the mean _does_ above the high anchor; it does not make an age with
-no data worth quoting. A model's `ages_query` grid is shared by every outcome it
-reports, but in the Down syndrome pool the outcomes are not observed over the same
-range:
-
-| Outcome    | Rows | 95th percentile |      Rows ≥ 72 mo |     Rows ≥ 84 mo |
-| ---------- | ---: | --------------: | ----------------: | ---------------: |
-| Understood |  987 |       69 months |  38 (25 children) | 13 (11 children) |
-| Spoken     | 1428 |       81 months | 127 (90 children) | 59 (50 children) |
-| Signed     |  904 |       85 months | 113 (78 children) | 56 (48 children) |
-
-Comprehension effectively stops around 84 months. Reporting it — and `q`, which is a
-ratio _of_ comprehension and so inherits the narrower range — on the same grid as spoken
-would quote a median and an 89% interval at 90 months from a handful of administrations,
-past the high anchor where the mean is now a levelled-off extrapolation rather than an
-estimate.
-
-**Implemented 2026-08-04, raised 72 → 84 on 2026-08-13, lowered back to 72 on
-2026-08-22:** `report_max_age_understood = 72` on VG02, VG05, VG07-VG10 and VG14-VG16.
-The original 72 was set against the pre-`uk_07` pool (905 understood rows, 95th
-percentile 64, only 15 at or above 72). Rebuilding `us_01` from the Edgin item-level
-files and integrating `uk_07` — together with the reinstated `uk_06` signing rows —
-rebuilt the older tail, and the 72-84 band now carries 25 rows from 20 children across
-five studies (`ie_01`, `uk_01`, `uk_06`, `uk_07`, `us_02`), which is what justified the
-raise to 84. The 2026-08-22 lowering rests on a different test: the band is populated,
-but the Down syndrome child structures disagree there, so a comprehension number in the
-72-84 band depends on which model produced it. Raise the cap again when new older-child
-comprehension data let the band _distinguish_ the structures, not merely populate it —
-see [`notes/202608221200-reporting-source-by-quantity.md`](../../notes/202608221200-reporting-source-by-quantity.md).
-(When the cap did sit at 84, the coinciding arguments were that only 13 rows from 11
-children remain above it and that 84 is the high trend anchor — the same test applied
-when `report_max_age_signed` was raised from 60 to 84 in #212.)
-
-It trims the understood and `q` summary tables and the production-ratio figure; spoken
-keeps the full grid at 90. **Signed is not covered by this field** — it has its own
-`report_max_age_signed`, added to the trivariate definition on 2026-08-13 so that VG14's
-sign-derived figures stop borrowing the comprehension cap. Note the two caps rest on
-different arguments: comprehension stops at 72 because the models disagree beyond it,
-whereas signed is observed on 56 rows from 48 children at or above 84 and stops there
-only because 84 is the trend anchor.
-
-Both caps are post-processing of a fitted trace — the query grid, the model graph and the
-`query_id` dimension are unchanged, so they cannot move a number that is still reported,
-and refitting VG10 across the change at a fixed seed reproduced its diagnostics
-bit-for-bit. The dropped ages remain in the trace. The policy itself lives in
-[`vocab_growth.reporting_ages`](../../src/vocab_growth/reporting_ages.py), which resolves
-a cap per reported _quantity_ rather than per figure, and `tests/test_reporting_age_policy.py`
-walks the fitted artefacts and fails on any that reports past its cap.
-
-Changing the cap is nonetheless **not** free. The summary tables are written during the
-fit pipeline, and `--render-only` re-renders Quarto against the CSVs already on disk
-rather than rebuilding them, so a new cap only takes effect on a refit. The field is
-also part of the recorded model definition, so a fit produced under a different value —
-including one produced before the field existed — is reported as stale by
-`sync_report_figures.py`. That is the intended behaviour and not a false alarm for a
-model whose cap actually changed; but note that adding the field moved _every_ model's
-recorded definition, so models that merely carry the `None` default were invalidated
-too.
-
-VG01 is left alone: it is production-only, and its data run to 115 months. The
-whole-month companion tables also keep the full observed span, where the `n_obs` column
-already records how thin the tail is — the trim is aimed at the curated 6-monthly table,
-which carries no such guard. The typically-developing grids stop at 30 months (18 for
-VG13), well inside their data, so this asymmetry is specific to the Down syndrome pool. See
-[`notes/202608042030-q-mean-extrapolation.md`](../../notes/202608042030-q-mean-extrapolation.md).
+Reporting caps are separate from prior specification. The [inventory](README.md#reporting-ages-6-monthly-tables-whole-month-companions) and `reporting_ages.py` state them. The DS comprehension and comprehension-conditioned quantities stop at 72 months; VG04 and VG12 stop at 25 months. A full model domain or an uncapped monthly table does not extend those published ranges.
 
 ### Signed ratio prior
 
-VG14 and VG15 model signing as `r(a) = P(sign | understood)`, whose developmental
-trajectory is a **hump** — near zero at young ages, peaking in the preschool years,
-then receding as words move into speech. The signed mean is therefore a
-**three-anchor "tent"**: Beta priors on `r` at a young, a peak and an old reference
-age (`sign_anchor_ages = (15, 36, 96)` months), joined by two logit-linear segments
-meeting at the peak anchor and clamped flat beyond the outer anchors (see
-[`gp_utils.tent_and_gp`](../../src/vocab_growth/models/gp_utils.py)).
+Signing uses a three-anchor trend for the signed share of understood words. It allows a rise and fall, with a GP adding smooth departures. That shape is a modelling assumption, not proof that every child follows the same pattern.
 
-| Anchor | Age   | Distribution  | `r` median | 5-95%        |
-| ------ | ----- | ------------- | ---------- | ------------ |
-| young  | 15 mo | `Beta(2, 20)` | 0.08       | [0.02, 0.21] |
-| peak   | 36 mo | `Beta(3, 4)`  | 0.42       | [0.15, 0.72] |
-| old    | 96 mo | `Beta(2, 16)` | 0.11       | [0.02, 0.26] |
+VG14 fixes the middle reference age. VG15 and its joint-engine extensions estimate the middle-anchor position under `sign_peak_prior` between fixed outer ages. Despite the parameter name, it need not be the full curve's maximum. Do not describe its age as fixed. Sparse data and differences between studies limit its interpretation even when a posterior interval is available.
 
-Because the peak sits at the middle anchor age by construction, the full
-prior-predictive `r(a)` median is a **hill** — rising to ~0.42 at ~36 mo, declining
-to ~0.11 — and the implied words-signed median is a gentle hill (peaking ~55 words at
-~54-60 mo) rather than the monotonic rise an intercept-only mean produced. The GP
-(`eta_sign ~ HalfNormal(0.4)`) now only carries smooth departures.
-
-Review notes:
-
-- **Why a hump, not an intercept or a slope.** An intercept-only mean gave a _flat_
-  prior-median `r`, so words signed = understood × `r` rose monotonically (reviewer
-  pushback: the median should be hill-shaped). A free monotone _slope_ extrapolated
-  to a spurious ~58% signed at 12 mo. The three-anchor tent gives the hill directly
-  and, being concave, sends `r` low at _both_ the young and old ends — avoiding the
-  young-extrapolation failure.
-- **Anchor ages/levels are independent, not data-fit.** Signing peaks around _mental_
-  age ~17 months (Miller 1992 via Clibbens: signed vocabulary ~2× spoken there,
-  declining by MA ~26 mo), which at a DS developmental quotient ~0.5 is chronological
-  ~34 mo — hence the ~36-month peak anchor. The inverted-U shape is confirmed by
-  Zampini (parabolic gesture trajectory). DS children retain signs _longer_ than TD
-  (Te Kaat-van den Os review) and `uk_06` has real 60-115 mo signers, so the old
-  anchor stays modest (~0.11), not near-zero. The peak _level_ is kept broad because
-  the peak _age_ is only weakly identifiable from the data.
-- Since the mean now carries the hump, `eta_sign` reverts to the standard ~0.4 (it
-  was inflated to ~1.0 only to force a hump out of a flat mean). VG15 additionally
-  anchors the signed GP at 54 mo, so the tent supplies the hump and the GP deviates
-  around it.
-- Independence: Miller (US) / Clibbens (UK) are independent of the training data;
-  Zampini (Italian) overlaps `it_01`, so it is cited for the _shape_ only. Shape and
-  sensitivity history in
-  [`notes/202606151700-vg14-signed-ratio-shape-and-p-any-bias.md`](../../notes/202606151700-vg14-signed-ratio-shape-and-p-any-bias.md).
+The [signing-shape review](../../notes/202606151700-vg14-signed-ratio-shape-and-p-any-bias.md) records the initial design. The [later prior decisions](../../notes/202608060900-three-prior-conflicts.md) explain the estimated peak and why the signed GP and legacy signed-dispersion block were retained. Literature on mental-age milestones motivates possible shapes but does not determine a chronological peak through a single developmental-age conversion.
 
 ### GP length-scale and amplitude priors
 
-The HSGP priors use a unit length-scale parameter mapped onto a length-scale in
-months:
+The length scale controls how quickly a smooth correction changes with age. The amplitude controls the size of its departures on the logit scale. `ell_unit` is mapped into the model's registered age-domain geometry; its raw value is not a length in months.
 
-```text
-ell_unit ~ Beta(alpha, beta)
-ell_months = ell_low + (ell_high - ell_low) * ell_unit
-```
+Read both with the HSGP basis and domain. A prior that looks broad in parameter space may still produce a restricted family of curves. Anchoring and removal of components aligned with the trend also affect the induced curve prior.
 
-The common range is 6-18 months.
-
-| Use                                 | Distribution                 | Observable interpretation                                                                              |
-| ----------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Standard U, spoken, and `q` smooths | `ell_unit ~ Beta(3, 3)`      | Median length-scale about 12 months; 5-95% about 8.3-15.7 months.                                      |
-| Signed-ratio smooth                 | `ell_unit_sign ~ Beta(2, 5)` | Median length-scale about 9.2 months; 5-95% about 6.8-13.0 months.                                     |
-| Standard GP amplitude               | `eta ~ HalfNormal(0.4)`      | Median logit-scale deviation about 0.27; 95% about 0.78.                                               |
-| `q`-ratio GP amplitude              | `eta_q ~ HalfNormal(0.8)`    | Median logit-scale deviation about 0.54; 95% about 1.57. VG13 keeps `HalfNormal(0.20)` (see below).    |
-| Signed GP amplitude                 | `eta_sign ~ HalfNormal(0.4)` | Median about 0.27; 95% about 0.78 (reverted to standard — the three-anchor mean now carries the hump). |
-
-Review notes:
-
-- The standard length-scale prior encodes smooth developmental departures rather
-  than rapid month-to-month oscillation.
-- The `q`-ratio GP amplitude `eta_q` was tightened from 0.4 to 0.20 to curb a
-  weakly-identified `q` slope/intercept ridge that broadening the `q` anchors had
-  surfaced, and was **widened to 0.8 on 2026-08-04**. The tightening was mis-scoped:
-  the conflict is not confined to the subject-RE-on-`q` models it was attributed to.
-  Every Down syndrome joint model sits at prior CDF 0.95-0.99 with contraction
-  0.03-0.16 — VG05, VG07 and VG08 included, which carry no subject RE on `q` at all,
-  and the Option D anchored models alongside the unanchored ones. What separates the
-  models is age span: `logit(q)` is S-shaped across the DS 8-115 month range and only
-  the GP can carry that curvature, so every model traversing it is prior-limited.
-  VG13 is the single exception (prior CDF 0.572) because its 8-18 month window sees
-  only the bottom limb of the S, and it keeps `HalfNormal(0.20)`. A `test`-config
-  control fit of VG10 at `eta_q = 0.4` cleared every remaining R-hat and ESS failure
-  and took divergences 2 → 0 with `tau_subj_q` unmoved, so the ridge does not return.
-  See [the note](../../notes/202608041730-ds-spoken-q-trajectory-prior.md).
-- The signed length-scale is shorter and its amplitude is larger because signing
-  needs to express a hump that can rise and fall over the observed age window.
-- The signed GP prior is a key sensitivity target because signed data are sparse
-  and age coverage is uneven.
-- The HSGP basis settings should be reviewed together with the length-scale
-  prior. A length-scale prior can look defensible while the basis approximation
-  still constrains the realised functions.
+VG11 adopted `eta_sigma = 0.4` on 2026-09-16; `eta-wide` restores 0.5 as a sensitivity. This was a regularisation decision supported by an earlier comparison, not evidence that the amplitude was well identified. See [the decision record](../../notes/202609161440-vg11-eta-sigma-0.4.md).
 
 ### Age-varying dispersion priors
 
-The Beta-Binomial concentration is age-varying:
+The usual concentration curve is:
 
 ```text
 kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)
 ```
 
-where `z` is standardised age. Every model uses that curve; they differ in how `(a_kappa, b_kappa)` are given priors.
+Here `z` is standardised age. Larger `kappa` means less residual count variation at a given mean and denominator. It is not a direct measure of differences between children.
 
-#### Legacy form — intercept and slope (VG05, VG07-VG10, VG14-VG16)
+The legacy form puts priors on the floor, intercept and signed slope magnitude. Its prior meaning depends on age standardisation and it constrains the trend's direction. Some development models retain it for historical comparison; the signed block also retains it where the review found no need to change it.
 
-```text
-b_kappa = -b_kappa_mag
+The two-anchor form puts positive priors on the concentration above the floor at two fixed ages. The log excess is interpolated between those ages. Standardisation cancels from the interpolation weight, so the prior retains its age interpretation when the frame changes. Either age direction is possible. `kappa_young` and `kappa_old` are totals, including the floor; the components are not interchangeable with those totals.
 
-kappa_min ~ LogNormal(log(5), 0.6)
-a_kappa ~ Normal(log(8), 1.0)
-b_kappa_mag ~ HalfNormal(0.3)
-```
-
-First-pass prior simulation gives:
-
-| Standardised age | Median kappa | 5-95% kappa | Median rho = `1 / (kappa + 1)` |
-| ---------------- | -----------: | ----------: | -----------------------------: |
-| `z = -1`         |         16.6 |    6.0-60.6 |                          0.057 |
-| `z = 0`          |         14.4 |    5.4-48.1 |                          0.065 |
-| `z = +1`         |         12.7 |    4.9-40.4 |                          0.073 |
-
-Review notes:
-
-- Smaller `kappa` means more overdispersion relative to a Binomial at the same mean. The prior allows substantial extra-binomial heterogeneity.
-- The sign of `b_kappa` encodes increasing heterogeneity with age, with a later plateau at `kappa_min`.
-- This structure should be checked carefully near floor and ceiling regions, where `kappa` can be weakly identified even if predictions look reasonable.
-- Alternative `kappa` priors are a sensitivity target for main reporting models.
-- **This form has three known weaknesses**, all of which the two-anchor form below removes and none of which are repaired by re-tuning the three numbers above. `a_kappa` is the age term at `z = 0`, so its prior describes the pool's _mean age_ and silently changes meaning when the pool is resampled or filtered. `b_kappa_mag` is a slope per unit standardised age, so one shared prior is about 3.5x tighter on the Down syndrome pool (age sd ~21 months) than on the typically-developing pool (~6 months). And `b_kappa_mag >= 0` forces dispersion to fall with age, which typically-developing comprehension rejects — its dispersion is flat to slightly rising.
-
-#### Two-anchor form (VG01-VG04, VG11, VG12, VG13)
-
-The same curve, with the age term `exp(a_kappa + b_kappa * z)` given priors at two reference **ages in months** and `(a_kappa, b_kappa)` solved for so the curve passes through both:
-
-```text
-kappa_min           ~ LogNormal(log(k_min),   s_min)
-kappa_excess_young  ~ LogNormal(log(e_young), s)     at anchor_ages[0]
-kappa_excess_old    ~ LogNormal(log(e_old),   s)     at anchor_ages[1]
-
-b_kappa = (log kappa_excess_old - log kappa_excess_young) / (z_old - z_young)
-a_kappa =  log kappa_excess_young - b_kappa * z_young
-```
-
-`a_kappa` and `b_kappa` remain in the trace as derived quantities under the same names, so a migrated model's dispersion posterior stays comparable with the fits that preceded it. `kappa_young` and `kappa_old` carry _total_ kappa at the anchors — floor plus excess — which is the quantity a per-age empirical estimate can be checked against. The joint engines take one form per outcome, suffixed `_u` and `_s`, so a model may anchor one and leave the other on the legacy form.
-
-| Model          | Outcome               | Anchors (months) | `k_min` | `e_young` | `e_old` | `s` | Calibration |
-| -------------- | --------------------- | ---------------- | ------: | --------: | ------: | --: | ----------- |
-| VG01           | spoken                | 18, 36           |       3 |        45 |     4.0 | 0.7 | marginal    |
-| VG02           | understood            | 18, 36           |       3 |        11 |     3.2 | 0.8 | marginal    |
-| VG03           | spoken                | 12, 20           |       3 |        30 |     3.0 | 0.7 | marginal    |
-| VG04           | understood            | 12, 18           |       3 |       7.6 |     7.2 | 0.7 | marginal    |
-| VG11           | spoken                | 12, 20           |       6 |       311 |      44 | 0.7 | conditional |
-| VG12           | understood            | 12, 20           |       3 |        40 |      63 | 0.9 | conditional |
-| VG13 `kappa_u` | understood            | 12, 17           |      30 |        10 |      90 | 0.9 | conditional |
-| VG13 `kappa_s` | q = spoken/understood | 12, 17           |       3 |        33 |      27 | 0.7 | conditional |
-
-> [!NOTE]
-> **Provenance corrected and regenerated, 2026-09-06 ([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)).** The VG11-VG13 conditional calibrations were originally computed on the calibration tooling's then-default **English-only** frames (16,235 / 5,997 / 5,406 rows), not the registered English-plus-Romance frames those models fit (18,500 / 7,049 / 6,356 after source deduplication). The tooling now derives its frames from the complete model definition, is pinned to the registered frames by test, and **has been rerun on them**: `k_min` / `e_young` / `e_old` come back as 6.08 / 283.1 / 44.4 for VG11, floor-unidentified / 37.2 / 67.2 for VG12, 27.9 / 12.1 / 82.6 for VG13 `kappa_u` and floor-unidentified / 34.7 / 30.9 for VG13 `kappa_s`. Against the settings in the table, on the log scale and in units of each prior's own `s`, the largest move is **0.21 prior standard deviations** — so no registered prior changes, and the magnitudes above now describe the registered scopes. The loading diagnostics below carry the regenerated numbers too, where one claim did move. See [202609062330](../../notes/202609062330-vg11-vg13-calibration-regenerated.md), and [202608231537](../../notes/202608231537-vg11-vg12-vg13-statistical-review.md) §3.6 for the original finding.
-
-**The two calibrations answer different questions and are not interchangeable.** A _marginal_ calibration estimates how much counts vary at an age, full stop; it is the right target only for a model with no grouping structure, which is why VG01-VG04 use it. A model with study and subject random intercepts has already removed most of that variation before its likelihood runs, so its `kappa` describes what is left once a child's own level is known — a much smaller residual. Substituting one for the other is a large error, not a rounding one: on VG11 the marginal number is 32.6 at 12 months where the conditional estimate is 289.2, and the fit went to 312 with the prior at CDF 1.000.
-
-**VG04 and VG12 are the cleanest demonstration**, being the same outcome and population under the two specifications. VG04 carries no random effects and its dispersion is 11.8 at 12 months; VG12 carries study and subject intercepts and its is 37.2. Fit VG04's own rows _conditionally_ and they give 42.8; fit VG12's _marginally_ and they give 11.5. The gap is the specification, not the data. (VG04's two numbers are unchanged by the 2026-09-06 rescoping: VG03 and VG04 are registered English-only, so their calibration frames never differed from the models'.)
-
-Both sets of estimates come from `scripts/kappa_conditional_calibration.py`, which fits a saturated per-age mean alongside whichever effects the model carries — study effects and a quadrature-integrated subject effect for the random-effect models, neither for VG01-VG04. Each pool declares its own grouping and the estimator mirrors it. The `--recover` and `--mean-sweep` modes are what establish that a given pool can be calibrated at all; both must be run before adding one.
-
-`s = 0.9` on the two understood outcomes rather than 0.7 is not generic caution. Typically-developing understood `kappa` per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16 months (measured on the English-only frames, and not regenerated: the estimator has no per-cell mode), so the fitted rise is a two-parameter summary of a jagged profile and should not be stated more confidently than that. What produces the jaggedness is now known — see "What a rising `kappa` on the understood outcomes means" below — and it is a further reason to keep these two anchors wide.
-
-Prior simulation on each model's own age grid:
-
-| Model | 8 mo           | 12 mo         | 18 mo        | 24 mo         | 36 mo       | oldest        |
-| ----- | -------------- | ------------- | ------------ | ------------- | ----------- | ------------- |
-| VG01  | 177 [30, 1150] | 105 [24, 491] | 49 [18, 147] | 24 [11, 52]   | 7.9 [3, 20] | 3.1 [0.8, 12] |
-| VG03  | 99 [19, 586]   | 34 [13, 99]   | 9.2 [4, 20]  | 4.6 [1.5, 15] | —           | 3.6 [1.0, 13] |
-
-Median and 5-95%. The upper tails at the youngest ages look alarming next to the legacy table above but are not: at `n = 810`, `kappa = 200` still gives 2.2x the binomial standard deviation, so it is _not_ near-binomial, and the observed dispersion at those ages is genuinely in that range — the Down syndrome 18-month cell estimates 64 (profile interval [35, 107]) and the typically-developing 12-month cell 89 ([66, 119]).
-
-Anchors are placed where the age term is roughly an order of magnitude above the floor and where it has fallen back to it. Both priors then sit inside the data, so the prior between them is an interpolation of two checked values rather than an extrapolation from an intercept and a slope whose tails compound as `exp(2b)`.
-
-Review notes:
-
-- The prior on `kappa` at any given age is **exactly invariant** to the pool's age standardisation: the interpolation weight is `(age - young) / (old - young)` in months, and the standardisation cancels. Resampling or a study filter cannot move it.
-- `kappa_min` is carried over from the legacy recalibration unchanged for the spoken and ratio outcomes. The anchored form leans on it harder — beyond the old anchor the floor alone sets the level — so its ~8% of prior mass below `kappa = 1` now shows at old ages. Tightening `kappa_min_sigma` is a candidate follow-up.
-- **The floor is not always a floor.** With `b_kappa > 0` the exponential term vanishes at young ages instead of old ones, so `kappa_min` becomes the _young_-age asymptote. That is why VG13's is 30 rather than 3: a third of its 8-18 month frame sits below the young anchor, and the 8-11 month cells estimate 23-32. VG12's conditional fit puts no mass on a floor at all (it goes to zero with an unbounded standard error, a rising curve never reaching one inside the frame), so it keeps the weak default and the anchors carry the level.
-- The sign of `b_kappa` is unconstrained, and this is what the comprehension models needed: their fitted `kappa` _rises_ with age, which `b_kappa_mag >= 0` cannot represent at any setting. For the spoken models the anchors put only about 1% of prior mass on a rising trajectory — correctly, since spoken dispersion demonstrably falls. On what the rise does and does not mean, see immediately below.
-- Dropping `kappa_min` entirely and using a pure log-linear `kappa` was tested and rejected: it costs 10 to 168 log-likelihood units against the floored form across the six pools.
-- **The Down syndrome joint frame is calibrated as a lower bound, not a point estimate.** Its 671 comprehension rows are the whole Down syndrome comprehension dataset — every model in that population loads the same 1,218 unfiltered rows, so there is nothing to pool in — and no configuration of spline flexibility, age window or anchor pair recovers a known `kappa` to within 30%. But the failure is a one-directional, monotone downward bias rather than scatter: holding `tau` fixed and varying only the truth, `kappa`(24) recovers at −2% when the truth is 12, −4% at 41, −26% at 82 and −36% at 163, because a large `kappa` is near-binomial and the optimum slides down the flat ridge. VG09, VG10, VG15 and VG16 therefore take medians equal to each estimate divided by the bias measured at it, with `sigma = 1.0` — wider than anywhere else in the family. Their previous `HalfNormal(0.3)` slope prior was not defensible on any reading: all eight Down syndrome joint models put `b_kappa_mag_u` at prior CDF 0.993-0.9999, well mixed, and five of the eight have _negative_ contraction on the spoken slope — the posterior wider than the prior.
-- **VG05, VG07, VG08 and VG14 stay on the legacy form deliberately.** The calibration has to match the specification, and theirs differ: VG05 carries no random effects, VG07 only study ones, and VG08 a subject effect on understood but not on `q`. All three are steps in the VG05 → VG07 → VG08 → VG09 → VG10 lineage, which exists to isolate what each random effect does, so changing a prior partway along would confound it. VG14's frame is the signing subset.
+Calibration must match the model's random effects. A fit without child effects assigns variation to the count likelihood that a hierarchical model can assign to persistent child differences. A marginal calibration therefore cannot be substituted for a conditional one. The [calibration record](../../notes/202608020829-kappa-and-eta-q-prior-recalibration.md) documents the estimator checks and failures as well as the adopted values.
 
 ### What a rising `kappa` on the understood outcomes means
 
-VG12's and VG13's dispersion priors rise with age, and the two-anchor form exists partly so they can. That is a correct description of the models' `kappa` parameter and **not** a finding that comprehension becomes more variable as children get older. On the instrument's own scale it becomes less so.
+Rising concentration means less residual spread at a fixed mean and denominator. It does not by itself show that children's vocabulary becomes more or less variable with age. Changes in the mean, checklist ceiling and child-effect structure also change observed spread.
 
-The cause is the 810-item reference scale interacting with a subject intercept whose scale is fixed in age. Comprehension is collected only on WG (396 items) and Oxford CDI (418), and those are the _easiest_ items, so as children work up a form the modelled proportion `y / 810` compresses: by 16-18 months the mean row sits at about half its form's extent. The apparent between-child spread on the logit scale therefore falls with age, a constant `tau_subject` cannot follow it, and `kappa(age)` — the only age-varying spread parameter in the likelihood — absorbs the residue. Where the observed spread crosses below `tau`, `kappa` runs away, which is what produces the 110.7 at 16 months in the per-cell profile above.
-
-Three measurements pin it down, first made in section 21 of [`notes/202608020829-kappa-and-eta-q-prior-recalibration.md`](../../notes/202608020829-kappa-and-eta-q-prior-recalibration.md). The first two are reproducible with `scripts/kappa_conditional_calibration.py --loading` and were regenerated on the registered language scopes on 2026-09-06 ([202609062330](../../notes/202609062330-vg11-vg13-calibration-regenerated.md)); the third has no mode in the tooling and stands as the note recorded it:
-
-- Letting the subject loading vary with age costs one parameter and buys **110.8-263.7** log-likelihood units on the three affected pools (VG11 spoken 263.7, VG12 understood 165.7, VG13 understood 110.8), shrinks the apparent child scale by 23-44% across each pool's anchor span, and reverses the sign of the fitted `kappa` trend on both understood outcomes — VG12 rises 37.2 → 67.2 with a constant loading and falls 79.2 → 51.6 with a varying one, VG13 rises 40.0 → 110.5 and falls 75.3 → 61.4.
-- `q` — the same children, the same design, a mean profile within 10% of understood's — shows a drift **15 to 36 times smaller and of the opposite sign**: 7.3 units, and +34% rather than a shrinkage. Its denominator is the child's own understood count, so the form's extent cancels, and the compression signature is absent. (7.3 units is a likelihood-ratio statistic of 14.6 on 1 df, so this is not _no_ drift, which is what this bullet said when it was measured at 0.8 units on the English-only frame; it is a different and much smaller effect, and what it is has not been established.)
-- Rescoring the identical rows out of each row's own form instead of 810 removes 84-96% of the drift. **This one and the per-cell profile above are still measured on the English-only frames**: both come from the note rather than from `--loading`, which has no rescoring mode. Neither sets a prior.
-
-Two consequences. For the priors, none: the calibration must mirror the model's own structure, the registered models carry a constant `tau_subject`, and so a `kappa` prior fitted under that assumption is the right one for them. For reporting, `kappa` on the understood outcomes is a compound of observation-level dispersion and a subject scale the model holds fixed, and should not be quoted as a statement about children. The 810-item scale itself is not in question — it is the harmonisation this project deliberately adopts (see "Instrument scale" below) — only an untraced consequence of it.
-
-See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` for the calibration, the estimator correction behind it, and the forms that were rejected.
+The TD calibration found that an age-varying child loading changed the fitted dispersion trend. The [registered-frame recheck](../../notes/202609062330-vg11-vg13-calibration-regenerated.md) supports treating the variance split as model-dependent. Report total spread on the word-count scale when that is the question, and assess recovery of that quantity separately.
 
 ### Study and subject random-effect scale priors
 
-Study and subject random intercepts use non-centred Normal effects with
-HalfNormal scale priors. The two levels take different scales:
+Study effects describe persistent differences between datasets; child effects describe persistent differences between children. Their scale priors regularise different sources of variation. Several models use HalfNormal scale priors, but there is no single independent scale prior shared by every engine.
 
-```text
-study scales   tau_u, tau_q, tau_sign                      ~ HalfNormal(0.5)
-subject scales tau_subject, tau_subj_u, tau_subj_q, ...    ~ HalfNormal(1.5)
-```
+VG11 and VG12 parameterise total scatter and the share attributed to children through `SubjectVariancePartitionParams`. Correlated models use joint child-effect priors. VG19 adds child slopes, and VG22 uses a low-rank factor structure. Inspect the definition and its induced correlations before treating two models' priors as matched.
 
-On the logit scale `HalfNormal(0.5)` has median 0.34 and `HalfNormal(1.5)` median
-1.01, with 5-95% of 0.09 to 2.94. As an odds multiplier, `exp(tau)` at the
-subject scale has prior median about 2.75.
-
-**The subject scales were `HalfNormal(0.5)` until the recalibration** and were the
-family's largest remaining prior-data conflict: all fourteen subject-scale
-parameters in the registry sat at prior CDF 0.86 to 0.994, none below. The
-conditional dispersion estimator
-(`scripts/kappa_conditional_calibration.py`) reports `tau` alongside `kappa` for
-every pool, because separating the two is what it exists to do, so a calibration
-had been available since the dispersion work and had simply not been read off
-it. It puts the subject scale at 0.74-0.77 on the typically-developing frames,
-0.85 on Down syndrome understood, and 1.12-1.15 on the two production ratios.
-`HalfNormal(1.5)` lands every one of those, and every current posterior, between
-prior CDF 0.38 and 0.64.
-
-Two details of that estimate are worth recording:
-
-- **It agrees with the posteriors to three significant figures** on all four
-  typically-developing parameters — 1.056 against 1.060 for VG11, 0.736 against
-  0.735 for VG12, 0.770 against 0.768 and 1.119 against 1.117 for VG13 — and to
-  within 3% on the five Down syndrome understood ones. A quadrature-integrated
-  maximum-likelihood GLMM and a Hamiltonian sampler with an HSGP mean reaching
-  the same number is independent corroboration of both.
-- The four that differ are all the Down syndrome ratio (estimate 1.147 against
-  posteriors 1.25-1.38). Its recovery check independently measures an 8% downward
-  bias on that pool, which accounts for VG15's gap exactly and about half of the
-  others'.
-
-Review notes:
-
-- The family stays HalfNormal rather than moving to the LogNormal the `kappa`
-  anchors use. A scale prior with mass at zero lets a subject effect the data do
-  not support shrink away, and that is worth keeping even where the effect is
-  overwhelming. Widening the scale removes the conflict without giving it up.
-- **The study scales are unchanged and need no change**: their posteriors sit at
-  prior CDF 0.43 to 0.82 across every model carrying them. That the two levels
-  shared one default was the accident; only one level was mis-set. The estimator
-  fits study effects as fixed, so it offers no opinion on the study scale either.
-- `tau_subj_sign` (VG15) has no calibration of its own — nothing estimates a
-  signing subject scale — so it inherits the family setting. Its posterior at
-  1.082 was in the same tail as the rest and is now at prior CDF 0.53. Subject
-  random effects for sparse modalities remain a sensitivity target.
-- The `tau-wide` / `tau-narrow` sensitivity variants now bracket 1.5 for the
-  subject scales (3.0 and 0.75) and still bracket 0.5 for the study ones.
+Repeated measurements help distinguish persistent differences from occasion-level variation. A prior or a reparameterisation cannot supply the information missing from a mostly single-visit dataset. See the [TD geometry investigation](../../notes/202608050900-td-hierarchical-geometry.md).
 
 ### VG15 association and four-cell concentration priors
 
-VG15 introduces a scalar Plackett association between signing and speaking within
-understood words:
+The joint signing engine places a Normal prior on `log_psi` and exponentiates it. Independence is `psi = 1`. The registered centre is weakly positive and was motivated by the observed cross-tabulations, so it is data-informed. The study-level association scale controls how strongly the four sources are pooled and is weakly identified with so few studies.
 
-```text
-log_psi ~ Normal(0.3, 0.5)
-psi = exp(log_psi)
-```
+`psi` is informed by `uk_02`, `uk_07`, `es_01` and `nz_01`, not `uk_02` alone. Their cell definitions differ. The likelihood uses study-adjusted margins and sex effects, while child intercepts remain outside the compositions. See the [association review](../../notes/202608121030-psi-heterogeneity-and-age-invariance.md) and the [source-construct correction](../../notes/202609021903-es01-gesture-construct-revisited.md).
 
-This prior has median `psi` about 1.35, 5-95% about 0.59-3.07, and about 72.5%
-prior probability above independence (`psi = 1`).
-
-VG15 also uses:
-
-```text
-log_conc ~ Normal(3.0, 1.0)
-conc = exp(log_conc)
-```
-
-This gives median concentration about 20, with a 5-95% interval about 3.9-104.
-
-Review notes:
-
-- The `psi` prior is weakly positive, not neutral. That is consistent with the
-  uk_02 four-cell data motivating VG15, but it should be explicitly labelled as
-  data-informed regularisation rather than independent prior evidence.
-- Because `psi` is identified primarily from a small uk_02 cross-tabulation, a
-  neutral prior such as `log_psi ~ Normal(0, 0.5)` or a broader alternative
-  should be included in sensitivity checks.
-- The current VG15 engine deliberately feeds the four-cell likelihood
-  population-plus-study marginals, not subject-shifted marginals, so `psi`
-  remains a population-conditioned association. The rationale is documented in
-  [`notes/202606171200-vg15-subject-re-stabilisation.md`](../../notes/202606171200-vg15-subject-re-stabilisation.md).
+`conc` controls Dirichlet-Multinomial variation among cells. The produced-only likelihood retains the original three Dirichlet parameters after conditioning; its total concentration is `conc * P(produced | understood)`. It is not the same concentration as the full four-cell likelihood.
 
 ## Evidence base: literature and normative data
 
-This section records the external evidence that can anchor or challenge the
-priors above, and — critically — separates _independent_ evidence from
-_regularisation_ drawn from data that overlap the training set (issue 89,
-step 3).
+The source assessments below were recorded in the prior review and corrected on 2026-09-04. They identify overlap and measurement limits. They are not a fresh literature search or proof that current priors have independent validation. Consult the source papers and dataset records when using them for a new analysis.
 
 ### Independence of candidate sources
 
@@ -598,348 +103,50 @@ Not every published cohort is independent of the fitted data. Where a prior is
 anchored on a study whose participants are already in `vocab_data_merged.csv`,
 it is regularisation, not independent prior evidence.
 
-| Source                                                                           | Role for priors                                                                                                                    | Independent of training data?                                                                                                                                                                                                                                               |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Wordbank by-child data (`wordbank_administration_data.csv`)                      | TD anchors, `q`, dispersion                                                                                                        | **No** — it _is_ the TD training data. Use the published normative percentiles as the non-circular check, not the rows.                                                                                                                                                     |
-| Berglund et al. (2001), n=330, Sweden                                            | DS _spoken_ anchors, growth shape, heterogeneity — the SECDI Words & Sentences form is production-only, so no comprehension anchor | Yes                                                                                                                                                                                                                                                                         |
-| Galeote et al. (2008, 2011), Spain                                               | DS spoken-versus-TD comparison by mental age; symbolic-gesture `r`                                                                 | **No** — the 186-child cohort _is_ `es_01`, supplied by the author (see `data/vocab_data_es_01.md`); treat as regularisation                                                                                                                                                |
-| Næss et al. (2021), Norway                                                       | Qualitative corroboration only (receptive ahead of expressive; slower expressive growth than TD)                                   | Yes — but not on the CDI scale: 43 children tested at 6, 7 and 8 years with the BPVS-II and WPPSI-III Picture Naming, no parent report. Supplies no CDI anchor and no `q`                                                                                                   |
-| Deckers et al. (2016, 2019), Netherlands                                         | Signed `r` corroboration; N-CDI validity in DS                                                                                     | Yes — 25–36 children aged 2;0–7;6, two waves 1.5 years apart, N-CDI Words & Sentences (702 words) with an added sign column. A production-only form; the 2019 receptive measure is a composite with the ROWPVT test, and no parent-report comprehension column is described |
-| Kaat-van den Os et al. (2017), Netherlands                                       | Signed `r` corroboration; spurt heterogeneity; sign-to-speech modality shift                                                       | Yes — 26 children followed monthly from 18–24 months for 18 months on the Lexi questionnaire (263 words, a Language Development Survey adaptation, not a CDI); production only, no comprehension                                                                            |
-| Miller et al. (1995); Mervis & Robinson (2000), US                               | DS anchors, parent-report validity                                                                                                 | Yes                                                                                                                                                                                                                                                                         |
-| Oliver & Buckley (1994), UK                                                      | DS low-age spoken anchor (10-word stage ~27 mo)                                                                                    | Yes — confirmed **not** to overlap `uk_01`                                                                                                                                                                                                                                  |
-| Caselli et al. (1998); Zampini & D'Odorico (2013); Bello & Caselli (2014), Italy | DS trajectory, gesture, dispersion                                                                                                 | **No** — overlap the `it_01` Italian-CDI-DS cohort; treat as regularisation                                                                                                                                                                                                 |
+| Source                                                                           | Role for priors                                                                                                                   | Independent of training data?                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wordbank by-child data (`wordbank_administration_data.csv`)                      | TD anchors, `q`, dispersion                                                                                                       | No. These are the TD training data. Normative tables can check scale, but their independence also needs to be established.                                                                                                                                                 |
+| Berglund et al. (2001), n=330, Sweden                                            | DS _spoken_ anchors, growth shape, heterogeneity. The SECDI Words & Sentences form is production-only, so no comprehension anchor | Yes                                                                                                                                                                                                                                                                        |
+| Galeote et al. (2008, 2011), Spain                                               | DS spoken-versus-TD comparison by mental age; symbolic-gesture `r`                                                                | **No**. The 186-child cohort _is_ `es_01`, supplied by the author (see `data/vocab_data_es_01.md`); treat as regularisation                                                                                                                                                |
+| Næss et al. (2021), Norway                                                       | Qualitative corroboration only (receptive ahead of expressive; slower expressive growth than TD)                                  | Yes, but not on the CDI scale: 43 children tested at 6, 7 and 8 years with the BPVS-II and WPPSI-III Picture Naming, no parent report. Supplies no CDI anchor and no `q`                                                                                                   |
+| Deckers et al. (2016, 2019), Netherlands                                         | Signed `r` corroboration; N-CDI validity in DS                                                                                    | Yes. 25–36 children aged 2;0–7;6, two waves 1.5 years apart, N-CDI Words & Sentences (702 words) with an added sign column. A production-only form; the 2019 receptive measure is a composite with the ROWPVT test, and no parent-report comprehension column is described |
+| Kaat-van den Os et al. (2017), Netherlands                                       | Signed `r` corroboration; spurt heterogeneity; sign-to-speech modality shift                                                      | Yes. 26 children followed monthly from 18–24 months for 18 months on the Lexi questionnaire (263 words, a Language Development Survey adaptation, not a CDI); production only, no comprehension                                                                            |
+| Miller et al. (1995); Mervis & Robinson (2000), US                               | DS anchors, parent-report validity                                                                                                | Yes                                                                                                                                                                                                                                                                        |
+| Oliver & Buckley (1994), UK                                                      | DS low-age spoken anchor (10-word stage ~27 mo)                                                                                   | Yes, confirmed **not** to overlap `uk_01`                                                                                                                                                                                                                                  |
+| Caselli et al. (1998); Zampini & D'Odorico (2013); Bello & Caselli (2014), Italy | DS trajectory, gesture, dispersion                                                                                                | **No**. Overlap the `it_01` Italian-CDI-DS cohort; treat as regularisation                                                                                                                                                                                                 |
 
 Corrected on 2026-09-04 after reading the papers: the Norwegian and Dutch cohorts had been listed together as independent sources of DS anchors and `q`, but none of them reports a parent-report comprehension count at chronological age, and the Galeote cohort is `es_01`. Every DS source in the table that is both independent and on the CDI scale is therefore production-only, which is why the DS understood anchors below rest on the project's own data.
 
-### Instrument scale (Fenson et al., 2007, via Hutchins, 2013)
+### Instrument scale
 
-The MB-CDI forms have different item totals, which the models fold onto the
-common 810-item reference scale:
+The model's 810-word scale is a common reference denominator. It is not an item-level crosswalk, and it does not make different checklists equivalent. A recommendation to compare common items does not, on its own, validate scoring every raw total against 810. The [methods chapter](../report/methods-data.qmd), dual-form comparisons and `dse-native-only` sensitivities describe the project's evidence and remaining assumptions.
 
-- **Words & Gestures (WG)** — 396-item checklist, _separate_ comprehension and
-  production columns; infant form (~8–18 months).
-- **Words & Sentences (WS)** — 680-item checklist, _production only_; toddler
-  form (~16–30 months). This is why the TD loader keeps WS as a spoken-only
-  observation and excludes WS "comprehension".
+### Recorded sensitivity results
 
-Two consequences for the priors:
+The 2026-08-18 Target 8 checks used the definitions and data then available. All seven variants met the recorded convergence and trajectory-interval comparison rule:
 
-1. Because WG carries the only CDI comprehension data, an _understood_
-   proportion derived from WG cannot exceed 396/810 = **0.489** on the model
-   scale. A high-age understood anchor near 0.5 would sit against the WG ceiling and implicitly assume near-total WG comprehension; VG13's 16-month understood anchor was recalibrated to `Beta(2, 6)` (median 0.228, about 185 words) partly for this reason, keeping it clear of the ceiling.
-2. Fenson et al. caution that percentile ranks are unstable at ages where a
-   skill is just emerging ("small differences in raw scores can have
-   dramatically different effects on percentile ranks"). The youngest-age
-   anchors should be re-centred toward the norms but **not** tightened.
+| Model | Variant as fitted | Maximum absolute count difference |
+| ----- | ----------------- | --------------------------------: |
+| VG10  | `u-anchor-broad`  |                       0.549 words |
+| VG10  | `eta-u-narrow`    |                       0.592 words |
+| VG11  | `anchor-broad`    |                       0.055 words |
+| VG11  | `eta-narrow`      |                       0.437 words |
+| VG12  | `lo-anchor-broad` |                       0.360 words |
+| VG12  | `hi-anchor-broad` |                       0.634 words |
+| VG12  | `eta-narrow`      |                       7.038 words |
 
-### TD anchor priors vs Wordbank norms
-
-Wordbank US-English, typically-developing, monolingual, cross-sectional deciles
-(downloaded 2026-07-01) translated onto the model's 810-item scale. The final
-column flags where the prior _centre_ departs from the normative median at the
-anchor age:
-
-| Anchor (models)                       | Prior            | Prior median (words/810) | Wordbank median | Prior ÷ empirical                   |
-| ------------------------------------- | ---------------- | -----------------------: | --------------: | ----------------------------------- |
-| Spoken low @12mo (VG03/VG11)          | `Beta(1, 30)`    |               0.023 (19) |      0.013 (11) | 1.8× high                           |
-| Understood low @12mo (VG04/VG12)      | `Beta(1.2, 8)`   |               0.104 (84) |      0.104 (84) | 1.0× (matches)                      |
-| Spoken high @26mo (VG03/VG11)         | `Beta(1.3, 1.3)` |              0.500 (405) |     0.436 (353) | 1.1× (broad, covers)                |
-| Young-TD understood low @10mo (VG13)  | `Beta(1, 15)`    |               0.045 (36) |      0.062 (50) | 0.73×                               |
-| Young-TD understood high @16mo (VG13) | `Beta(2, 6)`     |              0.228 (185) |     0.222 (180) | 1.0× (matches)                      |
-| Understood high @26mo (VG04/VG12)     | `Beta(1.3, 1.3)` |              0.500 (405) |               — | no CDI norm (WS is production-only) |
-
-Every prior's 5–95% band still covers the empirical median, so none is
-inconsistent with the norms — but the low-age and VG13 high anchors now sit close to the normative medians after the young-age recalibration (#135/#138/#140); the 26-month understood anchor still cannot be anchored to CDI norms (WS is production-only) and remains a sensitivity target. Source data: Wordbank vocabulary norm tables,
-<https://wordbank.stanford.edu/data/?name=vocab_norms>.
-
-### Production ratio `q(a)` from norms
-
-Because WG reports comprehension and production at the same ages, an empirical
-TD `q(a) = P(speak | understood)` can be read off as the ratio of median
-production to median comprehension (indicative — a ratio of population medians,
-not a within-child median):
-
-| Age (months) | Empirical TD `q(a)` |
-| ------------ | ------------------: |
-| 10           |                0.12 |
-| 12           |                0.13 |
-| 16           |                0.19 |
-| 18           |                0.26 |
-
-The DS-joint low-age `q` anchor, `Beta(2, 12)` (median 0.126), is centred on this
-independent TD `q(10–12 mo) ≈ 0.12` — an independent corroboration of the _level_,
-not a value read from the fitted DS data. VG13 uses lower `Beta(1, 10)` / `Beta(2, 7)`
-(medians 0.067 / 0.201), matching the younger empirical TD ratio above.
-
-The high-age DS `q` anchor has no independent source — there is no normative DS
-production ratio — and was `Beta(3, 2)` (median 0.614) on the reasoning that a broad
-prior would let the DS dataset the 84-month level. It did not: VG10 put the fitted
-trend anchor at 0.929, above `Beta(3, 2)`'s own 95th percentile of 0.902, at prior
-CDF 0.972. **Recalibrated 2026-08-04 to `Beta(4, 1.2)`** (median 0.805, 5-95%
-0.438-0.978). The evidence is the DS frame's own **directly observed** production
-ratio — the per-child `spoken / understood` ratio on the 902 rows carrying both
-outcomes, which is data rather than a posterior quantity:
-
-| Age (months) |    18 |    24 |    30 |    36 |    42 |    48 |    54 |    60 |    66 |    72 |
-| ------------ | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: | ----: |
-| Observed `q` | 0.026 | 0.061 | 0.089 | 0.128 | 0.241 | 0.475 | 0.502 | 0.610 | 0.706 | 0.733 |
-| Rows         |   135 |   158 |   135 |   134 |    83 |    77 |    27 |    31 |    24 |    11 |
-
-A size-weighted least-squares line through `logit(q)` over these bands implies a
-trend `q(84)` of 0.946 (unweighted 0.924; restricted to 36 months and up, 0.943).
-The chosen median of 0.805 stops deliberately short of that, because the last band
-carrying both outcomes is 72 months at 11 rows and only one row in the pool has both
-outcomes above 78 months — the anchor age itself is extrapolated. This is scale
-calibration on the project's own frame, the same evidence class as the dispersion
-priors and the 2026-08-04 understood anchors, and it is not an independent norm.
-The low anchor is unchanged: it is well-centred already (fitted 0.117, prior CDF
-0.464, contraction 0.81).
-
-### DS anchor priors vs independent cohorts
-
-The DS anchors (24 and 84 months) can be checked against the independent DS CDI
-cohorts — those not overlapping the training data. Only expressive (spoken)
-vocabulary can be anchored this way: the usable cohorts report production, and DS
-comprehension at chronological age has no independent source here (Berglund's
-form is production-only, Galeote et al. (2008) is reported by mental age and is
-in any case the `es_01` cohort, the Dutch and Norwegian cohorts carry no
-parent-report comprehension (see the independence table), and the
-Italian comprehension cohorts overlap `it_01`).
-
-Berglund et al. (2001) — 330 DS children on a 710-item Swedish CDI — give a full
-spoken trajectory by chronological age (their Table 3), translated onto the
-model's 810-item scale:
-
-| Age (months) | Berglund DS spoken (approx. median words / 810) | Notes                            |
-| ------------ | ----------------------------------------------: | -------------------------------- |
-| 12           |                                      ~0 (0.000) | 12% have ≥1 word                 |
-| 24           |                                     ~10 (0.013) | 53% pass 10 words, 3% pass 50    |
-| 36           |                                     ~30 (0.045) | mean 36 words (range 0–165)      |
-| 48           |                                     ~50 (0.063) | 54% pass 50 words; max child 668 |
-| 60           |                                     ~65 (0.081) | 73% pass 50 words                |
-
-Comparison with the DS spoken prior (VG01, `Beta(1, 25)` at 24 months, median 0.027, about 22 words):
-
-- The prior now places about 22 words at **24 months**, which Berglund observes around 30 months; at 24 months the independent median is ~10 words, so the DS spoken-low prior is ~2x high — recalibrated much closer to the cohort, in the same direction as the TD spoken-low anchor.
-- The **84-month high anchor** (`Beta(2, 1.5)`, median 0.586, about 475 words) is
-  **beyond the range of every independent DS CDI cohort** (Berglund tops out at
-  60 months; CDIs are young-child instruments). It is deliberately broad and can
-  only be checked against the project's own older DS data — i.e. it is
-  regularisation, not independently anchored. This mirrors the un-anchored TD
-  understood high anchor at 26 months.
-- The DS **understood** low anchor (`Beta(1.5, 8)` at 24 months, median 0.134 ≈
-  108 words) has **no independent chronological-age comprehension source** in the
-  current library. It is directionally sensible (understood > spoken at 24
-  months) but its level rests on the project's own DS comprehension data — a gap
-  worth filling. It was recalibrated on 2026-08-04 from `Beta(1, 7)` (median 76
-  words) together with the joint high anchor, from `Beta(2, 1.5)` to
-  `Beta(3, 1.3)` (median 475 → 592 words), after the prior predictive was
-  measured against the frame: the old pair left 80% of prior mass below the
-  frame's own median across 24–60 months, 87% of it at 48 months. This is scale
-  calibration on the training rows, the same weaker evidence class already
-  admitted for this anchor, and it corrects the prior's **level** only. The
-  residual displacement is structural — the mean is logit-linear in age while
-  the trajectory is strongly concave on that scale — and is documented, with the
-  proposed log-age mean form and the family-wide `eta_u` strain it causes, in
-  [`notes/202608041216-ds-understood-trajectory-prior.md`](../../notes/202608041216-ds-understood-trajectory-prior.md).
-
-Milestone timing corroborates the shape: the 50-word level is reached by ~25% of
-DS children at age 3, ~50% at age 4, and ~75% at age 5 (Berglund et al., 2001).
-Galeote et al. (2008, 2011) add that, matched on mental age, DS spoken vocabulary
-is comparable to TD while gesture use is superior — evidence for the signed ratio
-`r(a)` rather than a chronological-age anchor, and in-sample evidence at that,
-since the cohort is `es_01`.
-
-### Dispersion (`kappa`)
-
-Fitting a Beta-Binomial (n = 810, matching the model likelihood) per age to the
-by-child Wordbank TD data (English variants, `typically_developing`,
-`health_conditions` null — the loader's filter) gives the empirical dispersion.
-`kappa` is the concentration; `rho = 1 / (kappa + 1)` is the intra-child
-overdispersion.
-
-| Outcome / form  | Age span | Empirical `kappa` | Empirical `rho` | Age trend                      |
-| --------------- | -------- | ----------------: | --------------: | ------------------------------ |
-| Understood (WG) | 8–18 mo  |              6–14 |       0.07–0.13 | ~flat                          |
-| Spoken (WG)     | 8–18 mo  |             10–36 |       0.03–0.09 | `kappa` falls with age         |
-| Spoken (WS)     | 16–30 mo |              3–14 |       0.07–0.26 | `kappa` falls steeply with age |
-
-> [!IMPORTANT]
-> The per-age slopes in the table above are estimated by regressing `log kappa` on standardised age. That is **not** the model's parameter: because `kappa` flattens onto `kappa_min`, the log-slope of total `kappa` is shallower than `b_kappa_mag`, and the regression estimates it low — by roughly a factor of two. Fitting the model's own three-parameter form to the same cells gives `b_kappa_mag` of **2.78** for Down syndrome spoken and **1.71-1.78** for typically-developing spoken, against the 1.38 and 0.77 the log-linear regression reported. The direction below is unaffected; the magnitude is. See `notes/202608020829-kappa-and-eta-q-prior-recalibration.md` section 17.
-
-> [!IMPORTANT]
-> Every figure in this section is **marginal** — no random effects — and so applies only to VG01 and VG03. For a model with study and subject random intercepts the same data give a `kappa` three to ten times larger, because the random effects absorb the between-child spread that these per-age fits leave in the residual. The conditional estimates are in the two-anchor table above and in section 19 of the note; do not read this section's numbers across to VG11, VG12 or VG13.
-
-Against the shared prior (`kappa` median ~13–17, 5–95% ~5–60; `b_kappa < 0`):
-
-- **Direction confirmed.** For the spoken/production outcome (the primary one)
-  `kappa` clearly falls with age — dispersion rises with age, exactly the sign the
-  prior encodes. Comprehension is roughly flat, and on the typically-developing
-  random-effects frame very slightly rising, which the shared prior's
-  `b_kappa_mag >= 0` cannot represent at all. Zampini & D'Odorico (2013) report DS
-  vocabulary variability _increasing_ from 36 months, the same direction — but as
-  corroboration rather than independent evidence, since that cohort overlaps
-  `it_01`.
-- **The floor is real and is about 3.** Three independent pools (DS spoken, and
-  the two typically-developing spoken frames) put `kappa_min` at 3.08–3.54,
-  against a shared prior centred at 5 whose 5th percentile was 1.86. Dropping the
-  floor and using a pure log-linear `kappa` was tested and costs 10–168
-  log-likelihood units, so the plateau is a genuine feature rather than a
-  parameterisation convenience. Part of the old-age level is a ceiling artefact
-  (WS counts pile toward the 680-item form limit), and the model's GP mean and
-  study random effects absorb some spread that these raw per-age fits do not.
-- **The age slope was out by a factor of five, not "slightly too tight".** The
-  shared `HalfNormal(0.3)` has a median of 0.20 and a 95th percentile of 0.59
-  against corrected empirical values of 1.7–2.8. Widening it to `HalfNormal(0.75)`
-  moved VG03 from prior CDF 1.00 and contraction 0.18 to 0.93 and 0.82 but did not
-  go far enough, and widening a third time is not viable: the intercept and slope
-  tails compound as `exp(2b)`, so at `HalfNormal(1.5)` about 30% of prior mass puts
-  `kappa` above 200 at `z = -2`. This is what the two-anchor form above resolves,
-  and why VG01, VG03, VG11, VG12 and VG13 have migrated to it. The remaining
-  models still carry the mis-scaled shared default and are the outstanding work.
-- **The random-effect models needed a second correction on top of that one.**
-  Re-parameterising fixes the shape of the prior but not what it is a prior
-  _about_: a marginally-calibrated `kappa` transplanted into a model with subject
-  random intercepts is a prior for the wrong quantity, and VG11 showed the size of
-  that error at a factor of ten. VG11, VG12 and VG13 are now calibrated
-  conditionally. VG09, VG10 and VG16 are not, because their frame cannot support
-  it, so their dispersion priors remain the weakest part of this specification —
-  VG12's and VG13's posteriors sat at less than half their conditional estimate
-  before the change, and nothing rules out the same being true of them.
-
-### Methodological endorsement of the 810-item design
-
-Laudańska et al. (2026), systematically reviewing CDI use across
-neurodevelopmental and genetic conditions, recommend exactly the harmonisation
-this project adopts: proportion-based scoring on a common overlapping item set
-to compare across CDI forms and languages. Their pooled DS expressive-vocabulary
-age trend and cohort catalogue provide a meta-analytic DS anchor, with the
-caveat that clusters mix forms and languages. A useful cross-anchor: DS
-expressive vocabulary at ages 3–4 is comparable to TD at 16–20 months (Berglund
-et al., 2001), which via the Wordbank WS norms pins the DS spoken trajectory
-through the preschool years.
+These are historical checks on reported trajectories, not proof that all parameters or later fits are insensitive to priors. VG11's old `eta-narrow` arm is now its default, with `eta-wide` as the reverse comparison. Updated data, definitions and target quantities require compatible new comparisons. The [run record](../../notes/202608180600-refit-run-record-and-storage-move.md) provides the historical context.
 
 ## Prior predictive audit
 
-Prior-predictive output was regenerated for one representative of each model
-family — VG11 and VG12 (typically-developing univariate with study random
-effects), VG10 (Down syndrome bivariate understood + spoken, study + subject
-random effects and a GP anchor), VG13 (typically-developing bivariate, young
-8-18 month window), VG14 (trivariate signing) and VG15 (joint sign/speech) —
-using `scripts/prior_predictive_audit.py`, which builds each model and draws
-from the prior predictive only (no posterior sampling). The `prior_samples_*`,
-`prior_predictions` and `prior_predictive_checks` plots in each model's output
-directory were reviewed against the checklist below.
+Use `scripts/prior_predictive_audit.py` to simulate from registered definitions. Inspect the combined prior on counts, not just one parameter at a time. Record the revision, frame, simulation settings and figures reviewed.
 
-| Check                           | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Young-age floor                 | Plausible. Every trajectory family places prior-predictive mass near zero at the youngest ages (spoken and signed at 8-12 months, understood a little higher); no prior draw forces a high count at young ages.                                                                                                                                                                                                                                |
-| Old-age ceiling                 | Plausible. Understood and spoken curves approach the 810-word ceiling only gradually and only for the fastest draws; the bulk of the prior mass stays well below saturation across the query range, so the ceiling is reachable but not imposed.                                                                                                                                                                                               |
-| Smoothness                      | Appropriate. The HSGP produces smooth curves with individual-draw wiggle, admitting both near-linear and gently curved trajectories without high-frequency oscillation.                                                                                                                                                                                                                                                                        |
-| `q(a)` (speak given understood) | Plausible. The prior band is a smooth 0-to-1 sigmoid rising from about 0.05 at the youngest ages toward about 0.9 by ~100 months, with no mass piling implausibly at the bounds.                                                                                                                                                                                                                                                               |
-| `r(a)` (sign given understood)  | Re-specified as a three-anchor hump after this audit. The audited intercept-only mean gave a flat median (words signed = understood x r therefore rose monotonically); the signed mean is now a tent through young / peak / old anchors (`r` ~0.08 / ~0.42 / ~0.11 at 15 / 36 / 96 mo), so the prior median is a hill peaking ~0.42 at ~36 mo and the words-signed median is a gentle hill. The 54-month GP-anchor "waist" (VG15) is retained. |
-| Random-effect heterogeneity     | Plausible. At the observation level the study/subject random effects widen the prior-predictive cloud enough to cover the observed between-study and between-child spread without implying implausible extremes on the probability scale.                                                                                                                                                                                                      |
-| Simulated count spread          | Plausible. The prior-predictive count clouds bracket the observed counts for every outcome (understood, spoken, signed) before the data are seen — neither too narrow (which would fight the data) nor degenerate at 0 or 810.                                                                                                                                                                                                                 |
-| VG15 signing / four-cell        | Plausible. Signed counts stay low with a broad, hump-capable upper tail (matching the sparse signing data); the `log_psi ~ Normal(0.3, 0.5)` association prior spans the independence reference `psi = 1`, so the four-cell composition is not prior-forced toward association.                                                                                                                                                                |
-
-**Conclusion.** The priors encode the developmental floor and a
-reachable-but-not-imposed ceiling, keep the production ratio in a plausible range,
-and generate count spreads that bracket the observed data without dominating it;
-the association prior is weakly positive but spans independence. The one prior
-since revised on prior-predictive grounds is the **signed ratio**: this audit's
-`r(a)` had a flat, floor-hugging median (~14% of mass below 0.05), and it was
-re-specified as a three-anchor hump (a tent through young / peak / old anchors) so
-the prior median is a hill — see the "Signed ratio prior" section. Evidence: each
-model's `prior_samples_*.png` under `output/models/<model>-<config>/`, regenerated
-by `scripts/prior_predictive_audit.py`.
+Check young-age floors, older-age ceilings, curve smoothness, spoken and signed shares, differences between children and studies, and signing-cell compositions. Compare each against the correct observation denominator and age support. Earlier audit verdicts do not certify a changed prior or model.
 
 ## Sensitivity targets
 
-The following sensitivity checks should be prioritised before the technical
-report makes robustness claims:
+Use the registered variants in `src/vocab_growth/sensitivity/registry.py`. The main questions concern anchor levels, GP flexibility, dispersion, child and study scales, signing shape and association pooling, and lag construction. The sex covariate and child correlations also need comparisons appropriate to their reporting use.
 
-| Target                                                                                                            | Why it matters                                                                                                                                                                                                                                       | Suggested alternatives                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DS-joint `q` anchors (esp. `q_high`)                                                                              | Weakly-informative, broadened off the VG07-posterior values; `q_high` has no independent DS source.                                                                                                                                                  | The former `Beta(3, 22)` / `Beta(20, 4)` as a revert check; narrower/wider `q_high` such as `Beta(4, 2)` or `Beta(2, 1.5)`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Signed GP amplitude and length-scale                                                                              | Signing data are sparse and the hump is GP-driven.                                                                                                                                                                                                   | Wider/narrower `eta_sign`; standard `ell_unit_sign ~ Beta(3, 3)`; shorter length-scale alternative.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Signed hump anchors (peak / old)                                                                                  | Three-anchor tent; the peak _age_ is only weakly identifiable, and the old anchor is the words-fall (Miller) vs plateau (uk_06) knob.                                                                                                                | Lower/higher peak level (`Beta(2, 6)` / `Beta(4, 3)`); higher old anchor (`Beta(2, 8)`); shifted peak age (`sign_anchor_ages`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Kappa priors                                                                                                      | Dispersion can dominate predictive uncertainty, especially near floor or ceiling.                                                                                                                                                                    | Broader `kappa_min`; flatter age trend; non-monotone or constant-kappa comparison where feasible.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Random-effect scales                                                                                              | Study and subject effects can trade off with global age curves.                                                                                                                                                                                      | Wider `tau` prior; narrower `tau` prior; study-only or no-subject variants where already supported by flags.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| VG15 `psi`                                                                                                        | Identified from sparse four-cell data and prior is weakly positive.                                                                                                                                                                                  | Neutral `log_psi ~ Normal(0, 0.5)`; broader `Normal(0, 1)`; stronger positive prior only as an explicit data-informed sensitivity.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| VG16 `beta_lag` (cross-lag)                                                                                       | The coefficient is assumed constant across gaps of 1-28 months, several studies and checklist-form transitions, and 455 of 1,428 spoken rows enter through the fallback branch with no observed comprehension parent at all (#242).                  | `conditional-only` (drop the fallback rows), `dse-native-only` (no count on a denominator its form did not use), `lag-gap-12` (drop lags over 12 months; 41 of 477), `no-us01` (leave-one-study-out; `us_01` supplies 136 of 477), `lag-continuity` (a +0.5/+1 correction instead of clipping the 7 zero-count sources to logit 1e-4), `lag-same-form` (keep only lags whose source and target waves used the same checklist; 342 of 473 supporting rows in all eight contributing studies, against 80 in two under `dse-native-only`), `beta-tight`/`beta-wide` (the coefficient's own prior scale at 0.25 and 1.0 against the registered 0.5; the current fit's contraction is 0.98, so these are expected to move nothing and are registered to check that rather than assert it). |
-| VG15 concentration                                                                                                | Controls four-cell overdispersion.                                                                                                                                                                                                                   | Broader `log_conc`; lower/higher median concentration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Young-age trajectory anchors (`p_slope_*`, `eta`) on VG10 (DS understood), VG11 (TD spoken), VG12 (TD understood) | Re-centred toward the young-age empirical/normative band (#135/#138/#140/#142). The DS understood anchors and the 26-month TD understood high anchor (VG04/VG12) have **no** independent norm, so their re-centring is data-informed regularisation. | Revert each anchor to its pre-recalibration vague prior and un-widen `eta`. Registered as `u-anchor-broad` / `eta-u-narrow` (vg10), `anchor-broad` / `eta-narrow` (vg11), `lo-anchor-broad` / `hi-anchor-broad` / `eta-narrow` (vg12).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+Compare the quantities that motivate each model, together with their uncertainty. A cross-lag check must inspect the lag coefficient; agreement in population trajectories alone cannot validate it. A total-spread comparison must assess that spread, not infer recovery from its separate components. Follow the [recovery runbook](../runbooks/parameter-recovery.md) for designed-truth and cross-prior checks.
 
-Sensitivity summaries should compare headline quantities, not only raw
-parameters:
-
-- expected words understood, spoken, signed, and total expressive at query ages;
-- `q(a)` and `r(a)` at clinically relevant ages;
-- VG15 `psi` and `P(psi > 1)`;
-- VG16 `beta_lag` — the cross-lag coefficient, which is the **only** reported number VG16 supplies, so a VG16 variant scored on trajectories alone is not scored at all (added 2026-08-25, #242);
-- four-cell sign/speech composition;
-- uncertainty intervals for the above.
-
-### Sensitivity results
-
-**Target 8 (young-age trajectory anchors) — complete, all seven variants robust.** Fitted and compared on 2026-08-18 at the reporting (`rep`) tier — the issue that tracked it ([#147](https://github.com/dseinternational/vocabulary-growth/issues/147)) specified `test`, and `rep` is strictly stronger — against the models of record as they stood on that date, which is the frame before the `us_03` ingestion (#289) and before the `es_01` gesture-construct correction. The gate is the one in `src/vocab_growth/sensitivity/compare.py`: a variant is robust when every reported quantity at every query age stays inside the baseline 89% interval and the fit clears the convergence thresholds. Detail CSVs and `robustness_matrix_<model>.csv` were written under `output/comparisons/sensitivity/` on the fitting machine; the matrix is reproduced here because those files are not committed.
-
-| Model | Variant           | Converged | Coverage | Max abs delta (words) |
-| ----- | ----------------- | --------- | -------- | --------------------- |
-| vg10  | `u-anchor-broad`  | yes       | 1.0      | 0.549                 |
-| vg10  | `eta-u-narrow`    | yes       | 1.0      | 0.592                 |
-| vg11  | `anchor-broad`    | yes       | 1.0      | 0.055                 |
-| vg11  | `eta-narrow`      | yes       | 1.0      | 0.437                 |
-| vg12  | `lo-anchor-broad` | yes       | 1.0      | 0.360                 |
-| vg12  | `hi-anchor-broad` | yes       | 1.0      | 0.634                 |
-| vg12  | `eta-narrow`      | yes       | 1.0      | 7.038                 |
-
-The check that mattered most passes with room to spare. `vg12 hi-anchor-broad` reverts the 26-month understood high anchor — the one with **no** independent CDI comprehension norm, WS being production-only — to a vague Beta(1.1, 1.1), and moves the 30-month comprehension estimate by 0.634 words against a baseline 89% interval 152.8 words wide. The largest movement anywhere in the table is `vg12 eta-narrow` at 7.04 words, 4.6% of that interval. `vg10 u-anchor-broad` is scored across 395 quantities spanning four estimands (`Ey_understood`, `Ey_spoken`, `gap`, `q`), all inside. `vg11 anchor-broad` needed a high-tuned run (tune 12000, draws 8000, target-accept 0.99, six chains) and came back with zero divergences, max R-hat 1.0043 and min ESS 1,658.
-
-**What this settles.** Reverting each recalibrated young-age anchor to its pre-recalibration vague prior changes nothing the study reports, so the double-dipping concern the recalibration raised (#135/#138/#140/#142, #146) is answered empirically for every Target 8 anchor: the un-normed DS understood anchors (VG10) and the un-normed 26-month TD understood high anchor (VG04/VG12) are regularisation the posterior does not lean on. The anchor comments in `definitions.py` say so where each anchor is set.
-
-**What it does not settle.** Two caveats travel with the table. First, the VG10 baseline it was scored against predates `us_03`, so the VG10 rows describe the pre-ingestion pool; the anchors themselves are unchanged and nothing in the `us_03` refit (`notes/202609062030-us03-refit-curve-shift.md`) suggests the verdict would move, but they will be re-scored in the refit window as part of [#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 3.5, which also carries the rest of the registered matrix — VG10's other prior arms and VG15's Targets 1–7 — none of which has been fitted. Second, a robust verdict is a statement about the reported quantities at the query ages under this gate, not about every parameter: `eta-narrow` on VG12 moved the flexible term's amplitude posterior visibly while leaving the trajectories inside the interval, which is what the gate is designed to distinguish.
-
-## Provisional conclusions
-
-The current prior set is coherent with the model architecture, but several priors
-are not neutral defaults and need explicit labelling.
-
-- The anchor priors encode developmental floor expectations at young ages and
-  broad uncertainty at older ages.
-- The baseline `q` anchors are deliberately broad.
-- The DS-joint `q` anchors are weakly-informative, broadened off the
-  VG07-posterior-derived `Beta(3, 22)` / `Beta(20, 4)` to remove prior-data
-  double-dipping; `q_high` is deliberately broad as it has no independent DS source.
-- The signed-ratio prior is a three-anchor hump (a tent through young / peak / old
-  reference ages), so its prior median is a hill — replacing the intercept-only mean
-  (flat median) and avoiding the monotone-slope young-extrapolation failure. The
-  anchor ages/levels come from the independent DS sign literature (peak ~mental age
-  17 mo ≈ chronological ~36 mo, Miller/Clibbens; longer sign retention, Te
-  Kaat-van den Os), not the in-sample data; Zampini corroborates the inverted-U
-  _shape_ only, since that cohort overlaps `it_01`. `eta_sign` reverts to the
-  standard ~0.4 since the mean now carries the hump.
-- The shared kappa prior encodes substantial extra-binomial heterogeneity and a
-  monotone increase in heterogeneity with age.
-- Random-effect scale priors allow meaningful study and subject differences and
-  should be interpreted on the logit and probability scales.
-- VG15 `psi` is weakly positively regularised and must be tested against neutral
-  alternatives.
-- Checked against independent Wordbank normative deciles, the TD anchor priors
-  are broad enough to cover the norms and, after the young-age recalibration (#135/#138/#140/#142), their centres now track the normative medians; the independent TD `q(a)` curve corroborates both VG13's recalibrated `q` anchors and the VG10/VG15 `q`-anchor tightening. Each anchor's code comment in `definitions.py` now cites the external norm as its basis where one exists and demotes the in-sample statistic to corroboration.
-  See "Evidence base: literature and normative data" above.
-- Where an anchor has _no_ independent norm — the DS understood anchors (VG02/VG10) and the 26-month TD understood high anchor (VG04/VG12, WS is production-only) — the re-centring is data-informed regularisation rather than external anchoring, and is a registered sensitivity target (Target 8: `u-anchor-broad`/`hi-anchor-broad` etc.). **Tested 2026-08-18: all seven Target 8 variants are robust**, so the young-age conclusions do not hinge on it — see "Sensitivity results" above.
-- The independent DS cohorts anchor only DS _spoken_ vocabulary and only to ~60
-  months (Berglund et al., 2001): the DS spoken-low prior is ~2x high at 24 months, the DS understood-low anchor has no independent chronological-age
-  source, and the 84-month high anchor is beyond all independent CDI data.
-- A per-age Beta-Binomial fit to the Wordbank by-child data confirms the sign of
-  the `kappa` age-trend (dispersion rises with age for production) but shows the
-  prior is slightly tight at the high-dispersion (older-age) end.
-
-The robustness conclusion for the young-age trajectory anchors (Target 8) is made
-and recorded under "Sensitivity results". No robustness conclusion should be drawn
-for the other targets — the DS-joint `q` anchors, the signed hump, the kappa and
-random-effect scales, VG15 `psi` and concentration, VG16 `beta_lag` — until their
-registered arms have been fitted and compared, which is [#289](https://github.com/dseinternational/vocabulary-growth/issues/289)
-tasks 3.5–3.7.
+A prior-tail posterior or little reduction in uncertainty is a reason to investigate. Neither automatically proves an invalid model, and a narrow posterior does not by itself establish that the parameter is identified by the data.

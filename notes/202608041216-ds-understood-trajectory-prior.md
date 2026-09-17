@@ -60,7 +60,7 @@ intercept = logit(p_lo) - slope * z_24
 f_U(a)    = intercept + slope * z(a) + g_u(a)
 ```
 
-with `p_lo ~ Beta(1, 7)` at 24 months, `p_hi ~ Beta(2, 1.5)` at 84 ([`gp_utils.trend_and_gp`](../src/vocab_growth/models/gp_utils.py:152)). Under VG10's anchoring the GP `g_u` is orthogonalised against `[1, z]` on the observed rows and pinned to zero at 54 months, so it contributes no level and no linear component and its prior median is ~0. **The prior median population curve is therefore the straight line through the two anchor medians**, and everything below follows from that.
+with `p_lo ~ Beta(1, 7)` at 24 months, `p_hi ~ Beta(2, 1.5)` at 84 ([`gp_utils.trend_and_gp`](../src/vocab_growth/models/gp_utils.py)). Under VG10's anchoring the GP `g_u` is orthogonalised against `[1, z]` on the observed rows and pinned to zero at 54 months, so it contributes no level and no linear component and its prior median is ~0. **The prior median population curve is therefore the straight line through the two anchor medians**, and everything below follows from that.
 
 Decomposing the prior-to-fitted gap against a logit-linear trend pinned at the _fitted_ anchor values separates the two causes:
 

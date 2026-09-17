@@ -1,5 +1,8 @@
 # Vocabulary data - UK (1)
 
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+
 This data was collected during the 1990s through to 2000.
 
 ## Fields
@@ -165,16 +168,15 @@ double-count. Caveat: word-level say/sign overlap is not in this aggregated file
 category counts), so the de-duplication is taken from the study's definition, not
 re-derived here.
 
-### ⚠️ `signed` is defined differently here than in uk_02 / nz_01
+### `signed` is defined differently here than in uk_02 / nz_01
 
-uk_01's `signed` = **signed-only** (excludes words also spoken). In `uk_02` and `nz_01`,
+uk_01's `signed` = **signed-only** (excludes words also spoken). In the harmonised `uk_02` and `nz_01` data,
 `signed` = **total signed**, including words also spoken (verified: uk_02
 `signed == signed_only + signed_spoken`; nz_01 `signed == signs-only + both`). This is
 immaterial for `produced` (all three yield the correct union) but **does** bias the
 signing models VG14/VG15, whose signed ratio `r(a) = P(sign | understood)` treats
 `signed` as total sign use — uk_01's `r` is understated relative to uk_02/nz_01.
-Harmonising `signed` across studies (or deriving uk_01's total-signed from the original
-word-level forms) is needed before cross-study signed-ratio comparisons. See
+The primary signing analyses mask uk_01's signed-only counts through `SIGNED_ONLY_STUDIES`. Reinstating them as total signed counts would require the original word-level overlap data. See
 `notes/202607121753-reporting-config-fit-run-and-findings.md`.
 
 ## Withheld subjects (probable homonym fusion)

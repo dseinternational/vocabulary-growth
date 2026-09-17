@@ -1,10 +1,13 @@
 # Contributing
 
-**We welcome partners interested in developing and evaluating statistical models, evaluating and interpreting findings, and sharing original data.**
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6.
+
+We welcome contributions of data, models, code and interpretation.
 
 ## Contributing data
 
-We invite researchers and practitioners to share parent-reported vocabulary data relating to children with Down syndrome. Shared data may include MacArthur-Bates Communicative Development Inventory (MB-CDI) data, including all variations, translations and adaptations of the MB-CDI. They may also include data collected using the Vocabulary Checklists published by Down Syndrome Education International. They may also include any other form that presents a comprehensive list of early words against which a participant can indicate a child understands and/or says each word.
+We invite researchers and practitioners to share parent-reported vocabulary checklist data for children with Down syndrome. Sources may include any version of the MacArthur-Bates Communicative Development Inventory (MB-CDI), the DSE Vocabulary Checklists, or another checklist that records whether a child understands, says or signs each word.
 
 The data should include:
 
@@ -34,15 +37,15 @@ If you are unsure whether your data can be shared, contact us before sending it 
 
 Data contributed to this study is published in this repository under the Creative Commons Attribution 4.0 International (CC BY 4.0) licence, the same licence as the rest of the dataset (see [data/LICENSE](data/LICENSE)). By contributing data you confirm that you hold the rights necessary to share it under these terms.
 
-You retain copyright in your data; CC BY 4.0 means others may reuse it provided they give appropriate credit. We will attribute the contributing study or researcher «how — e.g. in a data sources file and in published reports». If you would prefer a particular form of attribution, let us know.
+You retain copyright in your data; CC BY 4.0 means others may reuse it provided they give appropriate credit. We will name the contributing study or researcher in the source documentation and reports. If you would prefer a particular form of attribution, let us know.
 
 ### How to share data
 
-Please get in touch via research@dseinternational.org before sending data, so we can agree a secure transfer method — we would rather not receive participant data as an unencrypted email attachment. We are happy to receive any tabular format (spreadsheets, statistical-package files or CSV), and we can undertake data preparation from your source files if helpful — for example, extracting columns or deriving age in months.
+Contact research@dseinternational.org before sending data so we can agree a secure transfer method. Do not send participant data as an unencrypted email attachment. We accept spreadsheets, statistical-package files and CSVs, and can help prepare them for analysis.
 
 ## Contributing code, models and reports
 
-Code contributions are welcome by pull request and are accepted under the project's AGPL-3.0 licence (see [LICENSE](LICENSE)); documentation and reports are under CC BY 4.0 (see [docs/LICENSE](docs/LICENSE)).
+Code contributions are welcome by pull request and are accepted under the project's AGPL-3.0-or-later licence (see [LICENSE](LICENSE)); documentation and reports are under CC BY 4.0 (see [docs/LICENSE](docs/LICENSE)).
 
 ### Commit messages
 

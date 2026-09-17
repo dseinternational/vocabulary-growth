@@ -1,6 +1,9 @@
 # VG16 quantified: what the cross-lag says about receptive vocabulary predicting expressive vocabulary
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). The numerical headline in this note was withdrawn after a lag-construction defect was found. Do not quote it as a current result. [Follow-up](202608231714-vg16-statistical-model-review.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!IMPORTANT]

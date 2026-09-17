@@ -57,12 +57,13 @@ written beside it and are not the headline:
 
 - VG16: understood is a pure control. The lag enters nothing else, so a held-out
   row's understood density is the same under both arms up to sampling noise.
-- VG25: understood and signed are the controls, and the **four-cell composition
-  is not** -- with ``sign_lag_in_cells`` the lag enters the population marginals
-  the Dirichlet-Multinomials are built on, which is the scope decision VG25's
-  registration turned on. Scoring the marginals alone would score the model on
-  the evidence that decision chose against, so `elpd_cells` is computed and
-  reported as a second place the coefficient can pay for itself. nz_01's
+- VG25: understood and signed are the controls. The **four-cell composition**
+  is a control too since 2026-09-15, when the registered model stopped letting
+  the lag into the cross-tab compositions (its first rep fit was bimodal there);
+  under ``sign_lag_in_cells``, as on the ``sign-lag-in-cells`` arm, the lag
+  enters the population marginals the Dirichlet-Multinomials are built on and
+  the composition is a second place the coefficient can pay for itself. Either
+  way `elpd_cells` is computed and reported. nz_01's
   three-cell produced composition is scored into the same column: its rows are
   disjoint from the four-cell rows, so no row is counted twice.
 
@@ -512,9 +513,9 @@ def _joint_row_elpds(
     """VG25: spoken carries the coefficient, and so does the composition.
 
     Understood and signed are controls -- the sign lag enters neither. The cell
-    compositions are **not** a control: with ``sign_lag_in_cells`` the lag is
-    added to the population production logit the Dirichlet-Multinomials are
-    built on, which is the scope decision the registration took, so the
+    compositions are a control when ``sign_lag_in_cells`` is off, as it is on the
+    registered model since 2026-09-15. With it on the lag is added to the
+    population production logit the Dirichlet-Multinomials are built on, so the
     composition is a second place the coefficient can pay for itself.
 
     The four-cell and produced-cell rows are disjoint -- different studies

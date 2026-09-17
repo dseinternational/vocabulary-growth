@@ -6,7 +6,7 @@
 > [!WARNING]
 > Run record. Covers the full reporting-quality refit of every registered model and the work it turned up. **Every model of record in this record is current as of 2026-08-06** and published. Parameter recovery and the #147 prior-sensitivity matrix were still running when this was written; §7 says so where it matters.
 >
-> The analytical findings live in their own notes and are not repeated here: [202608050900](202608050900-td-hierarchical-geometry.md) (typically-developing geometry), [202608051200](202608051200-project-review-update.md) (project review), [202608051500](202608051500-report-critical-review.md) (report review), [202608060900](202608060900-three-prior-conflicts.md) (the three prior conflicts). This note records what was run, in what order, and what broke.
+> The analytical findings live in their own notes and are not repeated here: [202608050900](202608050900-td-hierarchical-geometry.md) (typically-developing geometry), [202608051500](202608051500-report-critical-review.md) (report review), [202608060900](202608060900-three-prior-conflicts.md) (the three prior conflicts). This note records what was run, in what order, and what broke.
 
 ## 1. Outcome
 

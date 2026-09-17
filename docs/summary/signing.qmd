@@ -9,19 +9,16 @@ included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable
 # Signing
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Revised by OpenAI Codex/GPT-6. Outline only.
 :::
 
 <!--
-Outline (sketch note §9, item 7): what signs add for a child who signs (VG15's
-say-or-sign expected count against spoken), and that signing children are not
-ahead of non-signers overall — the compensation reading from
-notes/202607131325 §4, updated to the current fits. Static figure until VG15
-has a predictive path; the pack block is `total_expressive_by_age`.
+Planned content: the extra words available through signing, using VG15's
+expected count for the union of speech and signing. A comparison between
+children who sign and those who do not needs separate evidence and adjustment
+for differences between those groups. Do not infer an intervention effect.
 -->
 
-[TODO: for a child who signs, what signs add.]
+[TODO: describe what signing adds to the words a child can express, with the model's uncertainty and source limitations.]
 
-[TODO: signing children are not ahead of non-signing children overall; signs compensate rather than confer a surplus.]
-
-![Words spoken and words spoken or signed, by age.](../report/figures/VG15-age-joint-signspeech-ds/expected_counts_by_month_s){#fig-signing}
+[TODO: add a verified figure that shows both spoken and total expressive vocabulary.]

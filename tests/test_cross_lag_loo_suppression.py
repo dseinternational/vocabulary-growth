@@ -78,8 +78,9 @@ def test_the_sign_lag_keeps_the_spoken_score_and_says_what_it_conditions_on(
 def test_the_sign_lag_suppresses_the_administration_score_too(monkeypatch):
     """It bundles the two leaking factors with the two the lag also enters.
 
-    With `sign_lag_in_cells` the coefficient reaches the composition terms as
-    well, so no pointwise hold-out of a whole administration is clean either.
+    The source wave's counts reach later rows through the predictor whichever
+    likelihoods the coefficient enters, so no pointwise hold-out of a whole
+    administration is clean either.
     Reporting one would tell the reader the estimate is
     leave-one-administration-out while it conditions on the administration it
     claims to have left out.

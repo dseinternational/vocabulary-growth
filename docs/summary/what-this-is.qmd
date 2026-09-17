@@ -13,7 +13,7 @@ Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure onl
 :::
 
 <!--
-Outline (sketch note §9, item 1): the study in three sentences; the 810-word
+Planned page content (item 1): the study in three sentences; the 810-word
 list; parent report; "children in these studies"; the version and date, taken
 from the pack manifest rather than typed.
 -->

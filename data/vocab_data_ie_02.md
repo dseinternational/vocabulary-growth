@@ -1,6 +1,9 @@
 # Vocabulary data - Ireland 2
 
-[Description to follow]
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+
+This Irish source records repeated assessments on DSE Checklists 1 and 2. The pooled view retains rows recorded as English-speaking and supplies understood, spoken and signed counts. It sets `produced` equal to spoken because the modality overlap is not supplied. The source ceiling is 476 achievable items; the model reference remains 810.
 
 ## Columns
 

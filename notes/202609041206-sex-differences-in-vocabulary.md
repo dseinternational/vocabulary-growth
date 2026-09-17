@@ -1,6 +1,9 @@
 # Sex differences in vocabulary: what the literature and this repository's data say, and whether sex belongs in the models
 
 > [!NOTE]
+> Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. These analyses preceded the addition of sex covariates to the reporting models on 2026-09-13. See the [implementation record](202609131600-pre-refit-sex-mask-gap-vg26-td-variants.md) and [current model inventory](../docs/models/README.md). The results below belong to the fits named here.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 
 **Date:** 2026-09-04. **Scripts:** `scripts/experiments/sex_effect_by_study.py` (descriptive estimates and forest plot) and `scripts/experiments/sex_shift_predictive.py` (what a sex shift does to VG20's predictive). **Output:** `output/comparisons/sex-effect/`. **Sources:** the merged Down syndrome analysis view, the Wordbank English (American) typically developing export, the `es_01` matched pairs, and VG20's stored posterior summaries.

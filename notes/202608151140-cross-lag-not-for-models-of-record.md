@@ -1,6 +1,9 @@
 # Should the cross-lag enter the other models of record? No — and the fitted evidence says why
 
 > [!NOTE]
+> Review status, 2026-09-17 (OpenAI Codex/GPT-6). The motivating VG16 coefficient predates the corrected lag and is withdrawn. Retain this note for the distinction between persistent correlation and lagged association. [Follow-up](202608231714-vg16-statistical-model-review.md).
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 > [!IMPORTANT]

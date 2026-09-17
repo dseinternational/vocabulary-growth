@@ -6,6 +6,9 @@
 > [!IMPORTANT]
 > **This note refutes the hypothesis it was written to test.** It was prompted by VG11 failing the convergence gate on a single parameter, and by the reasonable suspicion that a fixed threshold applied to a maximum over thousands of parameters penalises large models. The measurement says otherwise, and §4 is the retraction. Reproduced by `scripts/experiments/rhat_gate_calibration.py`; the figures below are the 2026-08-15 scan.
 
+> [!NOTE]
+> **Followed up on 2026-09-16.** VG11 failed the gate again on the refit, this time on the GP length scale (`ell`/`ell_unit`, R-hat 1.0116, ESS 983) with the basis coefficient of §5 down at 1.0068. §3's ESS relationship predicted it: the failure sits in the 800–1,600 band, the only place this family produces exceedances. [`202609160500`](202609160500-vg11-length-scale-exception.md) identifies the slow direction as the GP's amplitude/length-scale ridge and records the widened exception. §7's "provisional, pending a longer refit" no longer has a route: `rep-hightune` was retired with `dse_research_utils` 0.15.1.
+
 ## 1. The question
 
 The convergence gate fails closed when **any** sampled parameter exceeds R-hat 1.01. On 2026-08-14 VG11 failed it on one parameter of 14,597 — `g_unit_hsgp_coeffs[4]` at 1.0125 — while every reported quantity converged with margin. That invited three worries, each of which would, if true, mean the rule was measuring something other than convergence:

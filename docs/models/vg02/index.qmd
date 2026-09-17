@@ -22,6 +22,8 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
 :::
@@ -100,11 +102,11 @@ render_glossary([
 
 ## Statistical model
 
-We model the number of words understood as a bounded count out of the reference inventory. The expected proportion understood is a smooth function of age. On the logit scale that function is a straight-line developmental trend plus a Gaussian process term, which lets the curve bend away from the line by as much as the data support and no more.
+We model the number of words understood as a bounded count out of the reference inventory. The expected proportion understood is a smooth function of age. On the logit scale that function is a straight-line developmental trend plus a Gaussian process term, which allows smooth departures whose size and shape depend on the priors and data.
 
 Children of the same age differ far more than a simple Binomial count would allow, so the likelihood is Beta-Binomial rather than Binomial. Its dispersion parameter is itself allowed to change with age, because how much children differ from one another is not fixed across development — it is one of the things worth measuring.
 
-The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion understood at two reference ages, which is a far more interpretable thing to have an opinion about than an intercept at age zero. One caution on reading them: these anchors parameterise the straight-line component only. The fitted trajectory at a reference age is the anchor plus whatever the Gaussian process adds there, and in this model the process is unconstrained at the anchors — so `p_slope_low` and `p_slope_hi` are coordinates of the trend, not exact values of the fitted curve at those ages.
+The straight-line trend is not given a prior directly. Instead priors are placed on the expected proportion understood at two reference ages, so the prior can be expressed in terms of vocabulary at those ages. One caution on reading them: these anchors parameterise the straight-line component only. The Gaussian process adds to the anchor on the logit scale before conversion back to a proportion, and in this model the process is unconstrained at the anchors — so `p_slope_low` and `p_slope_hi` are coordinates of the trend, not exact values of the fitted curve at those ages.
 
 This is the comprehension counterpart of VG01, which models words spoken in the same population on the same scale and with the same machinery. The two are deliberately parallel so that the comprehension and production trajectories can be read against one another; neither model contains the other outcome, so nothing here estimates the relationship between the two directly.
 
@@ -220,13 +222,13 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all, so a fit that reaches this page has already cleared those thresholds — or carries a recorded exception, disclosed above.
+The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
 
-![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
+![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
 ![Sampled values over time for each chain. Chains should look like indistinguishable noise around a stable level.](trace_plot.png){#fig-trace .lightbox fig-align="left"}
 
-![Pairwise joint posteriors. Strong ridges here indicate parameters the data cannot separate.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
+![Pairwise joint posteriors. Strong ridges show posterior dependence and can reveal trade-offs between parameters.](pair_plot.png){#fig-pair .lightbox fig-align="left"}
 
 ![Marginal posterior distributions for the fitted parameters.](posterior_plot.png){#fig-posterior .lightbox fig-align="left"}
 
@@ -244,7 +246,7 @@ render_prior_posterior_contraction()
 
 ::: {.callout-note title="What to watch in this model"}
 
-The understood anchors, the GP length-scale and amplitude, and the age-varying dispersion parameters. Poor behaviour in any of them would propagate directly into the comprehension trajectory and its age derivative. Compare the marginal posteriors above with the prior figures earlier in this report: a parameter whose posterior is indistinguishable from its prior has not been informed by the data, and any conclusion resting on it is a restatement of the prior. The dispersion floor `kappa_min` is the parameter to be most cautious about here — it is documented as weakly identified in this model, moving with the mean model rather than being pinned by the data, so treat it as a nuisance parameter rather than a result.
+The understood anchors, the GP length-scale and amplitude, and the age-varying dispersion parameters. Poor behaviour in any of them would propagate directly into the comprehension trajectory and its age derivative. Compare the marginal posteriors above with the prior figures earlier in this report: little change between a marginal prior and posterior suggests limited learning about that parameter. Check prior sensitivity before relying on it; the data may still inform related parameters or their joint distribution. The dispersion floor `kappa_min` is the parameter to be most cautious about here — it is documented as weakly identified in this model, moving with the mean model rather than being pinned by the data, so treat it as a nuisance parameter rather than a result.
 
 :::
 

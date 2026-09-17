@@ -13,7 +13,7 @@ Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure onl
 :::
 
 <!--
-Outline (sketch note §9, item 4): component 6.1, spoken; the early years'
+Planned page content (item 4): component 6.1, spoken; the early years'
 near-zero medians stated plainly and put in context.
 -->
 
@@ -28,7 +28,7 @@ Please enable JavaScript to explore how many words children say at each age.
 :::
 
 ::: {.content-visible unless-format="gfm"}
-![Words spoken by age: the expected count for a child not in the data, with its 50% and 89% bands, from the model of record.](../report/figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/expected_counts_by_month_s){#fig-words-spoken}
+![Words spoken by age: the reference expected count with 50% and 89% uncertainty bands; the separate dashed outline shows the individual-count predictive interval.](../report/figures/VG20-age-understood-spoken-ds-re-subj-uq-anchored-corr/expected_counts_by_month_s){#fig-words-spoken}
 :::
 
 <!-- Reporting cap: production is reported to `{python} cap("spoken")` months. -->

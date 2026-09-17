@@ -1493,24 +1493,19 @@ def build_model_graph(
         # understated and children with more visits weigh more. The
         # repeated-child sensitivity is tracked in #238.
         #
-        # The sign cross-lag is the one term that does cross this line, when
-        # `sign_lag_in_cells` is set, and the distinction is worth stating rather
-        # than inferring from the code. What is kept out above is a FREE PER-CHILD
-        # quantity, which on these thin rows is co-identified with psi and pulled
-        # it from 1.78 to about 2.8 when it was let in. `beta_sign_lag` is one
-        # scalar multiplying a covariate fixed by the data: it adds a single
-        # dimension, not one per child, and it is what brings uk_07's cross-tab
-        # children into the coefficient's support at all (191 supporting
-        # observations from 129 children against 111 from 80).
-        #
-        # The honest caveat, because it is not nothing. Under the `within`
-        # baseline the predictor itself contains `subject_shift_sign` at the
-        # PRIOR wave, so an estimated per-child quantity does reach the
-        # composition -- through one scalar coefficient, on lagged rows only,
-        # rather than as a free offset per row. The `sign-lag-population` arm is
-        # the one in which no estimated per-child quantity reaches the cells at
-        # all, since that baseline subtracts the shift back out; reading the two
-        # together is what says whether psi moved and why.
+        # The sign cross-lag crosses this line only when `sign_lag_in_cells` is
+        # set, and VG25 no longer sets it (2026-09-15). It was registered in the
+        # cells on the argument that `beta_sign_lag` is one scalar on a covariate
+        # fixed by the data, unlike the free per-child offsets kept out above.
+        # That holds for the `population` baseline only. Under `within` the
+        # predictor contains `subject_shift_sign` at the PRIOR wave, so the term
+        # carried an estimated per-child quantity into the composition -- and
+        # the first rep fit was bimodal, `beta_sign_lag` +0.69 in four chains
+        # and -0.50 in two, with the child signing block reshaped in both.
+        # Twelve-chain probes found one mode once the lag stayed out of the
+        # cells, and one for the population baseline in them; the
+        # `sign-lag-in-cells` arm is that second combination.
+        # notes/202609151930-vg25-lag-out-of-the-cells.md.
         #
         # Added under the flag rather than as `+ (term or 0.0)`, so a model
         # without the lag emits the ops it always did rather than gaining an

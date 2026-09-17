@@ -1,6 +1,9 @@
 # Vocabulary data - UK (6)
 
 > [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+
+> [!NOTE]
 > Column semantics drafted by an LLM-based AI tool (Claude Code/Opus 5), from the checklist completion instructions supplied by the study owner and a check against the data (2026-08-12).
 
 A small UK Down syndrome sample: **11 children, 60–115 months**, all from one area. Its value to the pool is its age range — before `uk_07` arrived it was the only source of signing observations above 60 months, and it remains the only source above 96.
@@ -22,7 +25,7 @@ A small UK Down syndrome sample: **11 children, 60–115 months**, all from one 
 
 ## Instrument
 
-The **standard DSE vocabulary checklists** — Checklists 1, 2 and 3, listing 120, 340 and 350 printed words, so **810 items** in total. Each checklist additionally admits the child's own name, family and pet names and similar proper nouns, so the maximum *achievable* counts are **127 / 349 / 353**, or 829 in total (study owner, 2026-08-25). The models score against the printed 810; the 19-word gap matters only for judging whether a high count is possible, and no observation in any source comes within 30 words of either figure. This is the same instrument as `ie_01` and `ie_02`, and it is the common reference inventory every model's likelihood scores against (`n_trials = 810`), so `survey_vocab_max = 810` is the source's native ceiling rather than a harmonisation.
+The **standard DSE vocabulary checklists** — Checklists 1, 2 and 3, listing 120, 340 and 350 printed words, so **810 items** in total. Each checklist additionally admits the child's own name, family and pet names and similar proper nouns, so the maximum *achievable* counts are **127 / 349 / 353**, or 829 in total (study owner, 2026-08-25). The models score against the printed 810; the 19-word gap matters only for judging whether a high count is possible, and no observation in any source comes within 30 words of either figure. This is the full instrument used by `ie_01` at follow-up; `ie_02` used only Checklists 1 and 2, and it is the common reference inventory every model's likelihood scores against (`n_trials = 810`), so `survey_vocab_max = 810` is the source's native ceiling rather than a harmonisation.
 
 The parent completes five columns per word, and the completion instructions make each of columns 2–5 **conditional on comprehension**:
 
@@ -38,7 +41,7 @@ The parent completes five columns per word, and the completion instructions make
 
 ### `signed` is a total sign count
 
-Column 2 is "understands **and** signs", ticked for imitated as well as spontaneous signs. It is therefore a **total**: it counts a word the child signs whether or not they also say it. That makes uk_06 directly comparable with `uk_02`, `nz_01`, `es_01` and `uk_07`, and **unlike `uk_01`**, whose `signed` is a sign-*only* count and needs item-level re-derivation before it can be pooled (see `SIGNED_ONLY_STUDIES`).
+Column 2 is "understands **and** signs", ticked for imitated as well as spontaneous signs. It is therefore a **total**: it counts a word the child signs whether or not they also say it. That places uk_06 on the total-count convention used for `uk_02`, `nz_01`, `es_01` and `uk_07`, and **unlike `uk_01`**, whose `signed` is a sign-*only* count and needs item-level re-derivation before it can be pooled (see `SIGNED_ONLY_STUDIES`).
 
 The columns are overlapping per-word ticks rather than a mutually exclusive ladder, which the data confirms three ways:
 

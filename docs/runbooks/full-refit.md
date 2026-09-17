@@ -1,846 +1,250 @@
-# Runbook: full reporting-config refit of all models
+# Reporting-quality refits
 
 > [!NOTE]
-> Drafted by LLM-based AI tools (Claude Code/Opus 4.8 and OpenAI Codex/GPT-5; the Quarto kernel-resolution section, the PowerShell driver and dirty-checkout material, the run-archive section, and the workstation revision, by Claude Code/Opus 5).
+> Drafted with assistance from Claude Code and OpenAI Codex. Revised by OpenAI Codex/GPT-6.
 
-How to refit the registered models at reporting quality (`rep`) on the project's
-fitting workstation, render every report, and produce comparisons — with the
-pitfalls that a naive run hits. Distilled from the 2026-07-12 run
-(`notes/202607121753-reporting-config-fit-run-and-findings.md`) and the runs
-since.
+Use `scripts/run_replication.ps1` for a resumable reporting run. Its default scope covers reporting models and unclassified candidates. Use `-Scope all` when the work requires every registered model.
 
-**Where fits run.** On the study owner's decision of 2026-09-15, model fits run
-on the fitting workstation: native Windows, 32 cores, about 137 GB of RAM,
-PowerShell 7 (`pwsh`), with the output root at `D:\output\vocabulary-growth`
-through a machine-wide `DSE_VOCAB_GROWTH_OUTPUT_DIR` and run archives under
-`F:\projects\vocabulary-growth\<commit>\output`. The 2026-09-07/08 full refit
-ran there. Earlier runs, and some of the incidents recorded below, were on Linux
-hosts; the commands that only apply on Linux are marked as such.
-
-## TL;DR
-
-- Canonical, resumable path: `scripts/run_replication.ps1 -Config rep`. It needs
-  PowerShell Core 7+ and runs unchanged on Linux, macOS and Windows.
-- **It no longer refits every registered model by default.** `-Scope publication`
-  (the default) covers the models whose catalogue role requires a
-  publication-valid fit; `-Scope all` restores the full registry. See
-  [Which models a run covers](#which-models-a-run-covers).
-- On the 32-core workstation, fit the **DS models concurrently** and the **TD
-  models one at a time** (see [Parallel fitting](#parallel-fitting)) — pass
-  `-MaxParallel` rather than driving a pool by hand.
-- Three things bite every time: the **DuckDB lock** on concurrent fits, the
-  **R-hat gate rounding** (need `dse-research-utils >= v0.6.0`), and the
-  **understood-GP R-hat ridge** in the DS joint/hierarchical models.
-- **Before the TD phase**, read
-  [Surviving an OOM](#surviving-an-oom-precautions-before-launching-the-memory-heavy-models):
-  keep each memory-heavy TD fit the only significant tenant, and make sure the
-  driver outlives whatever launched it. In the 2026-08-13 run a single overrun
-  killed a seven-hour fit plus three unrelated ones, because they shared a
-  process scope and there was nothing to swap to.
+The fitting workstation uses native Windows, PowerShell 7, 32 cores and about 137 GB of RAM. Its output root is `D:\output\vocabulary-growth`, set through `DSE_VOCAB_GROWTH_OUTPUT_DIR`. Run archives use `F:\projects\vocabulary-growth\<commit>\output`. The driver also supports Linux and macOS.
 
 ## 0. Prerequisites
 
-- Locked project environment installed and active: `uv sync --locked`, then `.venv\Scripts\Activate.ps1` in `pwsh` (or `source .venv/bin/activate` on Linux and macOS). On Windows also set `PYTHONUTF8=1`. The commands below assume it is on `PATH`; without activation, prefix each with `uv run`. Activation matters for **rendering**, not only fitting — read [Rendering without an activated environment](#rendering-without-an-activated-environment) first if you drive the scripts by absolute interpreter path instead.
-- **`dse-research-utils >= v0.6.0`** — earlier versions' convergence gate rounds
-  R-hat/ESS to 2 significant figures and can certify a fit that truly fails the
-  ≤1.01 gate (research#65). A banner reading exactly `max R-hat = 1.0` is the
-  tell-tale of the old rounding.
-- Data current: `python scripts/prepare_data.py` (confirm the 810 reference scale;
-  see `docs/report/methods-data.qmd`).
-- **Workstation tools outside `uv sync`.** `uv` itself (which provisions Python
-  from `.python-version`), **PowerShell 7 as `pwsh`** — what
-  `run_replication.ps1` needs; Windows PowerShell 5.1 is not enough — Quarto,
-  Node.js (`npm install` for spellcheck and formatting), `gh`, and `az` for
-  uploads. `quarto check` reports what Quarto resolved. The report book's `pdf`
-  format additionally needs TinyTeX (`quarto install tinytex`) and the Source
-  Sans 3 and Monaspace Neon fonts; nothing else does.
-- **Graphviz `dot` on `PATH`.** It
-  is the one tool a _fit_ tolerates missing — `render_model_graph` catches the
-  failure and prints a warning rather than aborting — but every model report
-  references `gp_model_graph.svg`, so without it all twenty render with a broken
-  figure and nothing fails loudly enough to notice.
-- Disk: **choose the trace tier against the volume you actually have, and set it
-  before you start.** Under about 300 GB use
-  `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE=compact`; above that leave the default
-  `full`, and make sure that variable is _unset_ so it cannot silently override
-  you. (**This threshold was 1 TB until 2026-09-06**, and was inherited from
-  traces written before the 2026-08-23 change that stopped sampling the
-  observation-sized deterministics. Measured on the 2026-09-04 round — 40 fits,
-  **218 GB** at `full` — a `rep` model fit now averages **6.6 GB**, a sensitivity
-  variant 3.8 GB and a recovery replicate 5.0 GB, with one outlier that dominates
-  any budget: VG11 at 24.6 GB. Sizing is in
-  [Surviving a full disk](#surviving-a-full-disk). The old figure would have sent
-  any workstation-sized volume to `compact` for no reason, and `compact` is the
-  tier that blocks exactly the tools the phase 3 validation work needs.)
-  `compact` is byte-identical for reporting but blocks recovery scoring,
-  `regenerate_plots.py` and `loso_compare.py` on those fits without a refit, so
-  it is a saving worth making only when the space is genuinely tight. Either way,
-  redirect output off the checkout with `--output-dir <output-root>` or
-  `DSE_VOCAB_GROWTH_OUTPUT_DIR` — on the workstation the variable is already set
-  machine-wide to `D:\output\vocabulary-growth` — and keep the whole root on one
-  volume, for the reason in [The output root](#the-output-root). The report figure cache
-  (`docs/report/figures/`) always stays in the checkout. Sizing and the
-  exceptions are in [Surviving a full disk](#surviving-a-full-disk) — read it
-  before the first fit, not after. The old advice here ("~20 GB × n_models") was
-  wrong by more than a factor of two, because a run fits far more _variants_ than
-  models.
-- **Run `prepare_data.py` in any fresh checkout, worktree or clone before `pytest`.** `data/vocabulary.duckdb` and `data/vocab_data_merged.csv` are generated and gitignored, and the tests that read the real pool (the `dse_native_only` ones in `test_data_utils.py` and `test_joint_four_cell.py`) fail without them — with an error about the pool, not about a missing file, so it reads as a code regression. Hit while validating a merge in a `git worktree` on 2026-08-14.
-- `rep` config = 6 chains / 6000 tune / 6000 draws / `target_accept` 0.95. The number of parallel cores is chosen for the host and does not affect fit compatibility.
-- Publishing needs `DSERESEARCH_BLOB_CONTAINER_URL` and a valid `az login`. `run_replication.ps1` sets `AZURE_TOKEN_CREDENTIALS=dev` (unless it is already set) so `DefaultAzureCredential` authenticates as that login; set it yourself when calling `upload.py` directly. A rejected upload is safe: validation runs for all models first, and the first blob write fails before anything is written, so the published set cannot be left half-replaced.
+- Install the [locked environment](environment-locks.md) with `uv sync --locked`. Use `uv run` for commands below. On Windows, set `PYTHONUTF8=1`.
+- Prepare the data with `uv run python scripts/prepare_data.py`, including in a fresh worktree. The database and merged CSV are generated and gitignored.
+- Install PowerShell 7, Quarto and Graphviz. `dot` is optional for fitting but required for the report's model diagram. Run `quarto check` to inspect the rendering environment. PDF output also needs TinyTeX and the report fonts.
+- Finish and commit changes before launching fits. Keep the checkout unchanged through the run. The driver refuses dirty source unless `-AllowDirty` is set; that override is for development and does not make the resulting fits publishable.
+- Confirm free space on the output volume and archive the outgoing run. Budget for models, sensitivity variants, recovery replicates and temporary copies during promotion.
+- Keep traces at `full` if recovery scoring, plot regeneration or leave-one-subject-out comparison will be needed. Check `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE` as well as command-line settings.
+- For uploads, configure `DSERESEARCH_BLOB_CONTAINER_URL` and the Azure credentials required by the upload path. The driver sets `AZURE_TOKEN_CREDENTIALS=dev` unless already set, so it can use a valid `az login`.
+
+The `rep` configuration uses 6 chains, 6,000 tuning iterations, 6,000 retained draws per chain and a target acceptance of 0.95. Host-dependent parallel cores do not affect fit compatibility.
 
 ## 1. Fit
 
-### Batch failure semantics
-
-> [!NOTE]
-> **2026-09-08.** The claim below that a failed model makes the run exit non-zero
-> was not observed. `vg09` missed the convergence gate, the driver correctly
-> logged "Stopping before downstream phases because at least one required step
-> failed" and skipped them — and the process still exited **0**. Decide whether a
-> run succeeded from `status.tsv` or the run log; do not automate on the exit
-> code.
-
-`python scripts/fit_model.py all --config rep --render --upload` treats convergence and rendering as per-model failures and publication as a batch-level decision. It continues fitting the remaining models after a `ConvergenceGateError`, atomically promotes every successful fit before rendering it, continues rendering after an individual Quarto failure, suppresses the entire upload phase so no partial batch is published, reports every failed model, and exits non-zero. A render failure leaves the completed fit available for `--render-only`; other fitting exceptions still abort immediately. The canonical `run_replication.ps1` path remains resumable and fits one model at a time unless `-MaxParallel` raises it.
-
-### us_01 implausible-production sensitivity
-
-The old `us01-ceiling-excluded` variants **no longer exist** and `fit_sensitivity.py` raises `KeyError` for them: they excluded records that the Edgin audit established as invalid and that are now masked by default, so they could not fail (`notes/202607261245-edgin-duplicated-outcome-records.md` §§9–10, 13).
-
-They are replaced by the inverse. `us01-masked-production-reinstated` puts the masked spoken observations back and refits, answering what changes if the default exclusion is itself mistaken. This is not optional in a published refit: the source author no longer holds the original data files, so the exclusion can never be confirmed at source, and this pair is the only evidence a reader has for whether the headline joint trajectories depend on our judgement.
-
-```bash
-python scripts/fit_sensitivity.py vg10 us01-masked-production-reinstated --config rep
-python scripts/fit_sensitivity.py vg15 us01-masked-production-reinstated --config rep
-python scripts/compare_sensitivity.py vg10 --variant us01-masked-production-reinstated
-python scripts/compare_sensitivity.py vg15 --variant us01-masked-production-reinstated
-```
-
-Check the fit log's observation counts: each variant prints `us_01 implausible production reinstated`, which must read **11** against the current pool, and `us_01 same-day production disagreements reinstated`, which must read **2**; the frame gains their sum, 13 spoken observations. A zero on either line means the variant has stopped biting on that rule and the comparison is worthless — treat it as a failure, not a pass.
-
-> [!NOTE]
-> **The mandatory arm changed from `us01-implausible-reinstated` to `us01-masked-production-reinstated` on 2026-09-05** ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.3). The one-factor variant lifts the implausible rule only, and `mask_same_day_production_disagreements` (#275) then independently re-masks six of the eleven reinstated counts because they have an observed same-day partner, so it nets **5** and answers a narrower question than the one registered for it — what changes if the implausible judgement is wrong _and the same-day judgement is right_. The successor lifts both rules through `include_same_day_disagreements`, a definition field added with a checked `BACKFILL_DEFAULTS` entry so no fit made before it was invalidated by its arrival. The one-factor variant stays registered and prints 5; fit it too if the two judgements need separating.
-
-> [!NOTE]
-> **Re-pinned from 22 to 11 on 2026-08-14.** The old figure was correct when `us_01` came from the Wordbank by-child export; rebuilding it from the Edgin item-level contributor files changed which administrations trip the near-ceiling and longitudinal-collapse signatures. Verified three ways rather than assumed: `vg10` and `vg15` independently log 11; `vg10`'s frame goes from 1,428 spoken observations at baseline to 1,439 in the variant, exactly +11; and the loader confirms it directly — `include_implausible_production=True` takes `us_01` from 211 to 222 spoken observations, whole-pool 1,428 to 1,439. Row counts are unchanged at 230 either way, because the rule blanks the `spoken` value rather than dropping the row. The old note about "22 rather than 30, the other 8 under the duplicated-outcome rule" no longer describes the current pool and has been dropped; the duplicated-outcome rule is still independent and still has its own flag.
-
-### The 810-item reference denominator
-
-`dse-native-only` is the other pair that is not optional in a published refit, and it is the only check on an assumption the report otherwise states and moves past. Every model scores raw counts against `n_trials = 810`, so a 416-item Oxford CDI count enters on a denominator its form never used; that is sound only if the shorter forms hold the easier items. The sufficiency result (`notes/202607261540-item-difficulty-and-the-aggregate-likelihood.md`) is the proof that no aggregate analysis of these data can test that — a statistic sufficient for ability carries no information about item composition — so the assumption is probed by deleting the rows that need it rather than by modelling it.
-
-```bash
-python scripts/fit_sensitivity.py vg10 dse-native-only --config rep
-python scripts/fit_sensitivity.py vg15 dse-native-only --config rep
-python scripts/compare_sensitivity.py vg10 --variant dse-native-only
-python scripts/compare_sensitivity.py vg15 --variant dse-native-only
-```
-
-Same discipline as above: each fit prints `Non-native-ceiling rows excluded`, which must read **1,633** against the current pool. It is the widest-scoped variant registered — **153 of 1,786** rows survive, from ie_01's 810 wave (46), uk_02's DSE arm (96) and uk_06 (11), leaving 116 children — so expect wide intervals and read it for whether the trajectory _shapes_ hold, not for agreement to three significant figures.
-
-> [!NOTE]
-> **Re-pinned from 1,523 / "264 of 1,787" on 2026-09-15**, when `ie_02` left the native set. Its administrations omitted DSE Checklist 3, so the view now records their own 476-word ceiling (`data_utils.DSE_SHORT_FORM_CEILINGS`) rather than 810; its 111 rows and 65 children leave the variant, and the form-ceiling guard drops one more `ie_02` administration from the pool, whose comprehension count of 477 exceeds that ceiling. Recomputed through `analysis_frames.build_analysis_frame` on VG10, VG15 and VG16, all reporting `non_native_rows_excluded = 1633`. **On VG15 this arm loses its largest signing source**: 50 signed observations remain, from `uk_02` and `uk_06` alone, where the 2026-09-06 fit that missed the gate had three sign-contributing studies — expect the escalation rung to be needed.
-
-> [!NOTE]
-> **Re-pinned from 1,243 / "278 of 1,521" on 2026-09-06**, after ingesting `us_03`. Recomputed through `analysis_frames.build_analysis_frame` on VG10 and VG15 — the fits' own builder, not a proxy for the rule — both reporting `non_native_rows_excluded = 1523`.
->
-> Note which denominator this is. 264 + 1,523 = **1,787**, not the 1,708 rows of VG10's _baseline_ frame: the restriction runs before some later exclusions, so the printed count is not "baseline minus kept". The old pair was on the same basis (278 + 1,243 = 1,521), so the two are directly comparable.
->
-> Most of the movement is the denominator rather than the variant — `us_03` is a 396-item form, so all 284 of its administrations are non-native. The kept set also fell slightly, 278 → 264; that cannot be `us_03`, which adds no native rows, and it is not attributed here. This is exactly the stale pin the paragraph warns about: the check says "must be 1,243", a current fit prints 1,523, and a reader following the runbook would record a failure that is not one.
-
-On VG15 it also leaves uk_02 as the only cross-tab source, so `psi` falls back to its single-study branch: that fit answers the denominator question, not the association one.
-
-### VG15's `psi` after the study-level term
-
-Four further VG15 variants exist for the 2026-08-12 changes and cost a fit each. `tau-psi-narrow` and `tau-psi-wide` bracket the between-study scale, which was set from the measured spread and so is data-informed in exactly the way Target 8 was created for; with four informed studies it is weakly identified and governs how far the per-study values shrink toward the reported centre. `psi-drop-es01` and `psi-drop-uk07` remove one source's cross-tab while keeping its marginals, so U, q and r are untouched and only the association loses evidence — es_01 is the one to run if only one is affordable, being 185 of the 434 `psi`-informing rows and the only source sitting at independence.
-
-### `vg15 fallback-dispersion` and nutpie's numba backend
-
-In the 2026-09-01 cycle this arm was the one fit that could not run: on a linux-aarch64 host the sampler compile died with numba/LLVM's "ran out of registers during register allocation" in `np_concatenate` over 44 arrays, while VG14's same arm compiled ([#289](https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.1). The 44 arrays are nutpie's gradient assembly: it concatenates one gradient array per free random variable in a single call (still so in nutpie 0.16.11, the latest release, and on `main`), and the arm adds two free scalars (`log_kappa_s_fallback`, `log_kappa_sign_fallback`) to VG15's 42. On win-amd64 with the locked numba and llvmlite the arm compiles and draws under both backends, so the failure is the AArch64 backend's, not the graph's — and on the fitting workstation the arm completed a full `rep` fit under numba on 2026-09-06 without the escape hatch.
-
-The escape hatch, needed only on a linux-aarch64 host, is the other compiler:
-
-```bash
-python scripts/fit_sensitivity.py vg15 fallback-dispersion --config rep --nutpie-backend jax
-```
-
-`--nutpie-backend` (or `DSE_VOCAB_GROWTH_NUTPIE_BACKEND`) changes which compiler evaluates the log-density and nothing else: the posterior is the same, the fit validates as any other, and the choice is recorded in the manifest's `runtime.nutpie_backend` so the run record can say which arm was made with which. Use the default; reach for `jax` only when numba fails, and note it in the run record.
-
 ### Default (sequential, resumable)
 
+Run from the repository root in PowerShell:
+
 ```powershell
-./scripts/run_replication.ps1 -Config rep -OutputDir <output-root>
+./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -NoUpload
 ```
 
-Idempotent: a model is skipped only when its state is `complete` and its model definition, requested sampling tier and minimum statistical effort, raw-data fingerprint, and Git commit match the current run (`--fresh` forces a refit). Host-dependent `cores` is ignored; a documented high-tuning refit is compatible when its draws, tuning iterations, chains and target acceptance meet or exceed the tier. A trace file by itself is never treated as complete. The script refuses to start from a dirty checkout, fits models, validates the set once, retries per-model rendering without resampling, runs comparisons, atomically synchronises figures, renders the report and comparison book, and optionally uploads. Development/test runs use provisional figure sync and do not upload. Any required-step failure stops all downstream comparison and publication phases and leaves a `FAILED` marker in the run log directory; an entirely successful run leaves `SUCCESS`. Estimate approximately 15–25 hours sequentially.
+Remove `-NoUpload` only when the run includes publication. The driver prepares outputs, fits or resumes models, validates them, renders model reports, runs comparisons, syncs report figures and renders the books. Check its help for phase-selection flags.
 
-The dirty-checkout refusal is not fussiness, and `-AllowDirty` is a development-only escape. `write_fit_manifest` records `git_metadata` when the manifest is written — at the **end** of each fit, not its start — so editing the working tree mid-run stamps `dirty: true` on every fit still in flight, and `check_fit.py --purpose publish` then refuses them as "produced from a dirty or unverifiable checkout". Land any code or documentation change as a commit **before** starting a run, not during one; a run interrupted for a repository change has to be restarted, not resumed, because `--purpose resume` also compares the current commit against each fit's.
+A model is skipped only when its lifecycle is complete and its definition, prepared data, sampling effort, implementation and source revision satisfy resume validation. A trace alone is insufficient. `cores` is ignored when comparing statistical effort; an adequately sampled high-tuning fit can satisfy a `rep` request.
+
+### Batch failure semantics
+
+A required-step failure stops downstream comparison and publication phases. Read the run log, `status.tsv` and the final `SUCCESS` or `FAILED` marker together. A launcher can return successfully while a detached child is still running, and a terminated driver may leave only `START` entries. Confirm process state before resuming.
+
+The direct command `fit_model.py all` continues after per-model convergence or rendering failures, reports them and suppresses the batch upload. Other fitting exceptions abort it. A render failure leaves a completed fit available for `--render-only`.
 
 ### Which models a run covers
 
-`-Models` is unchanged and still wins. When it is omitted the default list now
-comes from the **catalogue's roles** rather than from `MODEL_REGISTRY`:
+Explicit `-Models` takes precedence over `-Scope`.
 
-| `-Scope`      | covers                                                                                   |
-| ------------- | ---------------------------------------------------------------------------------------- |
-| `publication` | _(default)_ models of record, TD references, and anything still `UNCLASSIFIED` — 9 today |
-| `all`         | every registered model, including development steps — 23 today                           |
+| `-Scope`      | Coverage                                                                       |
+| ------------- | ------------------------------------------------------------------------------ |
+| `publication` | Default: models of record, TD references and unclassified candidates; 9 today. |
+| `all`         | Every registered model, including development steps; 23 today.                 |
 
-A development step supplies no reported number, and a superseded model never
-supplies one at all, so refitting them buys nothing publishable. Since the
-roles were settled on 2026-09-09 the default covers nine of the twenty-three —
-three models of record, four TD references, and two models with no role yet
-assigned: `vg25`, registered on 2026-09-11
-([#297](https://github.com/dseinternational/vocabulary-growth/issues/297) check 7),
-and `vg26`, registered on 2026-09-13
-([#240](https://github.com/dseinternational/vocabulary-growth/issues/240)) to
-supersede `vg21` once it has a fit. Seven of those nine were about 12 h of the
-30 h 27 m a serial `rep` cycle of the whole registry took on 2026-09-07/08
-(`notes/202609091600-model-roles-settled.md`); `vg25` costs roughly what `vg24`
-does on top of that, and `vg26` roughly what `vg21` does (1 h 45 m, 28 GB peak).
+The nine publication-scope models comprise three models of record, four TD references and the unclassified VG25 and VG26. A candidate remains subject to full validation until the study owner assigns a role. See the [model inventory](../models/README.md#model-roles).
 
-**Unclassified fails closed**, so a model whose role has not been decided is
-still refitted. Narrowing happens only when someone declares a role, in
-`src/vocab_growth/models/catalogue.py` alongside the roles table in
-[`docs/models/README.md`](../models/README.md) that justifies it.
-
-The run log names the scope and lists what it left out, with each model's role —
-`excluded by role: vg05:development-step …`. A run that silently fitted a subset
-is the defect `tests/test_runbook_model_lists.py` exists for, and narrowing the
-default deliberately must not reintroduce it quietly.
-
-**Use `-Scope all` for a true replication run**, or whenever a lineage figure
-comparing a development step against a model of record has to be regenerated
-from consistent fits. The parallel recipe below passes explicit `-Models` lists
-covering the whole registry and is unaffected by the default.
+Use `-Scope all` for comparisons that require development models fitted against the same code and data. The log records models excluded by role. The parallel recipe below covers the entire registry explicitly.
 
 ### Parallel fitting
 
-The DS datasets are small; the full-data TD models (`vg11`, `vg12`) are
-memory-heavy. So, on the 32-core workstation:
+On the workstation, run the smaller DS models in a pool and the TD pass separately. Do not overlap these two commands.
 
-> [!WARNING]
-> **The two lists below must together cover every key in `MODEL_REGISTRY`.** They are an explicit `-Models` split, so the driver's registry-derived default does not apply and a model missing from both is never queued, never validated, and never reported as absent — the run ends `SUCCESS` having fitted a subset. `tests/test_runbook_model_lists.py` checks the split against the registry; if it fails, correct the lists here rather than the test.
-
-- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22 vg24 vg25`): run
-  a pool, `concurrency × 6 ≤ physical cores` (e.g. 5 on 32 cores):
+- **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22 vg24 vg25`): allow up to five concurrent fits on 32 cores.
 
   ```powershell
   ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24,vg25
   ```
 
-  `-MaxParallel` above 1 pins `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
-  `MKL_NUM_THREADS` and `NUMBA_NUM_THREADS` to 1 for you, because each fit already
-  runs its own chains in parallel and a pool otherwise oversubscribes the box
-  through the BLAS/OpenMP thread pools (see the warning below). Setting any of
-  them yourself beforehand keeps your value.
-
-  `-MinFreeGB` (default 16) additionally holds a launch back while available
-  memory is below the floor and a fit is already running, so the pool throttles
-  itself rather than stacking peaks — the post-sampling assembly step is where
-  these fits spike, not the sampling.
-
-- **TD models** (`vg03 vg04 vg11 vg12 vg13 vg21 vg23 vg26`): **strictly one at a time** — the
-  full-data TD fits can OOM if stacked. `vg03` and `vg04` are the exception and may
-  share the box; `vg11`, `vg12`, `vg13`, `vg21`, `vg23` and `vg26` must not share it with anything,
-  including a batch of small DS sensitivity fits (see below). Run them as a separate
-  `-MaxParallel 1` pass; a single pool with a mixed model list cannot express this.
+- **TD models** (`vg03 vg04 vg11 vg12 vg13 vg21 vg23 vg26`): run one fit at a time, without another fitting batch on the machine.
 
   ```powershell
   ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23,vg26
   ```
 
-  `vg21`, `vg23` and `vg26` join this pass because each is VG13-class and none is
-  lighter than it: `vg23` is VG13's frame exactly, plus `rho_uq`; `vg21` widens
-  VG13's 8–18 month window to 8–22, so it sees strictly more of the TD pool than
-  the model the serial rule was written for; and `vg26` is `vg21`'s frame exactly,
-  plus `rho_uq`. `vg26` has no `rep` fit yet, so it has no measured peak of its
-  own — treat it as `vg21`'s (28 GB) until one exists.
+The two lists must cover the registry without overlap. `tests/test_runbook_model_lists.py` checks them. These are fit-only passes; resume the required downstream phases after both complete.
 
-  > [!NOTE]
-  > **2026-09-08: measured, and far below every earlier figure.** The VG11 `rep`
-  > measurement that
-  > [`notes/202609071440`](../../notes/202609071440-td-fits-on-96gb-hardware.md)
-  > §8 asks for has been made — sole tenant on a 137 GB Windows workstation,
-  > numba backend, `--trace-persistence full`:
-  >
-  > | model | peak per-process RSS |     wall |   trace |
-  > | ----- | -------------------: | -------: | ------: |
-  > | VG11  |            **27 GB** | 3 h 59 m | 19.8 GB |
-  > | VG12  |            **12 GB** |     54 m |  8.2 GB |
-  > | VG13  |            **27 GB** | 1 h 42 m | 15.7 GB |
-  > | VG21  |            **28 GB** | 1 h 45 m | 16.5 GB |
-  > | VG23  |            **27 GB** | 1 h 36 m | 15.7 GB |
-  >
-  > against a predicted ~48 GB for VG11 and the pre-2026-08-23 record's
-  > 178–243 GB for VG13. VG11's peak arrives in the fit's **final seconds** —
-  > 24 → 27 GB during post-sampling assembly — so it is still the
-  > assembly step that sets the peak, at a fraction of the old scale.
-  >
-  > **Peak memory does not scale with `n_obs`, and VG11 is not the model that
-  > sets it.** VG21 peaked highest at 28 GB on 6,783 rows, against VG11's 27 GB
-  > on 18,500. The three bivariate TD models (VG13, VG21, VG23) all sit at
-  > 27–28 GB on roughly a third of VG11's data, because each carries two
-  > outcomes, two GPs and two κ blocks; the univariate VG12 is half of that at
-  > 12 GB on a comparable row count. Size a machine for the bivariate models,
-  > not for the largest frame.
-  >
-  > **Read the per-process figure, not machine "used".** At VG11's peak the
-  > machine showed `used=75G` while 69 GB was _available_ and swap held 0.11 GB
-  > of 83: that gap is reclaimable file cache from writing a 20 GB trace, not
-  > consumption. Quoting "used" would overstate the fit by roughly 45 GB — the
-  > ambiguity §8 warned of when it said Windows working-set accounting is not
-  > Linux RSS.
-  >
-  > The _procedure_ below stands unchanged: sole tenant, separate scopes,
-  > per-process RSS. This run measured VG11 **as a sole tenant**, so it is
-  > evidence about VG11's footprint and **not** evidence that VG11 can share a
-  > box; §4 of that note is explicit that relaxing the rule "is a measurement to
-  > make deliberately, not an inference to act on".
+At `-MaxParallel` above one, the driver sets `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS` and `NUMBA_NUM_THREADS` to one unless already set. This prevents each chain from starting its own large numerical thread pool. Check existing environment values. Budget by concurrent fits times chains and measure actual load. These variables do not control every thread nutpie creates.
+
+`-MinFreeGB`, default 16, delays a new launch when available memory is below that floor and another fit is running. Fits can peak during post-sampling assembly, so sampling memory alone is not a safe budget. Data loading must remain read-only; a read-write DuckDB connection can block concurrent fits.
+
+The 2026-09-08 Windows run measured these per-process peaks with `full` traces:
+
+| Model | Peak memory | Fit time |
+| ----- | ----------: | -------: |
+| VG11  |       27 GB | 3 h 59 m |
+| VG12  |       12 GB |     54 m |
+| VG13  |       27 GB | 1 h 42 m |
+| VG21  |       28 GB | 1 h 45 m |
+| VG23  |       27 GB | 1 h 36 m |
+
+These are dated measurements, not upper bounds or proof that concurrent TD fits are safe. The much larger pre-August memory figures describe engines that stored observation-sized deterministic arrays. See the [memory investigation](../../notes/202609071440-td-fits-on-96gb-hardware.md).
 
 ### The output root
 
-On the workstation the output root is `D:\output\vocabulary-growth`, set
-machine-wide as `DSE_VOCAB_GROWTH_OUTPUT_DIR`, so `fit_model.py`,
-`fit_sensitivity.py`, `fit_recovery.py`, `sync_report_figures.py` and the driver
-all resolve it without `--output-dir`. The disk preflight prints the resolved
-root at the start of every fit; read it rather than assuming the variable is set
-in the shell you launched from.
+The command-line `--output-dir` overrides `DSE_VOCAB_GROWTH_OUTPUT_DIR`; otherwise the checkout's `output/` is used. Read the disk preflight to confirm the resolved path.
 
-**The output root has to be one filesystem.** `create_staging_root` puts
-`.staging` _inside_ the output root, and `promote_staged_fit` publishes with
-`os.replace` — a rename. Across filesystems that raises `EXDEV` rather than
-degrading to a copy, so the pipeline cannot stage on one volume and publish to
-another; the rollback path (`.previous`, also under the output root) has the
-same constraint. Do not point `models/` at one drive and `.staging` at another
-through a link, and do not fit to one volume intending to copy the results to
-another afterwards: that copy is a separate manual step outside the atomicity
-machinery, and a crash part-way through a multi-hundred-gigabyte copy leaves a
-partial fit that nothing guards against.
-
-**Writing the trace is not where the time goes.** Posterior sampling is about 92%
-of a `rep` fit's wall clock (measured on VG12: 3h09m of 3h26m), and the trace is
-a single burst at the end, so the choice of volume is about capacity and
-durability, not speed.
+Keep `.staging`, `.previous` and `models` on one local filesystem. Atomic promotion uses a rename and cannot cross volumes. A manual archive copy is separate from promotion; finish and verify it before treating it as complete.
 
 ### Archiving a run's output root
 
-A refit replaces each model directory in place, so archive the outgoing output
-root before a run that will overwrite it, and archive the new one when the run
-is done. The output root is **not** just `models/`. Four sibling directories
-carry state that nothing else can reproduce cheaply, and `models/` is the only
-one anybody thinks to copy:
+Copy the whole output root and record the destination and source commit. Retain:
 
-| directory           | what is lost with it                                                        |
-| ------------------- | --------------------------------------------------------------------------- |
-| `models/`           | the fits themselves — traces, summaries, manifests                          |
-| `recovery/`         | each replicate's `truth.nc`, `simulation.json` and synthetic frame          |
-| `comparisons/`      | scored recovery matrices, sensitivity matrices, the DS/TD contrasts, `oos/` |
-| `failed/`           | quarantined fits, which are the evidence for why a replicate was excluded   |
-| `replication-logs/` | the driver's per-model logs, including the backlog runs' `.err` files       |
+| Directory           | Contents                                                                          |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `models/`           | Traces, summaries, manifests and model reports.                                   |
+| `recovery/`         | Truth draws, simulation metadata and synthetic frames.                            |
+| `comparisons/`      | Recovery and sensitivity matrices, population contrasts and out-of-sample checks. |
+| `failed/`           | Failed or quarantined fits and evidence for excluding them.                       |
+| `replication-logs/` | Driver logs, status records and per-model errors.                                 |
 
-**Copy the whole root, and record where you put it.** On this workstation the
-convention is `F:\projects\vocabulary-growth\<commit>\output` — the commit the
-run was made at, which is also what every `fit_manifest.json` records, so an
-archive can be matched to its fits without opening one. The _working_ root is
-`D:\output\vocabulary-growth` (`DSE_VOCAB_GROWTH_OUTPUT_DIR`, set machine-wide),
-and consolidating an archive into it is what makes `--compare-only`,
-`compare_sensitivity.py` and the comparison book's recovery tables work at all.
-
-This is written down because the split cost an afternoon on 2026-09-05.
-`models/` had been consolidated into `D:` and everything else left on `F:`, with
-nothing recording that. `fit_recovery.py --compare-only` reported `no simulated
-replicates found`, a search of the output root and the checkout found no
-`truth.nc`, and eleven reporting-tier recovery fits were written off as lost —
-until the archive turned out to be one volume away, with the matrices already
-scored. The comparison book meanwhile rendered its honest fallback, telling
-readers "parameter recovery was not run in this cycle" about a run that had been
-completed, written up and committed two days earlier.
-
-**A posterior truth is recoverable even if `recovery/` is genuinely gone.**
-`truth_from_trace` selects the draw deterministically from the replicate number
-(a golden-ratio sequence over the source chain), and each recovery fit's
-`recovery_source.json` records the chain, draw and definition it used — so
-`(model-of-record trace, replicate)` identifies the truth completely. Verified on
-2026-09-05: rebuilding VG20 r01 from the surviving trace reproduced chain 0 draw
-3708 and all 24 deterministics exactly. **This does not extend to `--truth
-prior`** — a prior truth comes from a seeded draw against the model's own prior
-with no trace behind it, so nothing outside `recovery/` identifies it. Keep the
-directory; the rebuild is a backstop, not a reason to skip the copy.
+Copying only `models/` loses the data needed to score recovery studies. A posterior-derived truth may be reconstructed from the exact source trace and recorded draw, but this does not replace an archive and does not cover prior-derived truth.
 
 ### Surviving a full disk
 
-On 2026-08-14 at 16:12 the output volume reached 100% and five in-flight refits died on `[Errno 28] No space left on device` — VG16 and VG14 part-way through writing `trace.nc`, and VG10, VG07 and VG05 before they had started. Nothing warned first: the fits simply failed at the moment they wrote.
+Budget per fit, using recent outputs from the same model and sampling configuration. In the 2026-09-04 round, 40 fits occupied about 218 GB at `full`. Means were 6.6 GB per reporting model, 3.8 GB per sensitivity fit and 5.0 GB per reporting recovery fit. VG11 was a 24.6 GB outlier. These averages exclude many registered variants and do not estimate a complete new study.
 
-**The cause was the trace tier, not the disk size.** Every fit that run wrote at the default `--trace-persistence full`. `compact` drops observation-sized deterministics that are recomputable from the free parameters, and the reporting output is byte-identical. Applied afterwards to 21 fits it took **229 GB to 77 GB** — the volume went from 100% to 63% with no loss of anything the report reads. (Since 2026-08-23 those observation-sized deterministics are not sampled at all, at any tier — see `--trace-persistence` in `CLAUDE.md` — so a new `full` trace is already close to what `compact` used to leave; the arithmetic in this section and the sizing below describe the fits that run produced, not what a fit writes now.)
+Allow temporary space for each concurrent fit's staged output and previous version. Check free space before launching, not just the volume's capacity. Archive an old cycle before reducing trace content needed by later work.
 
-**Set the tier before the run**, either on the driver or in the environment:
+`compact` omits scaled random effects. `minimal` also omits log likelihood and posterior predictive draws. Observation-sized deterministic arrays are omitted at every tier. The tiers leave posterior sampling unchanged, but reduced storage blocks some later analyses. Preserve `full` for every model that needs recovery scoring, `regenerate_plots.py` or `loso_compare.py`, including the headline recovery set VG20, VG12 and VG15.
 
-```powershell
-./scripts/run_replication.ps1 -Config rep -TracePersistence compact
-# or, for anything driven directly:
-$env:DSE_VOCAB_GROWTH_TRACE_PERSISTENCE = 'compact'
-```
-
-**Three models should stay at `full`: VG10, VG12 and VG15.** They are `fit_recovery.py`'s headline set, and recovery scoring refuses a compacted trace up front — as do `regenerate_plots.py` and `loso_compare.py`. Pass `--trace-persistence full` for those three specifically. Everything else can be compacted, at the cost of needing a refit if its plots ever have to be regenerated.
-
-**Sizing.** Budget by _fits_, not by models: a full round fits ~15 models of record plus ~20 registered sensitivity variants plus recovery replicates.
-
-> [!NOTE]
-> **Re-measured 2026-09-06.** The paragraph below described traces written before the 2026-08-23 change that stopped sampling the observation-sized deterministics, and overstates a current round by roughly a factor of two. **Budget per fit rather than per round**, because what a round costs depends entirely on how many variants it schedules.
->
-> The 2026-09-04 round, measured directly: **40 fits, 217.8 GB** at `full` — 20 model fits at `rep` (131.4 GB, mean **6.6**), 9 sensitivity variants at `rep` (34.4 GB, mean **3.8**), 8 recovery replicates at `rep` (39.8 GB, mean **5.0**) and 3 VG11 recovery replicates at `test` (12.3 GB, mean 4.1).
->
-> **That is not a full round**, and the total should not be read as one: it carries 9 of the ~82 registered sensitivity variants, and its three `test` replicates would each be VG11-sized at `rep`. Scale from the means instead. Two things dominate any estimate. **The typically developing side is half the bill on 30% of the fits** — 108 GB across 12 fits — and within it five carry a third of the whole round on their own: VG11 24.6 GB, VG21 15.2, VG13 and VG23 14.5 each, VG12 7.6, so 76 GB of the 218. Against that, every one of the thirteen Down syndrome models is 1.2–5.9 GB (as are VG03 and VG04, the small TD pair, at 2.9 and 1.5). And the promotion headroom to add is **one VG11**, 24.6 GB, not a share of the total.
->
-> Practical figures: the 21 registered models come to about **140 GB**; add ~4 GB per sensitivity arm and ~5 GB per recovery replicate. So a model round plus the ten mandatory data-handling arms is roughly **180 GB**, and **300 GB is comfortable** for it. A round that also runs recovery across the registry passes 400 GB and wants **500 GB**. Reach for `compact` below ~300 GB, remembering it costs the recovery, plot-regeneration and LOSO paths.
-
-The figures that follow are retained as the record of what the pre-2026-08-23 fits cost, not as guidance: at `full` that exceeded 400 GB; at `compact` it was roughly 130–150 GB. Add headroom for atomic promotion, which transiently holds a second copy of the largest trace in `.staging`. **500 GB was comfortable at `compact`; 1 TB at `full`.**
-
-**On the workstation, check the free space on the output root's volume before a run**, not its size: `D:\output\vocabulary-growth` accumulates every cycle's fits, variants and recovery replicates until they are archived and cleared, and a refit transiently holds a second copy of each trace it replaces (in `.staging`, then `.previous`) before promotion completes. If the volume will not hold the round at `full`, archive and clear the previous cycle first (see [Archiving a run's output root](#archiving-a-runs-output-root)) rather than reaching for `compact`, which costs the recovery, plot-regeneration and LOSO paths.
-
-**Recovering a volume that is already full**: `scripts/compact_traces.py` applies the tier to traces already written. It reuses the same policy code the fit pipeline uses, verifies each rewrite carries every free parameter the original had before atomically replacing it, and records the tier in `fit_manifest.json`. It processes smallest-first, which matters — each rewrite needs room for its output beside the original, so the small traces buy the space the large ones need.
+To inspect possible savings on existing traces:
 
 ```bash
-python scripts/compact_traces.py --dry-run
-python scripts/compact_traces.py --exclude VG10-... --exclude VG12-... --exclude VG15-...
+uv run python scripts/compact_traces.py --dry-run
 ```
 
-Note that it will not touch a model whose fit is mid-promotion, and that it distinguishes a live staging directory from one an `ENOSPC` crash left behind by checking the PID embedded in the name — the aftermath of a full disk is full of stale staging directories, and a _live_ fit of some other model is usually exactly what the space is being reclaimed for.
-
-**Keep the output root on a local disk.** Do not put `trace.nc` on a network filesystem — a mapped network drive, blobfuse or Azure Files: netCDF here is HDF5, whose metadata I/O and POSIX assumptions make network filesystems a corruption risk. Storage speed is not the constraint (each trace is written once, at the end of a fit); integrity is. Blob storage remains the archive and publication tier, via `upload.py`.
+Review the selected files and required exclusions before running without `--dry-run`. Compaction needs room for a replacement beside the original and records the new tier in the manifest. It will not rewrite a fit during promotion.
 
 ### Surviving an OOM: precautions before launching the memory-heavy models
 
-On 2026-08-13 a kernel OOM killed `vg13` after **7h05m of successful sampling** and
-took three unrelated sensitivity fits and both drivers with it, costing about ten
-hours. Every item below is a direct consequence. That run was on a Linux host with
-far larger per-fit peaks than today's: since 2026-08-23 the observation-sized
-deterministics are not sampled, and on the workstation the heaviest TD fits peak at
-27–28 GB (see [Parallel fitting](#parallel-fitting)) against about 137 GB of RAM.
-The margin is wide, which is exactly when these precautions get skipped; the
-principles still hold, and the Linux-specific mechanics are marked.
+An out-of-memory failure can occur after hours of sampling. Keep the TD pass separate from other fitting batches and monitor per-process memory with `scripts/memwatch.ps1 <logfile>`. Machine-wide used memory includes file cache and can overstate a fit's footprint.
 
-**1. Make sure there is something to swap to.** On the 2026-08-13 host, 251 GB of
-RAM and `Total swap = 0kB` meant a transient overshoot was an instant kill rather
-than a slowdown. On the workstation the Windows page file plays that role — the
-2026-09-08 measurement recorded 83 GB of it — so leave it enabled and
-system-managed. On a Linux host with no swap, add a per-run swap file on a local
-disk with room, not a small root volume:
+Leave the workstation's system-managed page file enabled. On Linux, confirm adequate swap and use separate process scopes for independent jobs. A scope-level memory failure can terminate otherwise healthy co-running fits. Choose swap and memory limits for the host; the old run's allocation is not a portable recipe.
 
-```bash
-sudo fallocate -l 128G <local-disk>/swapfile && sudo chmod 600 <local-disk>/swapfile
-sudo mkswap <local-disk>/swapfile && sudo swapon <local-disk>/swapfile
-sudo sysctl -w vm.swappiness=10   # backstop only, not a working store
-```
-
-Deliberately **not** added to `/etc/fstab`: it is a per-run measure, and a run does
-not survive a reboot anyway.
-
-**2. Peaks are not predictable from plateaus, and plateaus are not stable between runs.** This is the trap, and the 2026-08-14 rerun sharpened it.
-
-`vg13` was killed at **232 GB** on 2026-08-13 after seven hours. Re-run on 2026-08-14 with an identical configuration, it plateaued at **178 GB** rather than the previous ~120 GB and peaked at **243 GB** — higher than the figure that had killed it — before completing in 337 minutes. Same commit, same data, same tune/draws/chains.
-
-So do **not** budget from a remembered plateau, and do not trust a "peak ≈ 2× plateau" rule; both numbers moved by ~50% between two runs of the same fit. What actually kept it alive was structural, and all three parts were needed:
-
-- **Swap existed.** The 2026-08-13 kill happened with `Total swap = 0kB`.
-- **Scopes were separate and capped**, so the co-tenants could be shed as one unit.
-- **Someone was watching per-process RSS and shed load.** At 13:31 the box had 39 GB available with `vg13` at 178 GB and a capped DS batch holding 29 GB; stopping that batch immediately preceded `vg13` reaching 243 GB with room to spare.
-
-The practical rule is therefore about _headroom and reversibility_, not about a target number: keep a memory-heavy TD fit as the only significant tenant, keep everything else in a scope you can stop in one command, and watch it. Anything co-scheduled with `vg11`/`vg12`/`vg13` should be work you are willing to throw away.
-
-**3. Give every job its own process scope, so one failure cannot take the others with it.** This is what turned one lost fit into
-four. All jobs were launched inside one tmux window, so they shared a single systemd
-scope, and when the kernel killed one process systemd applied `OOMPolicy` to the
-whole scope: `tmux-spawn-….scope: Failed with result 'oom-kill'`. On the workstation,
-run the protected TD pass as the only job in its own terminal (or as a scheduled
-task), separate from any other batch, so that stopping or losing one cannot stop the
-other. On a Linux host, launch each phase in its own systemd scope, and cap any batch
-that is not the one you are protecting:
-
-```bash
-# the protected long job
-systemd-run --user --scope --collect --unit=vg-td -p OOMPolicy=continue \
-  -- bash run_td.sh &
-# small fits alongside it can never be what pushes the box over
-systemd-run --user --scope --collect --unit=vg-sens -p MemoryMax=64G -p OOMPolicy=continue \
-  -- bash run_sens.sh &
-```
-
-`MemoryMax` contains an overrun inside the offending cgroup, so a runaway 30-minute
-sensitivity fit dies alone instead of killing a seven-hour one.
-
-> [!IMPORTANT]
-> **A systemd scope does not inherit environment activation.** The first relaunch
-> after the crash failed all three TD jobs in 0m with `ModuleNotFoundError: No
-module named 'dse_research_utils'`. Activate inside the driver script, and assert
-> it before any fit starts, so the failure is one line rather than a silent batch
-> of zero-minute FAILs:
->
-> ```bash
-> cd /path/to/vocabulary-growth
-> uv run python -c "import dse_research_utils" || { echo "env not resolved" >&2; exit 1; }
-> ```
->
-> **Updated 2026-09-06.** This block used to source `/opt/conda/etc/profile.d/conda.sh`
-> and activate `dse-vocab-growth`. That environment is retired — the project is a
-> single-layer `uv` environment now — so following the old text on a current image
-> fails with the very error it exists to prevent. The finding is unchanged and is
-> the reason to keep the assertion: a scope inherits neither form of activation.
-> Prefer `uv run`, which needs no activation at all; if you activate `.venv`
-> instead, assert the same import.
-
-**4. Sample per-process RSS, not machine-wide `used_GB`.** A machine-level sampler
-records that the box hit 244 GB but not which process did it — after the 2026-08-13
-kill, `vg13` could only be distinguished from its three co-tenants by reading the
-kernel log. Sample per-process RSS filtered to the fit scripts, so the next model's
-budget comes from measurement — `scripts/memwatch.ps1 <logfile>`, which reads
-`/proc/meminfo` and `ps` on Linux and the equivalent CIM classes on Windows.
-
-**5. Establish why a fit died before re-running anything.** On a Linux host,
-`sudo dmesg -T | grep -i oom` and `journalctl --since …` distinguish the three cases that look identical from the
-status file — a real convergence failure, a process killed by the OOM killer, and a
-process killed as collateral scope teardown. The three sensitivity fits killed here
-had left the **known non-fatal** PyTensor rewrite traceback
-([pymc-devs/pytensor#2349](https://github.com/pymc-devs/pytensor/issues/2349)) at the
-end of their logs, which reads convincingly as the cause and is not. Windows has no
-OOM killer: a process that exhausts the commit limit fails its own allocation, so the
-evidence is in that fit's own log under `replication-logs/` rather than in a system
-log.
-
-> [!WARNING]
-> **The driver records nothing when the scope is torn down.** A `run_job` wrapper
-> writes `OK`/`FAIL` only if it outlives the job, and it does not survive an
-> `oom-kill` scope teardown. So an OOM leaves the status file showing `START` with no
-> terminal line — indistinguishable from "still running" until you check `pgrep`.
-> Never infer success or liveness from the status file alone.
-
-**6. Detach the driver from whatever supervises it.** A fit inherits the lifetime of its parent process group, so anything that stops the supervisor kills the fit — no kernel log entry, no OOM, nothing to diagnose after the fact. On 2026-08-16 `vg11 anchor-broad` was killed three hours in, past its prior predictive checks and well into sampling, because the agent-harness background task running the driver was stopped; `sudo dmesg -T` for that day was empty, which is what distinguishes this case from item 5. Launch the driver so it outlives its launcher. On the workstation that means its own `pwsh` terminal or a scheduled task, not a background task of an agent session or another tool; `run_replication.ps1` is resumable, so a driver that is stopped anyway loses only the fit in flight. On a Linux host:
-
-```bash
-setsid nohup bash scripts/driver.sh >/dev/null 2>&1 < /dev/null &
-ps -o ppid= -p "$(pgrep -f driver.sh)"   # must be 1
-```
-
-Check the reparenting rather than assuming it: `nohup … &` alone leaves the process in the launcher's group and does not survive a group kill.
-
-**7. Order the queue cheapest-first unless something specific argues otherwise.** Putting the heaviest fit first to fail fast on disk or memory is only worth it while that resource is actually in doubt. Once headroom has been stable for hours, heaviest-first just maximises what a single interruption destroys — which is exactly what item 6 cost. Reordering after the loss got three of the four Target 8 variants moving while the multi-hour one waited.
+Launch long runs in a terminal or scheduled task that outlives the controlling session. A background command owned by an agent session may die with that session. On Linux, check system logs for memory failures; on Windows, inspect allocation errors in the fit log. Distinguish resource failure from convergence failure before changing sampler settings.
 
 ### Reporting age caps, and what `regenerate_plots.py` can and cannot fix
 
-Every figure and table stops where its own outcome's evidence stops. The policy
-lives in `src/vocab_growth/reporting_ages.py` — understood **72**, spoken **90**,
-signed **84**, and anything conditioned on understood (`q`, `r`, `p_any`,
-comprehension gaps) **72**, because the conditioning rule takes the _lower_ of the
-two components. Call sites name the _quantity_, not a cap attribute, because
-choosing the wrong attribute is a defect that has already shipped twice.
+The policy is in `reporting_ages.py` and the [inventory](../models/README.md#reporting-ages-6-monthly-tables-whole-month-companions). Check generated tables and figures, including age labels embedded in column names.
 
-> [!WARNING]
-> Understood was **84** until `ae04e5e` (2026-08-22) returned it to 72, and the
-> sign-ratio helper that makes `r` and `p_any` follow it —
-> `reporting_ages.max_age_for_sign_ratio` — landed a day later in `565a769`.
-> **VG14 and VG15 were fitted in the gap**, on 2026-08-22, so both write
-> `posterior_summary_r` and `posterior_summary_p_any` out to 84. `check_fit.py`
-> passes them, because their manifests record the current definition; only
-> `tests/test_reporting_age_policy.py` sees it. Both need refits — see §2.
-
-> [!IMPORTANT]
-> **`regenerate_plots.py` re-runs the plot stage only.** Artefacts written by the
-> _summary_ stage cannot be refreshed without a refit. On 2026-08-14 that was the
-> difference between a policy change costing nothing and costing two fits: the
-> univariate and bivariate engines emit their monthly summaries inside the plot
-> stage, so twelve models were brought into line by regeneration alone, but VG14's
-> `posterior_summary_p_any` / `posterior_summary_sign` and VG15's
-> `posterior_summary_monthly_*` / `expected_counts_by_month_*` are summary-stage
-> and stayed stale. `KNOWN_STALE` in `tests/test_reporting_age_policy.py` carried
-> them until `fa9f836` emptied it; it is empty now, so any summary-stage artefact
-> left past its cap fails the suite outright rather than being excused.
-
-Check the policy against **output**, not call sites. `tests/test_reporting_age_caps.py`
-walks the AST against a hand-written list of plot functions and so cannot see an
-artefact nobody thought to cap; `tests/test_reporting_age_policy.py` reads a
-fitted model's directory and checks every table. The second found sixteen
-uncapped artefacts the first had passed for months — including
-`posterior_predictive_pmf`/`_cdf`, which carry age in their **column names**
-(`pmf_90m`) rather than in a column, and which a filename audit missed as well.
+`regenerate_plots.py` reruns the plot stage only and requires a compatible `full` fit. It cannot repair stale summary-stage output or bypass a changed definition. `--render-only` restages the Quarto source and includes but reads the CSVs already on disk. Set reporting caps before fitting and use `tests/test_reporting_age_policy.py` to check outputs when available.
 
 ### Do not edit tracked files while a fit is launching
 
-`write_fit_manifest` runs **immediately after stage 0** ("Prepare data"), within
-seconds of launch, and records `git status --porcelain --untracked-files=normal` for
-the **whole tree** — not just the code. Any tracked file modified in that window,
-including a note or a runbook, sets `code.dirty = true` and makes the fit
-unpublishable: `check_fit.py --purpose publish` rejects it with "The fit was produced
-from a dirty or unverifiable checkout", and you discover it hours later.
-
-The window is short, but the failure is silent and expensive. Commit or stash before
-launching a batch, and confirm afterwards by reading the staged manifests rather than
-waiting for the publish gate:
-
-```bash
-python - <<'PY'
-import glob, json
-for m in sorted(glob.glob("output/.staging/*/models/*/fit_manifest.json")):
-    j = json.load(open(m))
-    print(f"{m.split('/')[-2][:52]:54s} dirty={j['code']['dirty']} commit={j['code']['commit'][:7]}")
-PY
-```
+The manifest records source state after data preparation, before the expensive fitting stages. A modified tracked file, including documentation, or an untracked file can mark the fit dirty. Resume and publication also check source compatibility. Keep the checkout unchanged for the whole run rather than relying on the timing of one snapshot.
 
 ### Config choice for the full-data TD models
 
-> [!WARNING]
-> **Superseded for the hierarchical TD models (2026-07-17, post-#164).** #164 added
-> child (subject) random effects to `vg11`/`vg12`/`vg13` (the #163 P1 fix; their output
-> dirs are now `…-td-re`), making them hierarchical. They now carry the same
-> trend/GP/study-intercept ridge the DS models have, and **`rep-lite` no longer
-> converges them**: `vg11` failed at `rep-lite` with max R-hat 1.023 / min ESS 164 on the
-> trend/GP/study-RE block (not the per-child effects). **Fit `vg11`/`vg12`/`vg13` at
-> `rep-hightune`** (tune 12000 / draws 8000 / 6 chains; `target_accept 0.99` for `vg13`,
-> which also has divergences) — e.g. via `scripts/refit_hightune.py`. The `rep-lite`
-> guidance below was validated only on the _pre-#164, non-hierarchical_ TD models and is
-> retained for history. (See `notes/202607170935-full-refit-vm-run-147-163.md`.)
-
-The full-data TD fits dominate wall time (`vg11`: 16,235 obs; `vg12`: ~6,000 obs).
-
-> [!NOTE]
-> **2026-09-08.** The wall times in this section are stale in _both_ directions and should not be used for scheduling. Measured this run at `rep` on a 32-core workstation: `vg11` **3 h 59 m**, `vg12` **54 m**, `vg13` **1 h 42 m**, `vg21` **1 h 45 m**, `vg23` **1 h 36 m** — against the ~9 h quoted below for `vg11` — and, in the other direction, `vg03` **2 h 46 m** against a historical ~30 m, with `vg04` 38 m. The Down syndrome pool ran 31 m (`vg02`) to 2 h 20 m (`vg19`), fourteen models in 3 h 47 m at `-MaxParallel 5`. At those sample sizes the posterior is **likelihood-dominated** and ESS
-> accumulates fast — `vg11`'s `rep` fit reached **min ESS ≈ 9,850, ~25× the 400 target**,
-> so raw draws are nowhere near the binding constraint. **Fit these large models at
-> `--config rep-lite`** (4 chains / 4000 tune / 4000 draws, same `target_accept = 0.95`):
-> it keeps reporting-grade rigour (ESS still clears 400 with wide margin), gives materially
-> identical estimates, and cuts ~⅓ off the wall time.
-
-**Validated (2026-07-13, vg11).** Fitting vg11 both ways confirmed it: expected-word
-trajectories agreed to **max 0.27 words (≤ 0.11%)** across the 9–30 mo grid, HDI widths
-were essentially unchanged (ratio 0.99), `rep-lite` min ESS was 4,461 (~11× target), and
-wall time fell from **9 h 17 m** (`rep`) to **5 h 59 m** (`rep-lite`), a ~35 % saving.
-`rep-lite` even cleared the strict 0-divergence gate that `rep` missed by one (favourable
-sampling luck, not a guarantee).
-
-Caveats: `rep-lite` keeps `target_accept`, so it does **not** trade away divergence
-control — but it has fewer tuning steps, so it won't _fix_ a divergence (and could nudge
-the count up slightly). It is a wall-time optimisation, not a convergence fix. And the
-small DS models are fast at `rep` anyway, so this only pays off on the big-data models.
-
-> [!IMPORTANT]
-> Concurrent fits require **read-only DuckDB connections**
-> (`data_utils.load_combined_data`/`load_data` open with `read_only=True`). The
-> default read-write connection takes an exclusive lock, so simultaneous fits die
-> at data load with `IOException: Conflicting lock`.
-
-> [!WARNING]
-> Thread oversubscription is the biggest time sink. Without the thread-pinning env
-> vars above, each of a fit's 6 chains spawns multiple BLAS/numba threads, so one
-> fit uses ~10 cores, not 6, and a 5-wide pool drives the load past 2× the core
-> count — in the 2026-07-13 run this made `vg03` take ~6 h instead of ~30 min.
-> Mitigations: (1) pin threads to 1 (env vars above) so `concurrency × 6` is the
-> real core count; (2) watch `uptime` — keep load near the core count; (3) don't
-> stack the DS pool on top of a TD fit or the convergence refits. With threads
-> pinned, 5 DS fits (30 cores) run cleanly on a 32-core box.
-
-> [!NOTE]
-> **The four env vars do not pin nutpie's own thread pool.** They control BLAS and
-> numba, but nutpie's Rust sampler sizes its pool from the core count independently.
-> Measured on 2026-08-14 with all four set to `1` and 6 chains requested: `vg13` held
-> **33** threads and each concurrent `vg15` sensitivity **78** — 189 threads on 32
-> cores. Observed load stayed near `concurrency × chains` (21.6 against 18 expected),
-> so the surplus threads are mostly parked rather than competing, and this is a
-> smaller effect than the BLAS oversubscription above. Still, budget by
-> `concurrency × chains` and verify with `uptime` rather than trusting the env vars,
-> and treat a thread count far above the chain count as expected, not as a fault.
-> `RAYON_NUM_THREADS=1` is the likely lever but is **untested here** — measure before
-> relying on it.
-
-## 2. Verify convergence (do not trust the banner alone)
-
-For every model confirm, on **unrounded** diagnostics: max R-hat ≤ 1.01, min ESS ≥
-400, 0 divergences, BFMI ≥ 0.3. With `dse-research-utils >= v0.6.0` the gate is
-correct natively; if any fit predates the fix, recompute from the trace:
+Start at `rep` and assess the actual diagnostics. The old `rep-lite` recommendation concerned pre-hierarchy models and is superseded. High tuning is an explicit sampling override, not a named `rep-hightune` configuration:
 
 ```bash
-python - <<'PY'
-import arviz as az, xarray as xr
-dt = xr.open_datatree("<output-root>/models/<MODEL>/trace.nc")
-r = az.rhat(dt["posterior"].to_dataset())
-print("max r_hat:", max(float(v.max()) for v in r.data_vars.values()))
-PY
+uv run python scripts/refit_hightune.py vg11 --tune 12000 --draws 8000 --target-accept 0.99 --chains 6
 ```
 
-### Expect diagnostics to move on a refit — but only for models with child effects
+Use a setting justified by the failed diagnostics and record it. The script writes to the selected model's normal output directory, so archive evidence needed from the earlier attempt first. It accepts `--variant` for a registered sensitivity and `--output-dir` for another root.
 
-Refitting the same commit against the same data does **not** reproduce diagnostics
-bit-for-bit for every model, and a docstring claiming otherwise misled a day of this
-run. The split is clean and worth knowing before you start comparing runs:
+### Required data-handling sensitivities
 
-- **Models without child random effects reproduce exactly.** `vg05` (max R-hat
-  1.00092, min ESS 7408), `vg07` and `vg14` were byte-identical across repeat fits —
-  `vg14` across all three of its fits in the 2026-08-13 run.
-- **Models with child random effects drift.** `vg08` moved 1.00437 → 1.00851 and
-  `vg09` 1.00452 → 1.00623 with min ESS 1365 → 1102, on identical code and data.
-  `vg10`, `vg15` and `vg16` drift likewise.
+The refit plan must name its required variants. The standing checks include `us01-masked-production-reinstated` and `dse-native-only` on VG10 and VG15:
 
-**The estimates are unaffected — only the diagnostics move.** `vg09`'s posterior
-means agreed to **≤ 0.023 posterior SDs** across the refit. So treat a changed R-hat
-on a random-effects model as sampling variation, not as evidence that something
-changed; verify by comparing posterior means in SD units before investigating.
+```bash
+uv run python scripts/fit_sensitivity.py vg10 us01-masked-production-reinstated --config rep
+uv run python scripts/fit_sensitivity.py vg15 us01-masked-production-reinstated --config rep
+uv run python scripts/fit_sensitivity.py vg10 dse-native-only --config rep
+uv run python scripts/fit_sensitivity.py vg15 dse-native-only --config rep
+```
 
-The corollary is a real scheduling risk: **`vg08` sits on the gate boundary**
-(R-hat 1.00851 against 1.01, a margin of 0.0015) at the strongest tuning available
-(16000/10000/0.99) and is the single longest DS fit at 202 m. Any change that forces
-a DS refit is a coin-flip on `vg08` passing, and there is no stronger setting left to
-escalate to. Weigh that before taking a change that re-fingerprints the DS family.
+The first reinstates production masked by both the implausibility and same-day disagreement rules. The narrower `us01-implausible-reinstated` variant leaves the latter rule active. The [Edgin audit](../../notes/202607261245-edgin-duplicated-outcome-records.md) records why both judgements matter. Check that the variant changes its prepared frame as intended; a zero change requires investigation.
 
-> [!WARNING]
-> **Reporting-only fields live inside the fingerprinted model definition.** Changing
-> a value that affects nothing but which ages get printed — `report_max_age_understood`,
-> `report_max_age_signed` — changes the definition, which invalidates every affected
-> model of record and forces a **full refit**. That cost three refits on 2026-08-13.
-> `regenerate_plots.py` cannot rescue it either: it validates the definition first,
-> and its own docstring names "a missing reporting-age cap" as the motivating case it
-> does not cover. Batch all reporting-cap decisions **before** the fitting phase.
+`dse-native-only` probes the 810-item reference assumption by retaining complete DSE forms. Since the 2026-09-15 short-form correction, `ie_02` is excluded. The dated frame check retained 153 rows and excluded 1,633 at that preparation stage. Those counts are not a subtraction from the final baseline frame because further filters follow. Recompute them after data-rule changes. VG15 then has only `uk_02` as a cross-tabulation source, so this arm cannot resolve between-study association differences.
+
+VG15's `tau-psi-narrow` and `tau-psi-wide` variants vary association pooling. `psi-drop-es01` and `psi-drop-uk07` remove association cells while retaining marginal data. Their results still need checking; unchanged input marginals do not guarantee unchanged posterior trajectories.
+
+### `vg15 fallback-dispersion` and nutpie's numba backend
+
+This variant failed compilation on Linux aarch64 in the September run but completed under numba on Windows. If that compilation failure recurs, use:
+
+```bash
+uv run python scripts/fit_sensitivity.py vg15 fallback-dispersion --config rep --nutpie-backend jax
+```
+
+The backend changes compilation, not the model's posterior distribution, and is recorded in `runtime.nutpie_backend`. Use the default unless a measured compiler problem requires the alternative.
+
+## 2. Verify convergence
+
+Read unrounded diagnostics. The usual thresholds are maximum R-hat 1.01, minimum effective sample size 400, no divergent transitions and energy BFMI at least 0.3. R-hat and effective sample size assess sampling agreement and information; divergences and BFMI flag other sampling problems. The pipeline distinguishes hard failures from caveats and narrowly documented exceptions. Read the fit's actual verdict rather than inferring it from a rounded banner.
+
+A repeated run may have different diagnostics and posterior summaries because sampling is numerical and stochastic. Compare estimates relative to their uncertainty as well as checking convergence. An earlier successful run does not excuse a new failure.
 
 ### Known ridge: the understood-GP block
 
-The DS joint/hierarchical models (`vg09`, `vg10`, `vg15`, `vg16`) tend to leave the
-**understood-trajectory GP block** (`g_u` / `g_unit_u` / `g_unit_u_hsgp_coeffs` /
-`slope_u` / `p_slope_low_u`) just over 1.01 at `rep` — the trend/GP/intercept
-redundancy the VG10 GP anchor addresses for the `q`-GP, here on the understood GP.
-Remedy: refit with heavier tuning (**tune 12000 / draws 8000 / target_accept 0.97**,
-6 chains), which cleared all four in the 2026-07-12 run (e.g. vg16 1.024 → 1.009).
-Back up the non-converged output first; the refit becomes the model of record.
+Trend, Gaussian process and random effects can be difficult to separate. If the failed parameters belong to that block, inspect their chains and consider more tuning. A 12,000-tune, 8,000-draw run at target acceptance 0.97 resolved VG09's September 2026 failure. That is evidence for a possible remedy, not a guarantee for another model.
 
-> [!NOTE]
-> **Update (2026-07-17, post-#164/#161):** this DS understood-GP ridge did **not** recur —
-> all ten DS models passed R-hat/ESS at plain `rep` (max R-hat 1.0066), so no DS
-> `rep-hightune` refits were needed. **Re-assess the DS family empirically** rather than
-> assuming hightune. The ridge now surfaces instead on the **hierarchical TD models**
-> (`vg11`/`vg12`/`vg13`) — see the TD config warning above. (`vg13` additionally needs
-> `target_accept 0.99` for divergences, as in July.)
+VG11 also has a recorded amplitude/length-scale exception and a subsequent amplitude-prior change. Read the [exception record](../../notes/202609160500-vg11-length-scale-exception.md) and [prior decision](../../notes/202609161440-vg11-eta-sigma-0.4.md) before interpreting its gate. Do not widen an exception solely to pass a fit.
 
-> **Update (2026-09-06, the `us_03` refit):** the ridge **did** recur, on exactly one model.
-> All fourteen Down syndrome models were fitted at plain `rep`; thirteen cleared the hard
-> gate first time and **`vg09` missed it at max R-hat 1.0111 on `p_slope_low_u` and
-> `intercept_u`** — which is this block, named in the list above — with **zero divergences**
-> and ESS fine (618 against 400). So the rung is the raised tuning prescribed here
-> (tune 12000 / draws 8000 / `target_accept` 0.97), not a divergence remedy — and
-> **it worked, first try**: max R-hat 1.0111 → **1.0037**, min ESS 618 → 1,479, still
-> zero divergences, in 1 h 03 m of which 89.5% was sampling. The prescription in this
-> section is therefore confirmed rather than merely inherited. Two models
-> cleared the hard gate but carry soft-tier caveats: `vg02` gained **1** divergent
-> transition where it had none before, and `vg22` went from **1 to 3**. `vg08` passed at
-> max R-hat 1.0092 against the 1.01 threshold and min ESS 666 — worth watching rather than
-> escalating. `vg24`, fitted for the first time, passed on the first attempt
-> (0 divergences, R-hat 1.0044, BFMI 0.578), so a correlated child block did not cost the
-> stability it costs the TD family. Wall times on 32 cores at four-way concurrency:
-> `vg02` 1,013 s at the fast end to `vg19` 5,897 s and `vg22` 5,138 s at the slow end,
-> about 9 hours for the fourteen.
+## 3. Render and compare
 
-## 3. Render + comparisons
+Prefer the driver's downstream phases. If running them separately, generate and validate comparisons before syncing them into the report cache. Do not delete a comparison manifest to bypass a failed check; regenerate the affected comparison or use a separate provisional output root.
 
-Two report blocks read artefacts the fit itself does not write, and print a "run this" note until they exist. Produce them per fit **before** rendering (each opens the trace, so run them one model at a time rather than as a sweep while a heavy fit is on the box):
+Some model-report sections use optional post-fit artefacts:
 
 ```bash
-python scripts/prior_vs_posterior.py --table --model vg20 --model vg15   # writes prior_posterior_contraction.csv into each fit dir
-python scripts/emit_factor_correlation.py <output>/models/VG22-*/         # writes subject_factor_corr.csv for the factor model
-python scripts/regenerate_plots.py all --config rep --output-dir <output-root>   # re-runs the plot stage: since 2026-09-03 the joint RE pages reference study_fans.png and posterior_summary_monthly_weighted_{u,s}.csv, and the words/ratio figures carry the observed children, none of which a fit made before that date wrote
+uv run python scripts/prior_vs_posterior.py --table --model vg20 --model vg15
+uv run python scripts/emit_factor_correlation.py <output-root>/models/<VG22-directory>
 ```
 
-A template change is applied to an existing fit with `--render-only`, which re-stages `docs/models/<model>/index.qmd` **and** every `docs/models/_*.qmd` include beside it (the bivariate random-effects family transcludes one). Since 2026-09-02 that is a fresh render of every page, not only the changed ones, because the shared blocks changed.
+Then render each required model with `fit_model.py <model> --config rep --render-only`. This refreshes its template and shared includes without resampling.
+
+After the required comparisons have been generated:
 
 ```bash
-python scripts/sync_report_figures.py --config rep --output-dir <output-root>   # validates fits, then feeds docs/report/figures/
-# comparisons (consume fitted traces/summaries):
-for c in loo_compare loso_compare compare_models \
-         compare_ds_td_trajectories compare_ds_td_expressive \
-         compare_ds_td_latency subject_effect_correlation; do
-  python scripts/$c.py
-done
-python scripts/compare_ds_td_re.py spoken understood comprehension   # the joint contrasts, incl. the weighted child
-for m in vg10 vg14 vg15; do python scripts/compare_sensitivity.py $m --variant all; done
-# `compare_ds_td` and `compare_ds_td_q_overlap` are deprecated shims that delegate to
-# compare_ds_td_re and need not run. `subject_effect_correlation.py` writes
-# ds_subject_effect_correlation.csv, which the comparison book reads; it was missing
-# from this list until the 2026-09-03 tail failed on it.
-python scripts/sync_report_figures.py --config rep --output-dir <output-root>   # re-sync comparison artefacts
-# Everything the report needs that is NOT model output -- the descriptives, the
-# introduction's illustrations (bayes_update*.png), the methods chapter's prior
-# figures and a placeholder for any figure still absent -- comes from one script
-# that the sync neither validates nor regenerates. Run it AFTER the sync, or
-# `quarto render docs/report` fails on a missing file:
-python scripts/prepare_report_figures.py
-# Pin Quarto's Python interpreter to the project environment for BOTH book renders: a bare `quarto render`
-# resolved a Python interpreter without the `yaml` package on 2026-09-03 and both books died in their first
-# cell with `ModuleNotFoundError: No module named 'yaml'`. fit_model.py pins this for
-# the per-model pages; nothing pins it for the books.
-export QUARTO_PYTHON="$(python -c 'import sys; print(sys.executable)')"
-quarto render docs/report
-# The comparison book stages, renders, publishes and VERIFIES itself in one step.
-# Do not stage and render it by hand; `publish_comparison.py` exists because both
-# halves of doing so failed on 2026-09-03 (see below).
-python scripts/publish_comparison.py --output-dir <output-root>
+uv run python scripts/sync_report_figures.py --config rep --output-dir <output-root>
+uv run python scripts/prepare_report_figures.py
+uv run quarto render docs/report
 ```
 
-Two more things the 2026-09-03 tail found. The **first** `sync_report_figures` in the block above fails with "comparison_manifest.json is missing" whenever `output/comparisons/` already holds artefacts from a script run outside the tail (a smoke run of `compare_ds_td_re.py`, say) and no comparison script that writes a manifest has run since: the sync validates the comparison directory as a whole, and a directory with artefacts and no manifest is invalid. Either clear the directory first or accept that the first sync validates the fits and fails on the comparisons, and rely on the second. And `check_fit.py all --purpose publish` has no caveat allowance: a fit that cleared R-hat and ESS but carries a divergence or a BFMI below 0.3 is reported `[invalid]` there even though `sync_report_figures --allow-caveats` and `upload.py --allow-caveats` accept it. On 2026-09-03 six fits were in that state (VG11, VG12, VG13, VG21, VG22, VG23); the decision to publish them under `--allow-caveats` is recorded in `output/run-record.md`, and the checklist item below is therefore not met by them.
+Use the documented `--allow-caveats` path only for fits whose limitations have been reviewed and recorded. `--allow-provisional` is for local development, not publication. Publication validation follows catalogue roles; a failing development model can be skipped, while a failing unclassified candidate blocks sync.
 
-**A provisional fit of _any_ registered model blocks the whole sync.** `sync_report_figures` validates every directory under `output/models/` whose name resolves to a registered model, and one failure aborts the run for all of them — by design, so a half-valid figure cache never reaches the report. The trap is that **registering a new model makes its output subject to that check immediately**, long before anyone intends to publish it. A `dev` fit of VG20, made only to prove its pipeline ran, failed with `Sampling configuration mismatch: found 'dev', expected 'rep'` and took the other fifteen models' sync down with it.
+Use `scripts/publish_comparison.py` to stage, render, upload and verify the comparison book. It clears stale staged inputs and checks the published assets. It is a publishing command, not a local-preview command. `--run-id` updates an existing publication.
 
-So when a new model is added mid-run, either delete its provisional output before syncing, or point it at a different output root. `--allow-provisional` relaxes the check but is for local dev work, not for a publication sync. Note also that the publication sync needs `--allow-caveats` regardless: VG10, VG11, VG12 and VG13 all carry recorded soft-tier caveats, and without the flag the sync fails on those four with no mention of sampling configuration at all — which reads as a different problem than it is.
+**Do not upload traces to the public container.** Leave `--include-traces` off; traces contain observation-level data and identifiers. Use designated internal or local storage for trace archives.
 
-**The comparison book has its own publishing script, and hand-staging it is what the script exists to prevent.** `scripts/publish_comparison.py` clears the staged inputs before restaging them, renders with `QUARTO_PYTHON` pinned, collects the assets **the rendered page actually references** rather than a remembered list, uploads them as a unit, and then requests every published file over HTTP and fails on anything that does not return 200. Pass `--run-id <id>` to republish over an existing publication instead of minting a new URL, which is how a broken publication is repaired without invalidating a link already circulated. Both failure modes it guards were hit on 2026-09-03: a hand-assembled upload carried `index.html` and `index_files/` but **none of the 24 figures**, and the page published with every image broken because only `index.html` was checked for a 200; and the staging `cp` overwrote without removing, so a quarantined recovery replicate survived in `docs/comparison/` and the book rendered a table that included it.
-
-**The report book is not published to public storage.** It was uploaded once on 2026-09-03 and removed the same day on the study owner's instruction. Render it — the render is what validates the figure cache and it must still pass — but do not upload it. Only the twenty model reports and the comparison book are published publicly.
-
-**Nothing enforced the comparison staging step before that script, and it failed quietly in both directions.** `docs/comparison/` is gitignored, so a stale copy survives indefinitely and renders without complaint against artefacts from a previous run — on 2026-08-16 the comparison book was published against figures 20 hours older than the report beside it, and the only reason it was noticed is that a _newly cited_ file was absent, which fails loudly with a `KeyError` where an _outdated_ one does not. Treat a comparison-book render as invalid unless the copy immediately precedes it in the same shell.
-
-Note also that `sync_report_figures._sync_dir` is flat: it copies files, not sub-directories. `comparisons/recovery/` and `comparisons/sensitivity/` are synced by an explicit loop, and anything else nested under `comparisons/` will silently not reach the report unless it is added there too.
-
-Per-model reports render after successful fits during `fit_model.py --render`; if a render fails, retry it without resampling using `python scripts/fit_model.py <model> --config rep --render-only --output-dir <output-root>`.
-
-> [!NOTE]
-> **2026-09-08: the `code-links` gotcha no longer reproduces.** This section used
-> to warn that rendering a model report whose output dir is outside the git
-> checkout makes quarto exit non-zero on the `code-links: [repo]` post-processor
-> ("not a GitHub project"), leaving complete HTML without the repo source-link
-> button. On Quarto 1.10.18, every `--render-only` run of this refit — all of
-> them from an output root on another volume — exited 0. Treat a non-zero exit
-> there as a real failure to investigate, not as the expected cost of an
-> out-of-checkout output root.
+**Do not upload the technical report book.** The study owner's standing decision allows public model reports and the comparison book; the technical report is rendered for local review. A successful render does not prove that all findings are complete. Inspect placeholders and caveats before publication.
 
 ### Rendering without an activated environment
 
-Quarto resolves the Jupyter kernel for a report's python cells from `PATH`, independently of the interpreter running the fit. Driving the scripts by absolute interpreter path (`.venv/bin/python scripts/fit_model.py …`) without also putting that `bin/` on `PATH` therefore renders against whichever `python` `PATH` finds — on macOS the system framework python, which has no `h5netcdf` and cannot open `trace.nc`. The tell-tale is a fit that samples, gates, and promotes normally, followed by `ModuleNotFoundError: No module named 'h5netcdf'` from the render (2026-08-03 `test`-config refit: fifteen clean fits, fifteen failed renders, all recovered with `--render-only`).
+`fit_model.py` pins `QUARTO_PYTHON` to its interpreter. For a direct book render, use the project environment and explicitly pin the interpreter if Quarto resolves a different kernel. In PowerShell:
 
-`fit_model.py` pins `QUARTO_PYTHON` to its own `sys.executable`, so per-model reports are immune. The two `quarto render` calls above are bare shell invocations and are not: either activate the env, or `export QUARTO_PYTHON="$PWD/.venv/bin/python"` before rendering the books. `run_replication.ps1` puts the project environment on `PATH` itself and needs neither.
+```powershell
+$env:QUARTO_PYTHON = uv run python -c 'import sys; print(sys.executable)'
+quarto render docs/report
+```
 
-On Linux the failure looks different and is worth recognising, because it does **not** stop the render: quarto reports `ModuleNotFoundError: No module named 'dse_research_utils'` for the affected chapters, prints `WARN: Error encountered when rendering files`, and still **exits 0** having produced a book with those chapters missing. Checking the exit status is not enough — confirm the chapter HTML you expected actually exists.
+On a POSIX shell:
+
+```bash
+export QUARTO_PYTHON="$(uv run python -c 'import sys; print(sys.executable)')"
+quarto render docs/report
+```
+
+Read render warnings and confirm that every expected chapter and asset exists. Earlier Quarto runs returned success despite missing chapters.
 
 ### `freeze: auto` does not track `{{< include >}}`
 
-`execute.freeze` is `auto`, which re-executes a chapter when its own source changes. It does not notice a change to a file that chapter transcludes, and the frozen result stores the document with includes already resolved — so an edit to `_caveats-signing.qmd`, `_caveats-ds.qmd` or `_report_data.qmd` renders as its **pre-edit** self, with no warning and a successful exit.
-
-Hit on 2026-08-16: a caveat rewritten to state a second bias rendered as the old single-bias paragraph, while a sibling chapter edited directly picked its change up normally — which is what makes this hard to spot, since some of the edits in a batch do appear.
-
-After editing any `_*.qmd`, delete the frozen results for every chapter that includes it and re-render:
-
-```bash
-grep -l "_report_data" docs/report/*.qmd            # find the dependents
-rm -rf docs/report/_freeze/<chapter>                # one per dependent
-```
-
-`_report_data.qmd` is included by nearly every chapter, so an edit there means clearing all of them.
+The technical report uses `freeze: auto`. A chapter's cache may survive changes to an included file such as `_report_data.qmd` or `_caveats-signing.qmd`. Find the dependent chapters, remove only their generated frozen results and render again. Changes to fitted inputs also require a fresh execution; a source-only cache cannot establish that the numbers are current.
 
 ## 4. Completion checklist
 
-- [ ] `python scripts/check_fit.py all --config rep --purpose publish --output-dir <output-root>` passes; this includes complete lifecycle state, compatible provenance, reporting configuration, clean fit source state, rendered output, and `trace.nc` for every registered model.
-- [ ] All registered models PASS the gate on **unrounded** diagnostics (R-hat ≤ 1.01, ESS ≥ 400, 0 divergences, BFMI ≥ 0.3).
-- [ ] Understood-GP-ridge models refit with heavier tuning if needed.
-- [ ] `sync_report_figures.py` run; all model reports + `docs/report` +
-      `docs/comparison` render clean.
-- [ ] Record the run in a dated `notes/` entry (config, incidents, convergence,
-      timings).
-
-## Standing caveats to re-check each run
-
-- **Fixed-810 denominator** is a _validated_ approximation (dual-form crosswalk,
-  `scripts/crosswalk_dse_oxford.py`; methods-data §Measures) — do **not** switch to
-  per-form `n_trials`, which over-corrects. (Issue #149.)
-- **Target 8 anchor prior-sensitivity** (#147) is a separate `test`-tier study, not
-  part of a `rep` refit.
+- [ ] Every model required by the chosen scope has a complete, compatible fit and the required sampling effort.
+- [ ] Diagnostics pass, or a permitted exception or caveat is recorded and disclosed through the appropriate validation purpose.
+- [ ] Required sensitivities, recovery checks and comparisons use the intended data and fit revisions.
+- [ ] Model reports, report cache and comparison book are current; chapters, figures and links have been inspected.
+- [ ] Publication includes only authorised outputs and all referenced assets.
+- [ ] The whole output root is archived, and a dated run record gives the commit, configuration, incidents, caveats and archive location.
