@@ -1,5 +1,8 @@
 # VG22's rep fits failed on a dead identification anchor
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Changing anchor order preserves the representable covariance set, but reassigning independent loading priors can change the induced covariance prior. At rank one, non-anchor loadings can have either sign, so correlations are not all fixed at positive one. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 

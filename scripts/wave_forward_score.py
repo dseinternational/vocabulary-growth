@@ -25,21 +25,22 @@ Children are split into K folds. For fold ``k``, every row of a fold-``k`` child
 first wave stays in training, as does everything belonging to every other child.
 The held-out later waves are then scored.
 
-That conditioning is the point. The lag predictor for a held-out wave is built
-from the child's earlier wave, which is training data, so the score is an honest
-one-step-ahead prediction: *given what this child was at their first visit and
-what other children did, how well is their next visit predicted?* Holding out the
-whole child instead (``--holdout-unit child``) makes the lag source a row the
-model never saw, which is a different and stricter question -- the child's random
-effect is then drawn from its prior -- and it is offered because #289 task 3.8
-asks for the choice to be made explicitly rather than assumed.
+The understood score predicts a future comprehension count from the training
+history. Paired speech scores condition additionally on the observed comprehension
+count at the held-out visit. They therefore measure conditional prediction, not
+a forecast made only from the earlier visits. The predictive mixture is updated
+with that comprehension count before evaluating speech. Four-cell composition
+scores likewise condition on the observed comprehension total. Produced-only
+composition scores condition on the recorded produced total.
 
-**First waves are never scored, under either unit.** A first wave carries
-``has_lag = 0``, so ``x_lag`` is zero and the cross-lag term vanishes from its
-likelihood: the two models being compared are numerically identical there, and
-including those rows would dilute the comparison with rows that cannot inform it.
-Excluding them is therefore not only leak avoidance, it is the only informative
-scored set.
+The strict row set uses lag sources that remain in training. Other reported row
+sets can use a preceding held-out visit as a predictor and answer a different
+question. With ``--holdout-unit child``, all that child's rows leave training;
+the supplied lag is still an observed predictor, not a jointly forecast value.
+
+First waves are not scored because this check targets later visits with lag
+information. Their direct lag term is zero, but their predictions can still
+differ after refitting through changes to shared parameter posteriors.
 
 What is compared
 ----------------
@@ -55,8 +56,8 @@ The headline is the **spoken** elpd difference on both models, because on both
 the coefficient enters the production-ratio logit. The other outcomes are
 written beside it and are not the headline:
 
-- VG16: understood is a pure control. The lag enters nothing else, so a held-out
-  row's understood density is the same under both arms up to sampling noise.
+- VG16: the understood likelihood has no direct lag term. Its predictive
+  density can still change after refitting through shared parameters.
 - VG25: understood and signed are the controls. The **four-cell composition**
   is a control too since 2026-09-15, when the registered model stopped letting
   the lag into the cross-tab compositions (its first rep fit was bimodal there);
@@ -135,6 +136,7 @@ from vocab_growth.models.likelihood_utils import (
     SPOKEN_FALLBACK_PRODUCT,
     nested_outcome_spec,
 )
+from vocab_growth.predictive_mixtures import conditional_log_predictive
 
 OUT_DIR = env.comparisons_output_dir()
 TMP_DIR = os.path.join(env.output_root(), "wave_forward_tmp")
@@ -350,7 +352,7 @@ def _betabinom_elpd(y, n, p_draws, k_draws, log_NK: float) -> float:
     return float(logsumexp(ll.ravel()) - log_NK)
 
 
-def _dirichlet_multinomial_elpd(counts, total, alpha_draws, log_NK: float) -> float:
+def _dirichlet_multinomial_elpd(counts, total, alpha_draws, log_NK: float, *, log_parent=None) -> float:
     """Log mean predictive density of one composition over the posterior draws.
 
     ``alpha_draws`` is ``(chain, draw, K)`` and ``counts`` is ``(K,)``. Written
@@ -370,6 +372,8 @@ def _dirichlet_multinomial_elpd(counts, total, alpha_draws, log_NK: float) -> fl
             - gammaln(counts + 1.0)
         ).sum(axis=-1)
     )
+    if log_parent is not None:
+        return float(conditional_log_predictive(log_parent, ll))
     return float(logsumexp(ll.ravel()) - log_NK)
 
 
@@ -443,7 +447,7 @@ def _bivariate_row_elpds(
     lagged: np.ndarray,
     clean: np.ndarray,
 ) -> pd.DataFrame:
-    """VG16: understood is a pure control, spoken carries the coefficient."""
+    """VG16: comprehension forecast and speech conditional on current comprehension."""
     n_trials = definition.n_trials
     p_u_obs = trace.posterior["p_u_obs"].values
     p_s_obs = trace.posterior["p_s_obs"].values
@@ -483,6 +487,12 @@ def _bivariate_row_elpds(
                 kappa_s_obs[:, :, idx],
                 log_NK,
             )
+        if spoken_is_conditional[idx] and pd.notna(row["spoken"]):
+            pu, ku = p_u_obs[:, :, idx], kappa_u_obs[:, :, idx]
+            q, ks = q_obs[:, :, idx], kappa_s_obs[:, :, idx]
+            ll_u = betabinom.logpmf(row["understood"], n_trials, pu * ku, (1 - pu) * ku)
+            ll_s = betabinom.logpmf(row["spoken"], row["understood"], q * ks, (1 - q) * ks)
+            elpd_s = float(conditional_log_predictive(ll_u, ll_s))
         records.append(
             {
                 "row": int(idx),
@@ -629,12 +639,27 @@ def _joint_row_elpds(
                 kappa_sign_obs[:, :, idx],
                 log_NK,
             )
+        # A conditional outcome score updates the whole predictive mixture
+        # with the observed comprehension count at the held-out visit.
+        if pd.notna(row["understood"]):
+            pu, ku = p_u_obs[:, :, idx], kappa_u_obs[:, :, idx]
+            ll_u = betabinom.logpmf(row["understood"], n_trials, pu * ku, (1 - pu) * ku)
+            if spoken_is_conditional[idx] and spoken_observed[idx] >= 0:
+                q, ks = q_obs[:, :, idx], kappa_s_obs[:, :, idx]
+                ll_s = betabinom.logpmf(row["spoken"], row["understood"], q * ks, (1 - q) * ks)
+                elpd_s = float(conditional_log_predictive(ll_u, ll_s))
+            if signed_is_conditional[idx] and signed_observed[idx] >= 0:
+                r, kr = r_obs[:, :, idx], kappa_sign_obs[:, :, idx]
+                ll_r = betabinom.logpmf(row["signed"], row["understood"], r * kr, (1 - r) * kr)
+                elpd_sign = float(conditional_log_predictive(ll_u, ll_r))
         if is_cell_row[idx] and cell_counts is not None:
+            if pd.isna(row["understood"]):
+                raise ValueError("A within-understood composition needs its comprehension total.")
             elpd_cells = _dirichlet_multinomial_elpd(
                 cell_counts[idx],
                 cell_total[idx],
                 conc[:, :, None] * pi_cells[:, :, idx, :],
-                log_NK,
+                log_NK, log_parent=ll_u,
             )
         elif is_prod_row[idx] and prod_counts is not None:
             # The produced composition drops the "neither" cell and keeps the
@@ -679,10 +704,9 @@ def _joint_row_elpds(
 #: and their predictor stands entirely on data the likelihood saw. ``lagged``
 #: adds the rows whose lag source was itself held out -- still forward chaining,
 #: but conditioning on an unseen row. ``all-later-waves`` adds the rows with no
-#: lag at all, which enter both arms identically: they leave the total untouched
-#: and shrink the per-row spread the standard error is built from, so quoting
-#: that standard error would make the comparison look more precise than its
-#: evidence.
+#: lag at all. Their direct lag term is zero, but refitting can change their
+#: predictions. Each restriction therefore defines a different prediction target.
+#: Standard errors use per-child sums of paired score differences.
 RESTRICTIONS = ("lagged-from-training", "lagged", "all-later-waves")
 
 
@@ -752,15 +776,17 @@ def paired_difference(wide: pd.DataFrame, column: str, *, restriction: str) -> d
     usable = keep & np.isfinite(lag) & np.isfinite(ctl)
     diff = lag[usable] - ctl[usable]
     n = int(usable.sum())
-    row = {"outcome": column, "rows_scored": restriction, "n_rows": n}
-    if n < 2:
-        return {**row, "elpd_diff": float("nan"), "se": float("nan"),
-                "mean_per_row": float("nan")}
+    child_diff = pd.Series(diff).groupby(
+        wide.loc[usable, "subject_code"].to_numpy()
+    ).sum().to_numpy()
+    n_children = len(child_diff)
+    row = {"outcome": column, "rows_scored": restriction, "n_rows": n,
+           "n_children": n_children}
     return {
         **row,
-        "elpd_diff": float(diff.sum()),
-        "se": float(np.sqrt(n) * np.std(diff, ddof=1)),
-        "mean_per_row": float(diff.mean()),
+        "elpd_diff": float(diff.sum()) if n else float("nan"),
+        "se": float(np.sqrt(n_children) * np.std(child_diff, ddof=1)) if n_children > 1 else float("nan"),
+        "mean_per_row": float(diff.mean()) if n else float("nan"),
     }
 
 

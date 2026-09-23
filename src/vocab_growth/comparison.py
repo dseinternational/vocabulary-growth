@@ -43,7 +43,7 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth import environment as env
-from vocab_growth import intervals
+from vocab_growth import intervals, reporting_ages
 from vocab_growth.models import subject_effects
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
@@ -673,7 +673,20 @@ def load_outcome_trajectory(
         )
 
     ages, (p, k), _ = _load_reshaped_draws(trace_path(key), (p_name, k_name))
+    ages, p, k = restrict_reporting_trajectory(key, outcome, ages, p, k)
     return ages, p, k, n_trials(key)
+
+
+def restrict_reporting_trajectory(key, outcome, ages, *arrays):
+    """Trim before inversion or differentiation, including an interpolated cap."""
+    cap = reporting_ages.max_age_for(MODEL_REGISTRY[key], reporting_ages.quantity_for_outcome(outcome))
+    ages = np.asarray(ages)
+    if cap is None or cap >= ages[-1]:
+        return (ages, *arrays)
+    if cap < ages[0]:
+        raise ValueError(f"{key} has no supported {outcome} grid below its reporting cap.")
+    grid = np.unique(np.r_[ages[ages <= cap], cap])
+    return (grid, *(interp_draws(ages, array, grid) for array in arrays))
 
 
 def product_marginal_kappa(
@@ -846,7 +859,8 @@ def child_scale_of_age(
     interpretable. At ``age == ref_age_months`` the scale is exactly ``tau0``,
     which is why the reference age is a definition field rather than a constant
     — ``tau0`` is a spread with a stated age attached. And the curve is a
-    parabola in age with its minimum at ``D = -rho01 tau0 / tau1``: a negative
+    square root of a quadratic in age, with its minimum at
+    ``D = -rho01 tau0 / tau1`` when ``tau1 > 0``: a negative
     ``rho01`` puts the tightest point in the future and children fan out on
     both sides of it, which is a real qualitative claim the constant-offset model
     cannot make and should be read off the figure rather than assumed.
@@ -1633,22 +1647,13 @@ def subject_effect_correlation(
     an internal detail. VG20 estimates the correlation as a free parameter
     (``rho_uq``), which is the fix rather than the measurement.
 
-    This function keeps both roles. On a model that does not estimate the
-    correlation it is the only check available without a refit; on one that does,
-    it is an *internal consistency check* — the realised deviations should
-    reproduce the fitted ``rho_uq``, and on VG20 they do (0.371 against 0.369).
+    Returns ``(correlations, n_children)``: the empirical correlation across
+    fitted child effects within each retained posterior draw. This includes
+    uncertainty in those effects, but is not the population correlation parameter.
+    A finite fitted sample need not reproduce that parameter exactly. Shrinkage,
+    differing observation patterns and selection can move empirical correlations
+    in either direction. They are not lower bounds on a population correlation.
 
-    Returns ``(correlations, n_children)``: one correlation per retained draw —
-    computed across children within the draw — so the result carries posterior
-    uncertainty, unlike a single correlation of the posterior *means*, which is
-    inflated by the shrinkage the two effects share.
-
-    Two cautions, and they apply only to the uncorrelated models. The estimate is
-    shrunk toward zero by the independence prior, so its magnitude is a lower
-    bound — VG10's realised +0.151 against VG20's fitted +0.369 measures how much
-    that prior suppresses. And because ``log p_S = log p_U + log q``, a positive
-    correlation means the independent-draw derivation **understates** the spoken
-    between-child spread; a negative one means it overstates it.
 
     ``thin`` keeps every ``thin``-th draw: the correlation is over hundreds of
     children per draw, so a few thousand draws already resolve the interval.
@@ -1902,11 +1907,12 @@ def fraction_below_reference_percentile(
     p_td: np.ndarray, k_td: np.ndarray,
     n_trials_: int, pct: float = 10.0,
 ) -> np.ndarray:
-    """Per-draw fraction of the DS Beta-Binomial child distribution at/below the
+    """Per-draw fraction of a simple Beta-Binomial distribution at/below the
     TD ``pct``-th percentile word count, on a common grid.
 
-    A clinically legible "how atypical" estimand: at each age, what share of DS
-    children fall below the TD ``pct``-th centile. ``p_*``/``k_*`` are
+    This helper excludes child random effects and is not the nested speech
+    distribution. Use ``new_child_percentile_fraction`` for those models.
+    ``p_*``/``k_*`` are
     ``(n_draw, n_grid)`` population mean proportions and Beta-Binomial
     concentrations. Returns ``(n_draw, n_grid)``.
     """
@@ -1916,6 +1922,64 @@ def fraction_below_reference_percentile(
     a_ds, b_ds = p_ds * k_ds, (1.0 - p_ds) * k_ds
     thresh = betabinom.ppf(pct / 100.0, n_trials_, a_td, b_td)
     return betabinom.cdf(thresh, n_trials_, a_ds, b_ds)
+
+
+def predictive_count_inputs(key, outcome, grid, draws):
+    """Pointwise new-child distribution at zero study effect and reference sex."""
+    plan = total_spread_plan(MODEL_REGISTRY[key], outcome)
+    native, arrays, scalars = _load_reshaped_draws(trace_path(key), plan.grid_variables, plan.scalar_variables)
+    values = {name: interp_draws(native, array[draws], grid)
+              for name, array in zip(plan.grid_variables, arrays, strict=True)}
+    values.update({name: array[draws] for name, array in scalars.items()})
+    return plan, values
+
+
+def new_child_count_sample(plan, values, ages, n, draw, children, rng):
+    """Pointwise count samples with child variation and nested observation noise.
+
+    Samples across ages are not individual trajectories. The prediction fixes
+    the study effect and sex at the values of the supplied reference curves.
+    """
+    shape = np.asarray(values[plan.p_name]).shape
+    def scale(source):
+        tau = _child_scale_values(source, values, ages, plan.slope_ref_age_months)
+        return np.zeros(shape[1]) if tau is None else _tau_to_draw_age(tau, shape, what="predictive scale")[draw]
+    def count(trials, p, k):
+        p = np.clip(p, 1e-12, 1 - 1e-12)
+        return rng.binomial(trials, rng.beta(p * k, (1 - p) * k))
+    zu, zq = rng.normal(size=(2, children, len(ages)))
+    p = _sigmoid(_logit_of(values[plan.p_name][draw]) + zu * scale(plan.scale))
+    parent = count(n, p, values[plan.kappa_name][draw])
+    if not plan.nested:
+        return parent
+    rho = 0.0 if plan.rho_name is None else float(values[plan.rho_name][draw])
+    q = _sigmoid(_logit_of(values[plan.q_name][draw]) + scale(plan.scale_q) * (rho * zu + np.sqrt(max(0, 1 - rho**2)) * zq))
+    return count(parent, q, values[plan.kappa_s_name][draw])
+
+
+def new_child_percentile_fraction(ds_inputs, td_inputs, ages, n, *, pct=10.0, children=4096, seed=47):
+    """Monte Carlo fractions at or below each draw's TD predictive percentile.
+
+    Parameter uncertainty is represented by rows. Each row integrates child
+    and observation variation by simulation, so it also has Monte Carlo error.
+    For a fixed threshold its maximum binomial Monte Carlo SE is 0.5/sqrt(M);
+    estimating the TD threshold adds uncertainty, especially with discrete ties.
+    """
+    if children < 2 or not 0 < pct < 100:
+        raise ValueError("Need at least two children and a percentile between 0 and 100.")
+    ds_plan, ds_values = ds_inputs
+    td_plan, td_values = td_inputs
+    nd = len(ds_values[ds_plan.p_name])
+    if len(td_values[td_plan.p_name]) != nd:
+        raise ValueError("Posterior draws must be paired before comparing percentiles.")
+    rng = np.random.default_rng(seed)
+    fractions = np.empty((nd, len(ages)))
+    for draw in range(nd):
+        td = new_child_count_sample(td_plan, td_values, ages, n, draw, children, rng)
+        threshold = np.quantile(td, pct / 100, axis=0, method="inverted_cdf")
+        ds = new_child_count_sample(ds_plan, ds_values, ages, n, draw, children, rng)
+        fractions[draw] = np.mean(ds <= threshold, axis=0)
+    return fractions
 
 
 def peak_growth_age(ages: np.ndarray, W: np.ndarray) -> np.ndarray:

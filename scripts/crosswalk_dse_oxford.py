@@ -193,7 +193,7 @@ def report(df: pd.DataFrame, outcome: str, variant: str, seed: int, draws: int, 
     print(f"  b1 (logit per 12 months): median {md:.3f}  90% ETI [{lo:.3f}, {hi:.3f}]")
     lo, md, hi = _eti_90(idata.posterior["delta"].values.ravel())
     print(f"  delta (logit offset): median {md:.3f}  90% ETI [{lo:.3f}, {hi:.3f}]  "
-          f"(0 = per-form; {np.log(LEN_DSE / LEN_OXF):.3f} = length-only)")
+          f"(0 = per-form; {np.log(LEN_DSE / LEN_OXF):.3f} = low-proportion approximation to length-only)")
 
     print("  R = DSE/Oxford count ratio by age (population level):")
     for age in REPORT_AGES:

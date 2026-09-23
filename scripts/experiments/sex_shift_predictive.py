@@ -94,24 +94,27 @@ class Predictive:
 
 
 def constant_shift_in_words_and_months(pred, d_u, d_q):
-    """A constant logit shift read on the count scale and as months of lead."""
+    """Illustrative plug-in count contrasts and local count-slope age equivalents.
+
+    Separate posterior medians are plug-in inputs, not a joint posterior draw.
+    Speech uses the product of its shifted comprehension and conversion
+    probabilities. The months column is a local derivative approximation.
+    """
+    ages = np.array([a for a in range(24, 73, 6) if a in pred.su.index and a in pred.sq.index], dtype=float)
+    lu = logit(pred.su.loc[ages, "p_population_median"].to_numpy())
+    lq = logit(pred.sq.loc[ages, "q_median"].to_numpy())
+    u = expit(lu)
+    q = expit(lq)
+    up, um = expit(lu + d_u / 2), expit(lu - d_u / 2)
+    qp, qm = expit(lq + d_q / 2), expit(lq - d_q / 2)
     rows = []
-    for outcome, table, delta in (("understood", pred.su, d_u), ("spoken", pred.ss, d_u + d_q)):
-        ages = np.array([a for a in range(24, 73, 6) if a in table.index], dtype=float)
-        lg = np.array([logit(table.loc[a, "p_population_median"]) for a in ages])
-        slope = np.gradient(lg, ages / 12)  # population logit gain per year
-        for age, l, s in zip(ages, lg, slope, strict=True):
-            rows.append(
-                dict(
-                    outcome=outcome,
-                    logit_shift=delta,
-                    age=int(age),
-                    median_words=N_TRIALS * expit(l),
-                    gap_words=N_TRIALS * (expit(l + delta / 2) - expit(l - delta / 2)),
-                    logit_slope_per_year=s,
-                    gap_months=12 * delta / s,
-                )
-            )
+    for outcome, base, plus, minus in (("understood", u, up, um), ("spoken", u * q, up * qp, um * qm)):
+        count_slope = np.gradient(N_TRIALS * base, ages)
+        for age, p, pp, pm, slope in zip(ages, base, plus, minus, count_slope, strict=True):
+            gap = N_TRIALS * (pp - pm)
+            rows.append(dict(outcome=outcome, age=int(age), reference_words=N_TRIALS * p,
+                             gap_words=gap, count_slope_per_month=slope,
+                             gap_months_local=gap / slope if slope > 0 else np.nan))
     return pd.DataFrame(rows)
 
 
@@ -215,11 +218,11 @@ def main():
     print()
     print("==== the base-case constant logit shift, read in words and in months along the population curve ====")
     for outcome, sub in words_months.groupby("outcome", sort=False):
-        print(f"  {outcome} (shift {sub['logit_shift'].iloc[0]:.2f}):")
+        print(f"  {outcome}:")
         print("    age (m)       : " + "  ".join(f"{a:5d}" for a in sub["age"]))
-        print("    median words  : " + "  ".join(f"{v:5.0f}" for v in sub["median_words"]))
+        print("    reference words: " + "  ".join(f"{v:5.0f}" for v in sub["reference_words"]))
         print("    gap in words  : " + "  ".join(f"{v:+5.0f}" for v in sub["gap_words"]))
-        print("    gap in months : " + "  ".join(f"{v:+5.1f}" for v in sub["gap_months"]))
+        print("    local months  : " + "  ".join(f"{v:+5.1f}" for v in sub["gap_months_local"]))
     print()
     print(f"wrote {out_dir}")
 

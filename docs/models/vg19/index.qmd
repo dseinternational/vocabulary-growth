@@ -233,7 +233,7 @@ Those three set every random effect to zero, so they test the mean function and 
 
 ![Individual child trajectories around a **fixed** population curve, varying only the child effect. Holding the trend fixed is what makes this readable: with a different trend under every child the curves would cross whatever the child block did, and a rate could not be distinguished from a constant offset.](prior_unseen_children.png){#fig-prior-children .lightbox fig-align="left"}
 
-This is the figure that tests $\tau_1$. Under VG10's constant offset the curves are parallel on the logit scale and **can never cross**, however wide $\tau_{subj}$ is; under a rate they fan, converge and cross. So the qualitative claim this model exists to make is visible in its own prior, and the quantitative question — whether $\text{HalfNormal}(0.5)$ per year puts appreciable mass on trajectories no child could follow, such as a child at the floor or the ceiling for the whole domain — is answerable by eye rather than by argument.
+For each separate latent logit, VG10's constant offsets preserve the ordering of children. A child rate lets that ordering change with age. Expected speech is a product of comprehension and conversion probabilities, so its child curves can cross even with constant offsets. Use the prior figures to inspect plausible trajectories, then assess the rate scales through posterior and sensitivity checks.
 
 ![Nested Beta-Binomial counts for one unseen child per draw: words understood drawn at the child's own $p_U$, then words spoken drawn **conditional on that count**.](prior_unseen_child_counts.png){#fig-prior-child-counts .lightbox fig-align="left"}
 
@@ -388,7 +388,7 @@ from vocab_growth.report_cells import render_variation_table
 render_variation_table()
 ```
 
-Under a rate, between-child spread is no longer a single number: it is $\sqrt{\tau_0^2 + 2\rho_{01}\tau_0\tau_1 D + \tau_1^2 D^2}$ at $D$ years from the reference age — a parabola in age with its minimum at $D = -\rho_{01}\tau_0/\tau_1$. A negative $\rho_{01}$ places the tightest point in the future and has children fanning out on both sides of it, which is a real qualitative claim the constant-offset model cannot make.
+Under a rate, the child-effect standard deviation is $\sqrt{\tau_0^2 + 2\rho_{01}\tau_0\tau_1 D + \tau_1^2 D^2}$ at $D$ years from the reference age. Its square is a quadratic in age. If $\tau_1>0$, both variance and standard deviation reach their minimum at $D=-\rho_{01}\tau_0/\tau_1$. The standard deviation itself is not a parabola.
 
 ### Did anything else move?
 

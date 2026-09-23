@@ -1,5 +1,8 @@
 # Sex differences in vocabulary: what the literature and this repository's data say, and whether sex belongs in the models
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A spoken-count curve is a product of comprehension and conditional speech probabilities. Its sex contrast cannot be calculated by adding their logit coefficients as a single spoken-probability shift. The revised experiment uses the product of shifted probabilities. Observed balance does not rule out selection or missing-sex bias, and word-scale gaps need not increase monotonically with age. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. These analyses preceded the addition of sex covariates to the reporting models on 2026-09-13. See the [implementation record](202609131600-pre-refit-sex-mask-gap-vg26-td-variants.md) and [current model inventory](../docs/models/README.md). The results below belong to the fits named here.
 

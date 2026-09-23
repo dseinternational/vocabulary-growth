@@ -48,6 +48,7 @@ import sys
 from multiprocessing import freeze_support
 
 import dse_research_utils.environment.setup as setup
+import dse_research_utils.statistics.models.sampling as sampling
 import xarray as xr
 
 from vocab_growth import environment as env
@@ -59,6 +60,11 @@ from vocab_growth.fit_artifacts import (
 )
 from vocab_growth.models.common import run_fit_pipeline
 from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.implementation_identity import (
+    describe_difference,
+    implementation_signature,
+    matches,
+)
 from vocab_growth.reporting import console, key_value_table
 
 SAMPLING_STAGE_NAME = "Posterior sampling"
@@ -113,6 +119,18 @@ def _verify(retained_dir: str, model_key: str, definition, config: str) -> dict:
             f"The retained fit used sampling configuration {recorded_config!r}, "
             f"not {config!r}."
         )
+    recorded_implementation = manifest.get("model", {}).get("implementation")
+    current_implementation = implementation_signature()
+    if not matches(recorded_implementation, current_implementation):
+        raise ValueError(
+            "The retained implementation signature is missing or incompatible: "
+            + describe_difference(recorded_implementation, current_implementation)
+            + "; refit before generating new summaries."
+        )
+    parameters = manifest.get("sampling", {}).get("parameters")
+    if not isinstance(parameters, dict) or not parameters:
+        raise ValueError("The retained fit records no sampling parameters; refit.")
+    sampling.SamplingConfiguration(**parameters)
     # The raw fingerprint cannot see a loader-rule change -- masking and
     # exclusion rules run in Python after the CSVs are read -- so on its own it
     # would let this script summarise an old posterior under new rules, which is
@@ -147,7 +165,7 @@ def _verify(retained_dir: str, model_key: str, definition, config: str) -> dict:
     return manifest
 
 
-def _loader_stage(trace_path: str):
+def _loader_stage(trace_path: str, retained_manifest: dict | None = None):
     """The stage that replaces sampling: load the retained trace and check it fits."""
 
     def load_retained_trace(context) -> None:
@@ -174,6 +192,20 @@ def _loader_stage(trace_path: str):
                         f"retained trace and {len(size)} in the rebuilt model."
                     )
         context.set_trace(trace)
+        if retained_manifest is not None:
+            context.sampling = sampling.SamplingConfiguration(
+                **retained_manifest["sampling"]["parameters"]
+            )
+            # The pipeline wrote a fresh manifest before loading this trace.
+            # Restore the provenance of sampling before any stage can publish it.
+            from vocab_growth.fit_artifacts import read_json, write_json_atomic
+
+            path = os.path.join(context.reporting.output_dir, FIT_MANIFEST_FILENAME)
+            current = read_json(path)
+            for field in ("sampling", "code", "runtime"):
+                current[field] = retained_manifest.get(field, {})
+            current.setdefault("artefacts", {})["retained_sampling_manifest"] = retained_manifest
+            write_json_atomic(path, current)
 
     return load_retained_trace
 
@@ -227,7 +259,7 @@ def main() -> int:
     index = names.index(SAMPLING_STAGE_NAME)
     stages[index] = (
         f"{SAMPLING_STAGE_NAME} (loaded from retained trace)",
-        _loader_stage(trace_path),
+        _loader_stage(trace_path, manifest),
     )
     # Prior predictive checks re-draw from the prior and cost real time without
     # informing anything the posterior artefacts need; the retained fit already

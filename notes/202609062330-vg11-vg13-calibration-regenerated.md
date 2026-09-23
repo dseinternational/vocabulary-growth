@@ -1,5 +1,8 @@
 # The VG11-VG13 dispersion calibration, regenerated on the registered language scopes
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A small shift in prior standard-deviation units does not guarantee a negligible posterior change. A boundary maximum-likelihood estimate does not imply zero posterior mass away from the boundary. Form extent cancels in a ratio only under suitable item-composition assumptions. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

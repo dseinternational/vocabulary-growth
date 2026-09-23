@@ -1,5 +1,8 @@
 # What VG19 says about individual trajectories
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A residual ICC that includes measurement noise and a fitted latent age-pair correlation are different quantities. Agreement between them is not independent validation. Constant logit-scale variation does not produce constant probability-scale intervals. The earlier recovery ranking and lower-bound claims must be read with the linked gate correction. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

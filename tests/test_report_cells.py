@@ -835,7 +835,7 @@ def test_loo_section_flags_unreliable_importance_sampling(tmp_path, capsys):
     assert "30 finite values above 1" in out
 
 
-def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
+def test_hierarchical_fits_distinguish_approximation_from_prediction_target(tmp_path, capsys):
     """A high k share under subject effects is expected, not evidence of misfit.
 
     VG10 has 20% of spoken and 31% of understood observations over the
@@ -846,7 +846,8 @@ def test_hierarchical_fits_get_the_wrong_unit_explanation(tmp_path, capsys):
     fit = _loo_fit(tmp_path, [row], parameters=("eta_u", "tau_subj_u"))
     report_cells.render_loo_section(str(fit))
     out = capsys.readouterr().out
-    assert "wrong unit of prediction" in out
+    assert "Choose the holdout unit from the intended use" in out
+    assert "wrong unit of prediction" not in out
     # With no manifest the page cannot say which check covers it, and says so
     # rather than naming one.
     assert "cannot be read without the fit manifest" in out
@@ -1176,8 +1177,9 @@ def test_headline_interior_peak_reports_draw_wise_age_interval(tmp_path, capsys)
     )
     report_cells.render_headline_quantities(str(tmp_path))
     out = capsys.readouterr().out
-    assert "Fastest growth in words" in out
-    assert "around 47 months" in out
+    assert "Maximum median growth rate in words" in out
+    assert "around 48 months" in out
+    assert "around 47 months" not in out
     assert "peak age 39 – 55 months" in out
     # A negligible boundary share is not reported as a caveat.
     assert "range edge" not in out
@@ -1507,7 +1509,7 @@ def test_diagnostic_verdict_says_so_when_the_summary_is_absent(tmp_path, capsys)
     assert "cannot be shown" in capsys.readouterr().out
 
 
-def test_contraction_table_marks_prior_driven_and_pressing_parameters(tmp_path, capsys):
+def test_contraction_table_describes_spread_without_claiming_absence_of_learning(tmp_path, capsys):
     fit = _fit(tmp_path)
     pd.DataFrame(
         [
@@ -1521,9 +1523,9 @@ def test_contraction_table_marks_prior_driven_and_pressing_parameters(tmp_path, 
     ).to_csv(fit / "prior_posterior_contraction.csv", index=False)
     report_cells.render_prior_posterior_contraction(str(fit))
     out = capsys.readouterr().out
-    assert "| GP amplitude, understood | 0.4 | 0.36 | 0.9 | 0.45 | -0.25 | 0.96 | prior-driven |" in out
-    assert "Understood proportion at the low age anchor" in out and "informed by the data" in out
-    assert "Prior-driven here: `eta_u`, `ell_unit_sign`" in out
+    assert "| GP amplitude, understood | 0.4 | 0.36 | 0.9 | 0.45 | -0.25 | 0.96 | little reduction in spread |" in out
+    assert "Understood proportion at the low age anchor" in out and "posterior spread reduced" in out
+    assert "Little reduction in spread here: `eta_u`, `ell_unit_sign`" in out
     # Sorted by contraction, so the least-informed parameter comes first.
     assert out.index("GP amplitude, understood") < out.index("GP length-scale, signing")
 
@@ -1783,7 +1785,8 @@ def test_dispersion_scope_maps_an_uninformed_kappa_to_its_anchor_age(tmp_path, c
     report_cells.render_dispersion_scope(str(fit))
     out = capsys.readouterr().out
     assert "the curve at and below 18 months" in out
-    assert "not estimated from this data" in out and "-0.23" in out
+    assert "posterior spread is little reduced" in out and "-0.23" in out
+    assert "not estimated from this data" not in out
     assert "callout-warning" in out
     # The informed parameter is not listed as a caveat.
     assert "kappa_min_u" not in out
@@ -1807,8 +1810,8 @@ def test_dispersion_scope_flags_a_prior_acting_as_a_floor(tmp_path, capsys):
     )
     report_cells.render_dispersion_scope(str(fit))
     out = capsys.readouterr().out
-    assert "pressing against its prior" in out
-    assert "below what the prior comfortably allows" in out
+    assert "posterior mean lies in a prior tail" in out
+    assert "do not establish a prior boundary" in out
     assert "the curve at and below 18 months" in out
 
 
@@ -1824,7 +1827,7 @@ def test_dispersion_scope_reports_every_curve_readable_when_nothing_is_flagged(
     )
     report_cells.render_dispersion_scope(str(fit))
     out = capsys.readouterr().out
-    assert "both ends of each curve can be read" in out
+    assert "does not establish data support" in out
     assert "callout-warning" not in out
 
 
@@ -1886,11 +1889,11 @@ def test_dispersion_scope_reports_a_strained_legacy_curve_as_one_finding(tmp_pat
     )
     report_cells.render_dispersion_scope(str(fit))
     out = capsys.readouterr().out
-    assert out.count("- **") == 1, "the coupled pair must be one bullet"
-    assert "The shape of this curve" in out
+    assert out.count("- **") == 2
+    assert "Inspect the full distributions" in out
     assert "`a_kappa_s`" in out and "`b_kappa_mag_s`" in out
-    assert "one finding, not two" in out
-    assert "steeper decline with age than the slope prior allows" in out and "pulled down to compensate" in out
+    assert "do not establish a prior boundary" in out
+    assert "pulled down to compensate" not in out
 
 
 def test_dispersion_scope_does_not_call_a_far_tail_posterior_uninformed(tmp_path, capsys):
@@ -1909,12 +1912,12 @@ def test_dispersion_scope_does_not_call_a_far_tail_posterior_uninformed(tmp_path
     )
     report_cells.render_dispersion_scope(str(fit))
     out = capsys.readouterr().out
-    assert "pressing against its prior" in out
+    assert "posterior mean lies in a prior tail" in out
     assert "not estimated from this data" not in out
-    assert "does not** mean the data was silent" in out.replace("**not**", "not**")
+    assert "do not establish a prior boundary, absence of learning" in out
 
 
-def test_dispersion_scope_still_calls_a_mid_prior_flat_posterior_unestimated(tmp_path, capsys):
+def test_dispersion_scope_does_not_infer_no_learning_from_spread(tmp_path, capsys):
     fit = _kappa_fit(
         tmp_path,
         definition={"n_trials": 810, "kappa_s": {"anchor_ages": [18.0, 72.0]}},
@@ -1925,7 +1928,8 @@ def test_dispersion_scope_still_calls_a_mid_prior_flat_posterior_unestimated(tmp
     )
     report_cells.render_dispersion_scope(str(fit))
     out = capsys.readouterr().out
-    assert "not estimated from this data" in out and "mid-prior" in out
+    assert "posterior spread is little reduced" in out
+    assert "not estimated from this data" not in out
     assert "pressing against its prior" not in out
 
 
@@ -2040,8 +2044,9 @@ def test_dispersion_scope_pairs_only_two_pressing_parameters_and_reads_the_direc
     )
     report_cells.render_dispersion_scope(str(fit))
     out = capsys.readouterr().out
-    assert "The shape of this curve" in out and "gentler decline" in out
-    assert "pulled up to compensate" in out
+    assert "Inspect the full distributions" in out
+    assert "gentler decline" not in out
+    assert "pulled up to compensate" not in out
 
 
 def test_reference_child_calibration_sets_the_curve_beside_the_sample(tmp_path, monkeypatch, capsys):

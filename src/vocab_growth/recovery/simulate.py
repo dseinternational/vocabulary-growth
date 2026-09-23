@@ -1336,9 +1336,14 @@ def load_simulation(
 
     record = read_json(os.path.join(directory, SIMULATION_FILENAME))
     if expected_definition is not None:
-        recorded = (record.get("simulation") or {}).get("definition")
+        recorded = (record.get("model") or {}).get("definition")
+        if not isinstance(recorded, dict):
+            raise ValueError(
+                f"The simulation at {directory} records no model definition; "
+                "re-run the simulate step before fitting it."
+            )
         current = normalise_for_json(expected_definition)
-        if recorded is not None and recorded != current:
+        if recorded != current:
             differing = sorted(
                 key
                 for key in set(recorded) | set(current)

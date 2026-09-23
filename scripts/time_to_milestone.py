@@ -132,6 +132,7 @@ def process_univariate(key: str, merged: list[dict], *,
     )
     ages, W = load_univariate_trajectory(trace, d.n_trials)
     pop, outcome = d.population.value.upper(), d.outcome.value
+    ages, W = C.restrict_reporting_trajectory(key, outcome, ages, W)
     model_dir = C.model_dir(key)
     _emit(
         milestone_table(W, ages, TARGETS), d.model_id, pop, outcome,
@@ -156,8 +157,9 @@ def process_bivariate(key: str, merged: list[dict], *,
     pop = d.population.value.upper()
     model_dir = C.model_dir(key)
     for outcome, W, suffix in (("understood", U, "u"), ("spoken", S, "s")):
+        report_ages, W = C.restrict_reporting_trajectory(key, outcome, ages, W)
         _emit(
-            milestone_table(W, ages, TARGETS), d.model_id, pop, outcome,
+            milestone_table(W, report_ages, TARGETS), d.model_id, pop, outcome,
             os.path.join(model_dir, f"time_to_milestone_{suffix}.csv"),
             f"Time-to-milestone — {d.model_id} ({pop}, {outcome})",
             os.path.join(model_dir, f"time_to_milestone_{suffix}"), merged,

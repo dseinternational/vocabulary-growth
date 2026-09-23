@@ -326,24 +326,18 @@ below CDF 0.14 and none of them flagged. ``report_cells`` had tested both tails
 since it began rendering this table, so the console report and the page it feeds
 disagreed."""
 CONTRACTION_FLOOR = 0.05
-"""Contraction below which the posterior is essentially reporting the prior back."""
+"""Screen for little reduction in posterior spread; not a test of learning."""
 
 
 def conflict_table(short: str, label: str, definition) -> list[dict]:
     """Prior-data conflict diagnostics for one model — review R3.
 
-    Two numbers per parameter. **Prior CDF** at the posterior mean says where the
-    data landed inside the prior: near 1 means the prior is a ceiling the
-    likelihood is pushing against. **Contraction**, ``1 - posterior sd / prior
-    sd``, says how much the data actually informed it: at or below zero the
-    posterior is no narrower than the prior, so the reported value is the prior
-    restated rather than an estimate.
-
-    Both matter and neither is sufficient. VG12's `eta` was flagged on the pair
-    (CDF 0.913, contraction 0.106) — pressing *and* uninformed. VG13's `eta_q`
-    sits mid-prior but with contraction below zero, which the CDF alone would
-    have passed. See notes/202608050900-td-hierarchical-geometry.md §5.
+    Prior CDF at the posterior mean locates that mean within the prior.
+    Contraction is ``1 - posterior sd / prior sd``. A tail mean or little
+    contraction merits inspection of the full distributions and sensitivity to
+    plausible priors. Neither establishes conflict or absence of learning.
     """
+
     trace_path = os.path.join(MODELS_DIR, label, "trace.nc")
     if not os.path.isfile(trace_path):
         return []
@@ -387,9 +381,9 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
             prior_median = float("nan")
         flags = []
         if cdf >= CONFLICT_CDF or cdf <= 1.0 - CONFLICT_CDF:
-            flags.append("pressing")
+            flags.append("tail-mean")
         if contraction <= CONTRACTION_FLOOR:
-            flags.append("uninformed")
+            flags.append("little-spread-reduction")
         rows.append(
             dict(
                 model=short,

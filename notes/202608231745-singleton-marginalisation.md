@@ -1,5 +1,8 @@
 # Marginalising the singleton child effects: what it took, and what it costs
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The adaptive quadrature has no guaranteed error direction. A probability below one is not evidence that it is underestimated or accurate. Independent integration found a 20-node overestimate of about 0.751 log units at an admissible parameter setting. The path is experimental and is blocked from strict publication pending numerical validation. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

@@ -37,8 +37,11 @@ source is caught the way one that outlives a refit is.
 
 from __future__ import annotations
 
+import ast
+import hashlib
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 
 from dse_research_utils.metadata.provenance import sha256_file
 
@@ -82,6 +85,25 @@ def _file_sha256(path: str) -> str:
     still compares equal.
     """
     return f"sha256:{sha256_file(path)}"
+
+
+def comparison_code_signature() -> dict:
+    """Package and analysis-script identity, excluding prose and comments."""
+    from vocab_growth import environment as env
+    from vocab_growth.models.implementation_identity import implementation_signature
+
+    digest = hashlib.sha256()
+    root = Path(env.ROOT_DIR) / "scripts"
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+        for node in ast.walk(tree):
+            if hasattr(node, "body") and isinstance(node.body, list) and node.body:
+                first = node.body[0]
+                if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+                    node.body.pop(0)
+        digest.update(path.relative_to(root).as_posix().encode())
+        digest.update(ast.dump(tree, include_attributes=False).encode())
+    return {"package": implementation_signature(), "scripts_ast_sha256": digest.hexdigest()}
 
 
 def fit_manifest_fingerprint(model_output_dir: str) -> dict:
@@ -196,6 +218,8 @@ def write_comparison_manifest(
     entry: dict = {
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "outputs": sorted(outputs),
+        "output_hashes": {name: _file_sha256(os.path.join(comparisons_dir, name)) for name in sorted(outputs)},
+        "implementation": comparison_code_signature(),
         "contributing_fits": {
             label: fit_manifest_fingerprint(model_dir)
             for label, model_dir in sorted(contributing.items())
@@ -223,6 +247,7 @@ def validate_comparison_manifest(
     *,
     source_root: str | None = None,
     current_source_data_hash: str | None = None,
+    require_publication: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Validate every recorded comparison against the current fitted output.
 
@@ -253,13 +278,49 @@ def validate_comparison_manifest(
     except Exception as exc:  # noqa: BLE001 - reported, not raised
         return [f"Could not read {manifest_path}: {exc}"], warnings
 
+    if not isinstance(payload, dict) or not isinstance(payload.get("scripts"), dict):
+        return ["Comparison manifest has no valid scripts record."], warnings
     claimed: set[str] = set()
+    checked_fits: set[str] = set()
+    current_code = comparison_code_signature() if require_publication else None
     for script, entry in sorted((payload.get("scripts") or {}).items()):
-        claimed.update(entry.get("outputs") or [])
+        if not isinstance(entry, dict):
+            errors.append(f"{script}: malformed provenance entry.")
+            continue
+        outputs = entry.get("outputs")
+        hashes = entry.get("output_hashes") or {}
+        if not isinstance(outputs, list) or not all(isinstance(name, str) for name in outputs) or not isinstance(hashes, dict):
+            errors.append(f"{script}: malformed output record.")
+            continue
+        if any(not isinstance(entry.get(key) or {}, dict) for key in ("contributing_fits", "source_files")):
+            errors.append(f"{script}: malformed input record.")
+            continue
+        claimed.update(outputs)
+        if require_publication:
+            if entry.get("implementation") != current_code:
+                errors.append(f"{script}: comparison code is missing or changed; regenerate outputs.")
+            if not any(entry.get(key) for key in ("contributing_fits", "source_files", "source_data_hash")):
+                errors.append(f"{script}: no contributing fit or data source is recorded.")
+        for name in outputs:
+            path = os.path.join(comparisons_dir, name)
+            if os.path.basename(name) != name:
+                errors.append(f"{script}: output must be a basename: {name}.")
+            elif not os.path.isfile(path):
+                errors.append(f"{script}: output {name} is missing.")
+            elif name in hashes and _file_sha256(path) != hashes[name]:
+                errors.append(f"{script}: output {name} changed after generation.")
+            elif require_publication and name not in hashes:
+                errors.append(f"{script}: output {name} has no recorded hash.")
         for label, recorded in sorted(
             (entry.get("contributing_fits") or {}).items()
         ):
+            if not isinstance(recorded, dict) or os.path.basename(label) != label:
+                errors.append(f"{script}: malformed contributing fit {label}.")
+                continue
             model_dir = os.path.join(models_dir, label)
+            if require_publication and label not in checked_fits:
+                checked_fits.add(label)
+                errors.extend(_publication_fit_errors(model_dir, current_source_data_hash))
             manifest_file = os.path.join(model_dir, FIT_MANIFEST_FILENAME)
             if not os.path.isfile(manifest_file):
                 errors.append(
@@ -288,6 +349,9 @@ def validate_comparison_manifest(
             )
         root = os.getcwd() if source_root is None else source_root
         for label, recorded in sorted((entry.get("source_files") or {}).items()):
+            if not isinstance(recorded, dict):
+                errors.append(f"{script}: malformed source file {label}.")
+                continue
             path = os.path.join(root, recorded.get("path") or "")
             if not os.path.isfile(path):
                 errors.append(
@@ -312,4 +376,32 @@ def validate_comparison_manifest(
                 f"{COMPARISON_MANIFEST_FILENAME} entry; its provenance is "
                 "unrecorded."
             )
+    if require_publication:
+        errors.extend(warnings)
+        warnings = []
     return errors, warnings
+
+
+def _publication_fit_errors(model_dir: str, raw_hash: str | None) -> list[str]:
+    """Validate the fit itself as well as the comparison's link to that fit."""
+    from dataclasses import asdict
+
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    from vocab_growth.analysis_frames import expected_analysis_frame_hash
+    from vocab_growth.fit_artifacts import fit_validation_kwargs, validate_fit_output
+    from vocab_growth.fit_consumers import model_key_for_dir
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    key = model_key_for_dir(model_dir)
+    if key is None:
+        return [f"{model_dir}: no registered publication validation for this variant."]
+    definition = MODEL_REGISTRY[key]
+    policy = fit_validation_kwargs(
+        "publish", expected_definition=definition,
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(sampling.get_sampling_configuration("rep")),
+        current_source_data_hash=raw_hash,
+        current_analysis_frame_hash=expected_analysis_frame_hash(key, definition),
+    )
+    return [f"{key}: {error}" for error in validate_fit_output(model_dir, **policy)]

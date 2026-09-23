@@ -1,5 +1,8 @@
 # Dispersion $\kappa$ is not comparable across outcomes or across models
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Counts below the 810 reference ceiling can still reach their own form's lower ceiling. The moment-matched fallback derives a concentration; the legacy product-marginal fallback does not. Little prior-to-posterior contraction does not establish absent information, and different models need not give the same concentration. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

@@ -1,5 +1,8 @@
 # The forward score VG25 was sent to, and could not run
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Removing a direct lag from a likelihood term does not make its prediction invariant after refitting shared parameters. Forward speech scoring conditions on comprehension observed at the held-out visit and needs the corresponding mixture weights. The paired uncertainty calculation must group repeated visits by child. The original numerical comparison needs regeneration with these corrections. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

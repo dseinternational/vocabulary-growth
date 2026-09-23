@@ -273,7 +273,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all. A fit reaching this page has therefore either met those thresholds or is published under a recorded exception — and if there is an exception, the block above states it, names the parameter, and gives the reason it was accepted. Read that block before reading anything else on this page.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 

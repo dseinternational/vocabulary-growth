@@ -42,13 +42,14 @@ bootstrap over rows would give.
 
 Attenuation
 -----------
-Observed correlations are attenuated by measurement error: a child's count is one
-noisy realisation, so two assessments correlate less than their underlying
-standings do. A binomial lower bound on the error variance is reported, and with
-it a disattenuated correlation. Because that bound ignores the extra-binomial
-dispersion the models fit (``kappa``), it *understates* error and therefore
-*understates* the correction — the disattenuated figure is a lower bound on true
-trait stability, not an estimate of it.
+Independent additive measurement error attenuates Pearson correlations under
+the classical error model. Counts and ranks need not satisfy those assumptions.
+An equal-probability independent-item Binomial variance is a
+benchmark, not a lower bound: unequal item probabilities can give less
+variance, while dependence can increase it. Dividing a Spearman correlation by
+this estimated reliability is only a descriptive sensitivity calculation.
+The familiar attenuation formula is for Pearson correlations under a specified
+additive-error model. It does not establish a bound on latent rank correlation.
 
 Usage::
 
@@ -97,7 +98,8 @@ def adjusted_scores(population: str, outcome: str) -> pd.DataFrame:
         )
         d = d[d[outcome].notna()].copy()
         # TD rows carry no per-row ceiling; the form does. Use the observed
-        # maximum per form, which is the ceiling the instrument admits.
+        # maximum per form as an empirical scale proxy. It need not equal the
+        # registered form ceiling, which limits the measurement-error benchmark.
         ceiling = d.groupby("form")[outcome].transform("max").values.astype(float)
         ceiling = np.maximum(ceiling, d[outcome].values + 1)
 
@@ -118,11 +120,22 @@ def adjusted_scores(population: str, outcome: str) -> pd.DataFrame:
 
 
 def icc(d: pd.DataFrame, key: str = "child") -> float:
-    """Between-child share of residual variance (observations, not pairs)."""
-    m = d.groupby(key)["resid"].transform("mean")
-    vb = np.var(m, ddof=1)
-    vw = np.var(d["resid"].values - m.values, ddof=1)
-    return float(vb / (vb + vw)) if (vb + vw) > 0 else np.nan
+    """One-way random-intercept ANOVA estimate, allowing unequal visit counts.
+
+    Subtract within-child sampling noise from the variance of child means.
+    Negative between-child variance estimates are truncated at zero.
+    """
+    groups = d.groupby(key)["resid"]
+    sizes, means = groups.size(), groups.mean()
+    n, k = len(d), len(sizes)
+    if k < 2 or n <= k:
+        return np.nan
+    ms_between = float((sizes * (means - d["resid"].mean()) ** 2).sum() / (k - 1))
+    ms_within = float(((d["resid"] - groups.transform("mean")) ** 2).sum() / (n - k))
+    n0 = float((n - (sizes**2).sum() / n) / (k - 1))
+    between = max(0.0, (ms_between - ms_within) / n0)
+    total = between + ms_within
+    return between / total if total > 0 else np.nan
 
 
 def icc_ci(d: pd.DataFrame, n_boot: int) -> tuple[float, float]:
@@ -147,7 +160,12 @@ def icc_ci(d: pd.DataFrame, n_boot: int) -> tuple[float, float]:
             g = by_child[c].copy()
             g["boot_key"] = k          # duplicates become distinct clusters
             frames.append(g)
-        v = icc(pd.concat(frames, ignore_index=True), key="boot_key")
+        resampled = pd.concat(frames, ignore_index=True)
+        if {"age", "study", "logit"} <= set(resampled):
+            design = _design(resampled.age.to_numpy(float), resampled.study)
+            beta = np.linalg.lstsq(design, resampled["logit"].to_numpy(), rcond=None)[0]
+            resampled["resid"] = resampled["logit"].to_numpy() - design @ beta
+        v = icc(resampled, key="boot_key")
         if not np.isnan(v):
             vals.append(v)
     if not vals:
@@ -176,7 +194,11 @@ def _spearman(x, y) -> float:
 
 
 def cluster_boot(pairs: pd.DataFrame, stat, n_boot: int) -> tuple[float, float]:
-    """Percentile CI, resampling CHILDREN (the independent unit)."""
+    """Child-bootstrap interval conditional on the fitted residual adjustment.
+
+    Unlike the ICC bootstrap, this pair-only check cannot refit age and study
+    effects. Its interval omits uncertainty in that first-stage adjustment.
+    """
     children = pairs["child"].unique()
     by_child = {c: g for c, g in pairs.groupby("child", sort=False)}
     vals = []
@@ -192,12 +214,12 @@ def cluster_boot(pairs: pd.DataFrame, stat, n_boot: int) -> tuple[float, float]:
 
 
 def reliability_bound(d: pd.DataFrame) -> float:
-    """Binomial lower bound on measurement error, as a reliability.
+    """Equal-item Binomial measurement-variance benchmark, not a bound.
 
-    On the logit scale the sampling variance of an observed proportion is
-    approximately ``1 / (n p (1 - p))``. Ignoring the extra-binomial dispersion
-    the models fit, this UNDERSTATES error, so the reliability it gives is an
-    upper bound and the resulting disattenuation is conservative.
+    Uses the delta-method logit variance 1 / (n p (1-p)). Item heterogeneity,
+    dependence, response errors and truncation can all change this approximation.
+    A negative residual variance signals incompatibility with this benchmark;
+    truncation at zero does not establish non-identification of another model.
     """
     err = 1.0 / (d["n_items"].values * d["p_hat"].values * (1 - d["p_hat"].values))
     total = np.var(d["resid"].values, ddof=1)
@@ -505,10 +527,11 @@ def report(population: str, outcome: str, n_boot: int, max_age: float | None = N
     # full set (singletons included) gave 0.865 against 0.853 here; small, but
     # the decomposition below is only coherent on one of them.
     rel = reliability_bound(rep_only)
-    print(f"  reliability (binomial upper bound, repeats)    = {rel:.3f}")
+    print(f"  reliability (equal-item benchmark, repeats)    = {rel:.3f}")
     print(f"  variance: between-child {i:5.1%}  within {1 - i:5.1%} "
           f"(measurement {1 - rel:5.1%}, occasion {(1 - i) - (1 - rel):+5.1%})")
 
+    print("  rho/rel is a sensitivity calculation; values outside [-1,1] are incompatible with a correlation.")
     print(f"\n  {'lag (mo)':>10s} {'pairs':>7s} {'children':>9s} {'rho':>7s} "
           f"{'89% CI':>18s} {'rho/rel':>8s}")
     for a, b in LAG_BINS:
@@ -517,7 +540,7 @@ def report(population: str, outcome: str, n_boot: int, max_age: float | None = N
             continue
         rho = _spearman(sub.r0, sub.r1)
         clo, chi = cluster_boot(sub, lambda x: _spearman(x.r0, x.r1), n_boot)
-        dis = min(1.0, rho / rel) if rel > 0 else np.nan
+        dis = rho / rel if rel > 0 else np.nan
         print(f"  {a:4d}-{b:<5d} {len(sub):7d} {sub.child.nunique():9d} "
               f"{rho:7.3f} [{clo:7.3f},{chi:7.3f}] {dis:8.3f}")
 

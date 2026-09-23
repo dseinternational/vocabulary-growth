@@ -34,13 +34,14 @@ from scipy.special import expit
 
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
+from vocab_growth.censored_ages import summarise_crossing_ages
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 TARGETS = [50, 150, 300, 500, 750]
 SHARES = [0.50, 0.75, 0.90]
 N_CHILDREN = 2000
 DRAW_SUBSAMPLE = 1000
-HDI_PROB = 0.89
+INTERVAL_PROB = 0.89
 CAPS = {"understood": 72.0, "spoken": 90.0}
 
 
@@ -115,20 +116,9 @@ def crossing_ages(Y: np.ndarray, ages: np.ndarray, level: float) -> np.ndarray:
     return np.where(np.isnan(out), np.inf, out)
 
 
-def summarise(values: np.ndarray, cap: float) -> dict:
-    median = float(np.median(values))
-    finite = np.isfinite(values)
-    lo, hi = (
-        C.hdi_from_samples(values[finite], HDI_PROB) if finite.sum() > 1 else (np.nan, np.nan)
-    )
-    ok = np.isfinite(median) and median <= cap
-    return {
-        "median": median if ok else np.nan,
-        "lo": float(lo) if np.isfinite(lo) else np.nan,
-        "hi": float(hi) if np.isfinite(hi) else np.nan,
-        "frac_beyond_window": float(np.mean(values > cap)),
-        "beyond_cap": not ok,
-    }
+def summarise(values: np.ndarray, cap: float, floor: float = 0.0) -> dict:
+    """Censor-aware median and 89% equal-tailed interval across all draws."""
+    return summarise_crossing_ages(values, cap, floor, INTERVAL_PROB)
 
 
 def run(model: str) -> pd.DataFrame:
@@ -152,7 +142,7 @@ def run(model: str) -> pd.DataFrame:
                     )
     rows = [
         {"model": model.upper(), "outcome": o, "target": t, "share": s,
-         **summarise(acc[(o, t, s)], CAPS[o])}
+         **summarise(acc[(o, t, s)], CAPS[o], ages[0])}
         for (o, t, s) in keys
     ]
     return pd.DataFrame(rows)
@@ -174,11 +164,14 @@ def table(df: pd.DataFrame, outcome: str) -> None:
             cells = []
             for share in SHARES:
                 r = r0[r0.share == share].iloc[0]
-                if r["beyond_cap"]:
+                if r["before_floor"]:
+                    cells.append("before the grid".center(22))
+                elif r["beyond_cap"]:
                     cells.append(f"not by {cap:.0f} mo".center(22))
                 else:
                     hi = f"{r['hi']:.1f}" if np.isfinite(r["hi"]) and r["hi"] <= cap else f">{cap:.0f}"
-                    cells.append(f"{r['median']:5.1f}  [{r['lo']:.1f}, {hi}]".center(22))
+                    lo = f"{r['lo']:.1f}" if np.isfinite(r["lo"]) else "before grid"
+                    cells.append(f"{r['median']:5.1f}  [{lo}, {hi}]".center(22))
             print(f"{target:>6} {m:>6} | " + " | ".join(cells))
         print()
 

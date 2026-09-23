@@ -1,5 +1,8 @@
 # Data defects in the us_01 (Edgin) subset
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. An empirical flag rate in typically developing records is not a false-positive rate unless the records' validity is known. Equal, declining or boundary counts can motivate a source audit, but do not by themselves prove a reporting mechanism or an invalid record. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 

@@ -1,5 +1,8 @@
 # The Edgin subset is age-truncated, and what the missing administrations turn out to be
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The ceiling-only exclusion uses observed counts and is outcome-dependent, though source concerns motivate it. It can remove genuinely high-vocabulary children. The earlier distinction between provenance and outcome selection is incorrect. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 

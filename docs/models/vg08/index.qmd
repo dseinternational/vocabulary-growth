@@ -150,7 +150,7 @@ The same age curve can be drawn two ways, and they differ by roughly an order of
 - **Population-level** sets every random effect to zero: a conditional zero-effect trajectory — a reference with study and child effects set to zero, not the average of children's curves. Its interval carries uncertainty about that reference trajectory only. This is what the production ratio, the comprehension–production gap, the expected-count curves, the age derivatives and the dispersion curves show, and it is what the `p_population_*` and `Ey_population_*` columns of the summary tables report. The unprefixed historical `p_*` and `Ey_*` columns carry the same population-level meaning.
 - **Subject-marginal** draws a fresh child's random effect for every posterior draw and keeps that one child across the whole age grid. It answers _where would one more, unseen child fall?_ and is much wider. This is what the joint trajectory figures, the predictive ratio and predictive scatter, and every posterior predictive count artefact (PMF, CDF, count distributions, median trends) show, and it is what the `Y_*`, `P(Y<=k)`, `p_subject_marginal_*` and `Ey_subject_marginal_*` columns report.
 
-Confusing the two is the single easiest way to misread this report: the population band answers a question about a group average, and only the subject-marginal band answers a question about a child.
+Confusing the two is the single easiest way to misread this report: the population band answers a question about a reference curve at zero study and child effects, and only the subject-marginal band answers a question about a child.
 
 :::
 
@@ -284,7 +284,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
@@ -349,7 +349,7 @@ Read it together with the dispersion figures below rather than instead of them. 
 
 ![The same **subject-marginal** prediction with the 50% inner and 89% outer equal-tailed intervals drawn explicitly.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
-These are the widest bands in the report, and correctly so: they describe where a single unseen child might fall, not where the group average lies. The comprehension curve stops earlier than the production curve because the two outcomes carry different reporting caps, which the _Model at a glance_ block states; the evidence for comprehension thins out earlier, so the model declines to publish an understood curve past that point.
+These are the widest bands in the report, and correctly so: they describe where a single unseen child might fall, not where the reference curve at zero study and child effects lies. The comprehension curve stops earlier than the production curve because the two outcomes carry different reporting caps, which the _Model at a glance_ block states; the evidence for comprehension thins out earlier, so the model declines to publish an understood curve past that point.
 
 ### Production ratio
 
@@ -368,7 +368,7 @@ render_conditional_production_check()
 ```
 
 
-@fig-production-rate-by-understood re-plots the identical quantity with comprehension on the horizontal axis. It answers a different question from the age plot: not _how old is this child?_ but _how far along in comprehension is this child?_ — which is the more useful framing when children of the same age are at very different stages. Note that the horizontal axis compresses towards the right, because expected comprehension grows slowly at the top of the reported range.
+@fig-production-rate-by-understood re-plots the age-indexed reference ratio against the reference comprehension curve. It does not condition on an individual child's observed comprehension or integrate over the possible ages of children with that count. The horizontal axis compresses where the reference comprehension curve changes slowly.
 
 ![The ratio of **subject-marginal** predicted spoken to predicted understood counts.](production_rate_predictive.png){#fig-production-rate-predictive .lightbox fig-align="left"}
 
@@ -405,7 +405,7 @@ Read across from a child's comprehension score to the line for their age, and th
 
 ### Posterior summary table
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child and occasion-level variability, so it is much the wider of the two. The `_population_` and `_subject_marginal_` columns state the two estimands explicitly; the unprefixed columns are the population-level ones. Quote $Y$ or a `subject_marginal` column when asking where a single child might fall, and a `population` column when asking about the group average. Columns labelled `ci` are the 89% outer interval and those labelled `ci50` the 50% inner interval, both equal-tailed.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child and occasion-level variability, so it is much the wider of the two. The `_population_` and `_subject_marginal_` columns state the two estimands explicitly; the unprefixed columns are the population-level ones. Quote $Y$ or a `subject_marginal` column when asking where a single child might fall, and a `population` column when asking about the reference curve at zero study and child effects. Columns labelled `ci` are the 89% outer interval and those labelled `ci50` the 50% inner interval, both equal-tailed.
 
 ```{python}
 #| echo: false
@@ -582,6 +582,6 @@ render_loo_section()
 - **The child effect is one constant offset.** Every child's latent comprehension trajectory is parallel to every other's: relative standing is fixed at every age, rank changes are impossible, and developmental tracking is therefore perfect by construction rather than estimated. Do not read age variation in $\kappa$ as changing between-child spread once the child effect is in place — it is residual, occasion-level dispersion.
 - **The hierarchy is asymmetric.** A child effect is fitted on comprehension only. Between-child differences in the production ratio have nowhere to go but the spoken dispersion parameter, so the spoken predictions rest on a structure this model itself demonstrates to be inadequate for comprehension.
 - **The dispersion parameterisation cannot represent a rising $\kappa$.** It is retained deliberately, for lineage comparability; where the data want dispersion to rise with age, this model cannot follow them.
-- **Above the high age anchor the production ratio is clamped**, and the reported comprehension range stops before the spoken range does. Both are stated in the _Model at a glance_ block. Rows beyond those points are carried by the model's smoothness assumptions rather than by observations.
+- **The production-ratio mean trend is clamped above the high anchor.** Its Gaussian-process departure remains free. The reporting age caps limit the displayed quantities; values beyond well-supported ages would depend more heavily on the model assumptions.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it, and the receptive-to-expressive mapping is a cross-sectional conversion, not a causal claim.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat.

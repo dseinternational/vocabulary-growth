@@ -210,9 +210,11 @@ uv run python scripts/prepare_report_figures.py
 uv run quarto render docs/report
 ```
 
+The experimental singleton-quadrature path cannot pass strict sync or publication. Its numerical error is not validated across the required parameter range; keep explicit child effects for reporting.
+
 Use the documented `--allow-caveats` path only for fits whose limitations have been reviewed and recorded. `--allow-provisional` is for local development, not publication. Publication validation follows catalogue roles; a failing development model can be skipped, while a failing unclassified candidate blocks sync.
 
-Use `scripts/publish_comparison.py` to stage, render, upload and verify the comparison book. It clears stale staged inputs and checks the published assets. It is a publishing command, not a local-preview command. `--run-id` updates an existing publication.
+Use `scripts/publish_comparison.py` to stage, render, upload and verify the comparison book. Before staging, it requires current comparison code and output hashes, input provenance and compatible registered reporting fits with complete diagnostics. This strict publisher currently requires clean convergence; the model-report caveat override does not bypass it. Sensitivity and recovery directories need their own validation path and are not imported into the comparison book as unverified inputs. `--no-render` requires a saved receipt matching the current inputs, report source, HTML and local assets. It is a publishing command, not a local-preview command. `--run-id` updates an existing publication.
 
 **Do not upload traces to the public container.** Leave `--include-traces` off; traces contain observation-level data and identifiers. Use designated internal or local storage for trace archives.
 

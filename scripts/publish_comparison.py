@@ -49,6 +49,11 @@ import subprocess
 import sys
 
 from vocab_growth import environment as env
+from vocab_growth.comparisons_provenance import (
+    _file_sha256,
+    validate_comparison_manifest,
+)
+from vocab_growth.fit_artifacts import read_json, source_data_hash, write_json_atomic
 from vocab_growth.publication_checks import (
     describe_failures,
     inspect_report,
@@ -69,6 +74,50 @@ PROJECT = "vocabulary-growth"
 KEEP = ("index.qmd",)
 
 
+def validate_inputs(comparisons_dir: str) -> dict[str, str]:
+    """Require current inputs and publication-quality contributing fits first."""
+    errors, warnings = validate_comparison_manifest(
+        comparisons_dir, env.models_output_dir(), source_root=REPO_ROOT,
+        current_source_data_hash=source_data_hash(env.DATA_DIR),
+        require_publication=True,
+    )
+    if errors or warnings:
+        raise SystemExit("Comparison publication refused:\n  " + "\n  ".join(errors + warnings))
+    return {
+        name: _file_sha256(os.path.join(comparisons_dir, name))
+        for name in sorted(os.listdir(comparisons_dir))
+        if os.path.isfile(os.path.join(comparisons_dir, name))
+    }
+
+
+def check_staged_inputs(inputs: dict[str, str]) -> None:
+    extras = [name for name in os.listdir(BOOK_DIR)
+              if os.path.isfile(os.path.join(BOOK_DIR, name))
+              and name not in inputs and name not in (*KEEP, "index.html")
+              and not name.startswith("_")]
+    if extras:
+        raise SystemExit("Unvalidated staged files remain; stage again: " + ", ".join(sorted(extras)))
+    for name, digest in inputs.items():
+        path = os.path.join(BOOK_DIR, name)
+        if not os.path.isfile(path) or _file_sha256(path) != digest:
+            raise SystemExit(f"Staged input {name} differs from validated output; stage and render again.")
+
+
+def render_receipt(inputs: dict[str, str]) -> dict:
+    """Tie a reusable render to its inputs, report source and rendered assets."""
+    inspection = inspect_report(BOOK_HTML)
+    failures = local_failures(inspection)
+    if failures:
+        raise SystemExit("Rendered comparison is incomplete: " + "; ".join(describe_failures(failures)))
+    return {
+        "inputs": inputs, "source": _file_sha256(BOOK_SOURCE),
+        "rendered": {
+            name: _file_sha256(os.path.join(BOOK_DIR, name))
+            for name in ["index.html", *present_assets(inspection)]
+        },
+    }
+
+
 def stage_inputs(comparisons_dir: str) -> int:
     """Clear the staged copy, then copy the comparison artefacts in fresh.
 
@@ -84,7 +133,9 @@ def stage_inputs(comparisons_dir: str) -> int:
         os.remove(path)
         removed += 1
     copied = 0
-    for source_dir in (comparisons_dir, os.path.join(comparisons_dir, "recovery")):
+    # Only the manifest-validated comparison root belongs in this book. Recovery
+    # reports have their own pipeline and are not imported as unverified inputs.
+    for source_dir in (comparisons_dir,):
         if not os.path.isdir(source_dir):
             continue
         for name in sorted(os.listdir(source_dir)):
@@ -181,11 +232,19 @@ def main() -> None:
 
     env.set_output_root(args.out)
     comparisons_dir = env.comparisons_output_dir()
-
-    if not args.no_stage:
-        stage_inputs(comparisons_dir)
-    if not args.no_render:
+    inputs = validate_inputs(comparisons_dir)
+    receipt_path = os.path.join(BOOK_DIR, "_publication_receipt.json")
+    if args.no_render:
+        check_staged_inputs(inputs)
+        if not os.path.isfile(receipt_path) or read_json(receipt_path) != render_receipt(inputs):
+            raise SystemExit("Rendered book has no matching publication receipt; stage and render again.")
+    else:
+        if not args.no_stage:
+            stage_inputs(comparisons_dir)
+        check_staged_inputs(inputs)
         render()
+        check_staged_inputs(inputs)
+        write_json_atomic(receipt_path, render_receipt(inputs))
     if not os.path.isfile(BOOK_HTML):
         raise SystemExit(f"{BOOK_HTML} does not exist; render the book first")
 

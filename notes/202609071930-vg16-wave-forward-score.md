@@ -1,5 +1,8 @@
 # VG16's sequential validation target: what is held out, and what may be claimed from it
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Forward-score standard errors must group repeated contributions by child. Speech scores here condition on comprehension observed at the held-out visit, so they are not forecasts from earlier history alone. Unchanged likelihood terms at fixed parameter values need not give equal predictions after refitting; the understood and zero-lag rows are not invariant controls. The conditional mixture also needs weighting by observed comprehension. Rerun the scores before reusing the numerical contrast. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The statement that VG16 recovery is unavailable was superseded by the [recovery implementation check](202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md). Both recovery and forward scoring are implemented; each still needs suitable completed runs to provide evidence.
 

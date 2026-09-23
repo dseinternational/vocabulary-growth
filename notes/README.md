@@ -5,7 +5,7 @@
 
 Notes are dated records, named `YYYYMMDDHHMM-slug.md`. Their counts, fits and open work describe the revision they examined. A retained note is not a claim that its results or recommendations remain current.
 
-For current practice, use the [model inventory](../docs/models/README.md), [prior guide](../docs/models/PRIORS.md), [data guide](../data/readme.md) and [runbooks](../docs/runbooks/full-refit.md). The following decisions provide useful entry points:
+For current practice, use the [model inventory](../docs/models/README.md), [prior guide](../docs/models/PRIORS.md), [data guide](../data/readme.md) and [runbooks](../docs/runbooks/full-refit.md). The [September statistical review corrections](202609231200-statistical-review-corrections.md) qualify earlier methodological claims and record calculation fixes. The following decisions provide useful entry points:
 
 - [Reporting sources and age caps](202608221200-reporting-source-by-quantity.md), with the [September cap check](202609091700-comprehension-cap-check-rerun.md).
 - [Model roles](202609091600-model-roles-settled.md) and the [VG20/VG22 decision](202609091200-vg20-vg22-gate-resolved.md).
@@ -169,3 +169,4 @@ The September documentation review removed the May meeting summary, August proje
 | [202609151930](202609151930-vg25-lag-out-of-the-cells.md)                        | VG25 lag out of the cells                                    | Dated analysis                              |
 | [202609160500](202609160500-vg11-length-scale-exception.md)                      | VG11 length scale exception                                  | Dated analysis                              |
 | [202609161440](202609161440-vg11-eta-sigma-0.4.md)                               | VG11 eta sigma 0.4                                           | Decision record                             |
+| [202609231200](202609231200-statistical-review-corrections.md)                   | Statistical review and corrections                           | Methodological correction record            |

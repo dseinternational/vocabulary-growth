@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import betabinom
 
-from vocab_growth.models.definitions import subject_factor_spec
+from vocab_growth.models.definitions import subject_factor_spec, subject_scale_spec
 from vocab_growth.models.subject_effects import (
     DEFAULT_SLOPE_REF_AGE_MONTHS,
     slope_reference_age,
@@ -183,10 +183,16 @@ def unseen_child_deltas(prior, definition, ages_months, rng):
     else:
         delta_q = tau_q * z_q
 
-    return (
-        np.broadcast_to(delta_u[:, None], (n_draws, ages.size)).copy(),
-        np.broadcast_to(delta_q[:, None], (n_draws, ages.size)).copy(),
-    )
+    def across_ages(delta, outcome):
+        values = np.broadcast_to(delta[:, None], (n_draws, ages.size)).copy()
+        scale = subject_scale_spec(getattr(definition, f"tau_subj_{outcome}_sigma", None))
+        if scale is not None:
+            young, old = scale.anchor_ages
+            log_ratio = _flat(prior, f"log_tau_subj_{outcome}_ratio")
+            values *= np.exp(log_ratio[:, None] * (ages[None, :] - young) / (old - young))
+        return values
+
+    return across_ages(delta_u, "u"), across_ages(delta_q, "q")
 
 
 def unseen_child_curves(prior, definition, rng, *, n_children=N_CHILD_CURVES):

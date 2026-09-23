@@ -1,5 +1,8 @@
 # VG16's available-case assumption, audited
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A form ceiling does not uniquely identify its item content. Missing comprehension that depends on observed speech can be ignorable under a suitable joint model; the missingness question must specify what is observed and conditioned on. Two sensitivity estimates do not bound missingness bias, and row count alone does not establish power. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

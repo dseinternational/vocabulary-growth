@@ -1,5 +1,8 @@
 # The `us_03` refit halved the young-age concentration, and widened the interval the project publishes
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Adding understood-only records can change the conditional speech posterior through shared parameters. An unchanged speech likelihood formula at fixed parameters does not imply unchanged inference after refitting. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

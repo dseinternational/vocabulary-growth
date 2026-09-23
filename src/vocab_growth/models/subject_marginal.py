@@ -1,11 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Exact marginalisation of the child effects only one observation ever sees.
+"""Numerical marginalisation of singleton child effects (experimental).
 
 A child assessed once contributes a single likelihood term, and its random
 effect ``delta_subject`` appears in that term alone. Nothing else in the model
-sees it, so it can be integrated out in closed form up to quadrature error:
+sees it, so it can be integrated out numerically:
 
     p(y | eta, kappa, tau) = INT phi(u) BetaBinom(y | sigmoid(eta + tau u), kappa) du
 
@@ -25,16 +25,14 @@ conditional scale tracks ``tau_subject`` (the funnel mass that
 energy-BFMI driver) leave it. See
 ``notes/202608231410-td-geometry-remaining-levers.md`` section 3.
 
-Two consequences are real rather than cosmetic, and are why this is a definition
-flag and not an implementation detail:
-
-* the pointwise ``log_likelihood`` of a marginalised row is the **marginal**
-  predictive density, not the conditional one, so its ``elpd`` is not comparable
-  with a fit made without marginalisation -- which is also why it is the right
-  quantity for a leave-one-subject-out reading of a singleton row; and
-* posterior predictive draws for a marginalised row draw a fresh child effect
-  rather than reusing the fitted one, which widens the predictive interval for
-  those rows to its honest marginal width.
+The stored pointwise likelihood changes from conditional to marginal. For a
+singleton, exact leave-one-out prediction can still target the same held-out
+child under either representation. Importance-sampling behaviour can differ.
+Predictive draws with fresh child effects answer a different question from
+replicates conditional on that fitted child's effects; neither has guaranteed
+training-data coverage. Finite quadrature can also change the posterior through
+approximation error. Publication rejects this experimental path until its
+numerical error has been validated over the relevant parameter range.
 
 Why the quadrature is adaptive
 ------------------------------
@@ -107,6 +105,9 @@ EPSILON = math_constants.EPSILON
 #: VG12's fitted rows and 4.0e-05 on VG11's; thirty takes VG11 to 4.5e-06. The
 #: node count is a definition field so the doubling sensitivity check is a
 #: definition change, not a code change.
+# The historical error figures above describe those tested points only. For
+# n=810, y=400, mu=8, kappa=1000, sigma=0.5, 20 nodes overestimate the log
+# probability by about 0.751. No registered model enables this path.
 DEFAULT_QUADRATURE_NODES = 20
 
 #: Damped Newton steps used to find each row's integrand mode. Measured on
@@ -343,9 +344,11 @@ def _node_placement(value, mu, kappa, sigma, *, n_trials, epsilon):
     Starts from a closed-form Gaussian approximation -- the child effect implied
     by the row's own count, shrunk towards the prior by the Beta-Binomial's
     information -- and refines it with damped Newton steps on finite differences
-    of :func:`_log_integrand`. The scale is capped at the prior's, which the
-    exact conditional posterior of a log-concave likelihood cannot exceed, so a
-    failed search underestimates a tail row rather than inventing mass.
+    of :func:`_log_integrand`. Capping the proposal scale at the prior scale is
+    a numerical heuristic. The Beta-Binomial likelihood is not globally
+    log-concave in this parameterisation, and the approximation error can have
+    either sign. Check larger node counts against independent integration over
+    the parameter range of each proposed use.
     """
     p_hat = (value + 0.5) / (np.float64(n_trials) + 1.0)
     eta_hat = pt.log(p_hat) - pt.log1p(-p_hat)

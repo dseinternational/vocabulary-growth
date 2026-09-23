@@ -132,7 +132,7 @@ $$
 
 $f_U$ (understood) and $h$ (the production ratio) are each a straight-line developmental trend plus a Gaussian process on the logit scale. $g$ (the signed ratio) is not: signing rises and then recedes, so its mean is a three-anchor "tent" — two logit-linear segments meeting at a peak, clamped flat outside the outer anchors — with a Gaussian process carrying smooth departures around it.
 
-A **Plackett copula** joins the two expressive marginals. It is a construction that couples two outcomes into a joint distribution while leaving each one's own distribution untouched, so adding it changes nothing about the separately estimated signing and speaking trajectories; it only says how much they co-occur. Its single parameter is the odds ratio $\psi$, which is age-invariant but carries a study-level random intercept:
+A **Plackett copula** joins the two expressive marginals. At fixed parameter values it couples the two marginal probabilities without changing them. Refitting the joint model can change the estimated marginal trajectories because the shared parameters use all likelihood terms. Its single parameter is the odds ratio $\psi$, which is age-invariant but carries a study-level random intercept:
 
 $$
 \pi_\text{both} = C(r, q; \psi), \quad \pi_\text{sign-only} = r - \pi_\text{both}, \quad \pi_\text{speak-only} = q - \pi_\text{both}, \quad \pi_\text{neither} = 1 - r - q + \pi_\text{both}.
@@ -165,7 +165,7 @@ $\psi$ is identified by four sources: three that report the four within-understo
 
 $\psi$ carries a **study-level random intercept**, zero-summed over the sources that inform it. This is not a refinement but a correction: the four sources disagree about the association substantially, and until 2026-08-12 $\psi$ was the only latent in this model without a study term — so the reported value was a precision-weighted average over whichever sources happened to be in the pool, and moved substantially on adding one study. **The per-study values are the primary read; the population $\psi$ is a shrunk centre, not a consensus**, and the between-study scale is reported beside it below.
 
-$\psi$ remains **age-invariant**, and that was tested rather than assumed. `uk_07`'s rows are markedly older than the others', so its association is a natural candidate for an age effect — but age alone fits worse than study alone and adds nothing on top of it, and where the within-understood sources overlap in age, two of them are matched almost exactly and still differ several-fold. Three-way age overlap is narrow, so an age term's tails would be one study's intercept re-labelled as a trend. See `notes/202608121030-psi-heterogeneity-and-age-invariance.md`, reproduced by `scripts/psi_heterogeneity_audit.py`.
+$\psi$ is constant in age within study as a simplifying assumption. The descriptive audit examines age and study together, using standard errors that group repeated visits by child. Narrow age overlap limits separation of the two effects. Failure to detect an age effect would not establish constancy. See the [September correction](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202609231200-statistical-review-corrections.md) and the dated audit in `notes/202608121030-psi-heterogeneity-and-age-invariance.md`.
 
 The parameter stays **descriptive/exploratory**. The four-cell composition at the youngest ages, and $p_\text{any}$ there, still lean on the marginal trajectories plus $\psi$ extrapolation. `uk_07` is a randomised trial sample, though its association is present in both arms at baseline and is a property of its context rather than its trial; the registered `psi-drop-uk07` and `psi-drop-es01` variants isolate each source's pull on $\psi$ while keeping its marginals in the fit, and `tau-psi-narrow` / `tau-psi-wide` bracket the between-study scale that governs how far the per-study values shrink toward the reported centre. The primary analysis masks `uk_01` signing because it records sign-only rather than total signed words, which remains an explicit source sensitivity. `uk_06` signing is included: the source confirmed the standard DSE checklists, whose column 2 ("understands and signs") is a total sign count, closing #211.
 
@@ -424,7 +424,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality. so this fit cleared them.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
@@ -548,7 +548,7 @@ render_family_notes()
 
 ## Posterior vocabulary summaries {#sec-predictions}
 
-These tables report **population-level** query-age summaries, with study and child random effects set to zero. Because those effects are symmetric around zero on the logit scale, that is the *typical* (median) child in the typical study — **not** the arithmetic average of children's counts, which the nonlinear link shifts away from the median wherever children differ. They are also not the predictive distribution for a new child, which — given the child-level scales in the variation table above — is much wider. Intervals are 89% outer and 50% inner equal-tailed intervals.
+These tables report query-age summaries for a reference profile with study and child effects set to zero. Symmetric effects make zero the median of each separate latent logit, but a product of probabilities need not have its median there. These curves are also different from means across children and predictive counts for new children. Intervals are 89% outer and 50% inner equal-tailed intervals.
 
 ### Words understood
 
@@ -605,7 +605,7 @@ summary_sign = pd.read_csv("posterior_summary_sign.csv")
 summary_sign
 ```
 
-Signed vocabulary is the one outcome that **rises to a maximum and then falls back** within the reported range. That turnover is a genuine result of the model of record for signing, and it is a turnover in the _count_ of signed words, not only in their share of comprehension.
+Use the current count table and its intervals to assess whether signed vocabulary peaks within the reporting window. A decline in the signed share of comprehension does not by itself imply a decline in the signed count.
 
 ### Production and signed ratios
 
@@ -614,7 +614,7 @@ summary_q = pd.read_csv("posterior_summary_q.csv")
 summary_q
 ```
 
-The production ratio — the fraction of understood words a child can also say — rises monotonically across the range; the age at which it reaches one half is in the headline table above.
+The production ratio is the fraction of understood words the model expects a child to say. Its prior mean trend increases, but the Gaussian-process departure need not be monotone. Read any crossing of one half from the current summary and check whether the reporting window supports it.
 
 ```{python}
 summary_r = pd.read_csv("posterior_summary_r.csv")
@@ -773,7 +773,7 @@ Each milestone is found **in every posterior draw and then summarised**, not rea
 
 Two disclosure columns qualify every row. A crossing is only counted when it is a genuine **transition** — the state flips from false to true inside the grid; a draw in which the state already holds at the youngest established age (for instance, speech-only ahead of sign-only from the start) is **censored**, not an early crossing, and a peak whose maximum falls on a grid edge is likewise censored rather than located. `Draws reaching it` is the fraction with a genuine transition or interior peak; `Draws censored` is the fraction where the milestone's state is censored; the remainder never satisfy the condition at all. A milestone reached in only part of the posterior is a bound, not an estimate. A milestone is also only read once a draw's child has at least one expressive word, which matters at the youngest ages.
 
-**The spacing between these ages is the substantive result.** Sign-only vocabulary stops _growing_ well before it stops being the majority of everything the child can express, and it stays larger than speech-only for a further stretch beyond that. Across that whole span sign-only declines only gently while speech-only grows quickly — the two curves in the composition figure above show it directly. **Signing is overtaken because speech grows, not because signing stops**, which is a different picture from children dropping signs as they learn to talk.
+The spacing between milestone ages describes the fitted reference curves. Establish their order and uncertainty from this fit before drawing a developmental conclusion. These observational comparisons cannot establish that learning speech causes signing to decline.
 
 ::: {.callout-note title="Why the composition figure peaks earlier than this one"}
 
@@ -937,7 +937,7 @@ render_loo_section()
 - **The association is assumed constant with age.** That was tested against a study-level explanation and survives, but it is an assumption, not a measurement at every age.
 - **Repeated children are not clustered in the composition likelihood.** The cell rows deliberately carry no child term (that is what keeps $\psi$ decoupled from the thinly identified child sign effect), so a child's repeated cross-tabulation visits enter as independent rows; the support table under Data gives how many administrations that is. $\psi$'s intervals may therefore be too narrow, and frequently measured children weigh more. The child-shifted sensitivity that would size this is tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
 - **Only the administration-level LOO row scores the association.** The per-outcome LOO rows, PIT calibration and the parameter-recovery harness run on the marginal count likelihoods; the composition rows that identify $\psi$ enter the administration row of the out-of-sample section and the posterior predictive panels, and nothing else. Cell-likelihood calibration, per-source age-banded checks and honest child-level held-out assessment are tracked in [#238](https://github.com/dseinternational/vocabulary-growth/issues/238).
-- **Population-level, not subject-marginal.** The reported curves set every random effect to zero — the typical (median) child in the typical study, which the nonlinear link separates from the arithmetic average of children's counts. Given the child-level scales in the variation table, the range a single child might fall in is much wider than any interval on this page.
+- **Population-level, not subject-marginal.** The reported curves set every random effect to zero — a profile with zero child and study effects, which need not be a median or a mean across children. Given the child-level scales in the variation table, the range a single child might fall in is much wider than any interval on this page.
 - **Signing is nearly a study-level property in these data.** Nothing here supports a causal reading of signing on later speech.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common scale; it is a unit of measurement, not an instrument any child sat.

@@ -63,6 +63,10 @@ def _write_complete_output(output_dir: Path, *, sampling_name: str = "rep") -> N
     _write_manifest(output_dir, sampling_name=sampling_name)
     (output_dir / "trace.nc").touch()
     (output_dir / "index.html").touch()
+    (output_dir / "diagnostics_summary.json").write_text(json.dumps({
+        "scan_completed": True, "max_rhat": 1.001, "min_ess": 1000,
+        "checks": {"rhat": True, "ess": True, "divergences": True, "bfmi": True},
+    }))
     write_fit_state(
         str(output_dir),
         "complete",
@@ -91,6 +95,38 @@ def test_publish_validation_accepts_complete_compatible_reporting_fit(tmp_path):
     )
 
     assert errors == []
+
+
+def test_experimental_singleton_quadrature_cannot_be_published(tmp_path):
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+    path = output_dir / "fit_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["model"]["definition"]["singleton_marginalisation"] = {"n_nodes": 20}
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    errors = validate_fit_output(str(output_dir), require_convergence_evidence=True)
+    assert any("quadrature" in error for error in errors)
+
+
+@pytest.mark.parametrize("purpose", ["publish", "publish-with-caveats", "sync", "sync-with-caveats"])
+@pytest.mark.parametrize("evidence", [None, "{", "{}", '{"scan_completed":true,"max_rhat":1.2,"min_ess":10,"checks":{"rhat":false,"ess":false,"divergences":true,"bfmi":true}}'])
+def test_publication_requires_positive_hard_convergence_evidence(tmp_path, purpose, evidence):
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+    path = output_dir / "diagnostics_summary.json"
+    if evidence is None:
+        path.unlink()
+    else:
+        path.write_text(evidence, encoding="utf-8")
+    policy = fit_validation_kwargs(
+        purpose, expected_definition=VG01,
+        expected_sampling_config_name="rep",
+        expected_sampling_parameters=asdict(sampling.get_sampling_configuration("rep")),
+        current_source_data_hash="sha256:data",
+        current_analysis_frame_hash="sha256:frame",
+    )
+    errors = validate_fit_output(str(output_dir), **policy)
+    assert any("convergence" in error.lower() for error in errors), errors
 
 
 def test_a_changed_prepared_frame_invalidates_a_fit(tmp_path):

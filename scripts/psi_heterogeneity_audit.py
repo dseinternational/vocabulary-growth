@@ -3,18 +3,17 @@
 
 """Audit the between-study heterogeneity in VG15's sign-speech association.
 
-Recomputes every number in ``notes/202608121030-psi-heterogeneity-and-age-invariance.md``
-from the committed source CSVs, so the evidence for two model decisions can be
-re-run after any later data or loader change:
+Updates the descriptive checks in
+``notes/202608121030-psi-heterogeneity-and-age-invariance.md`` from the source CSVs.
+The registered model makes two choices:
 
 1.  ``psi`` carries a **study-level term** (``delta_psi``), because the four
     cross-tab sources disagree about the association by an order of magnitude.
-2.  ``psi`` does **not** vary with age, because the apparent age gradient is
-    entirely between-study confounding — uk_07 is both the oldest sample and the
-    highest-association one.
+2.  ``psi`` does **not** vary with age. This is a simplifying assumption.
+    Study composition and narrow age overlap limit the evidence about age.
 
 Everything here is descriptive: Mantel-Haenszel odds ratios and weighted least
-squares on per-child log odds ratios, computed directly from the four cells. None
+squares on per-administration log odds ratios, computed directly from the four cells. None
 of it is the fitted ``psi``, which is a population-conditioned quantity defined
 against the model's own r and q. These statistics are diagnostic of heterogeneity
 and of confounding, not estimates of the parameter — but they are computed
@@ -34,8 +33,8 @@ from vocab_growth import cross_tab_sources
 from vocab_growth.reporting import console, dataframe_table, heading, key_value_table
 
 # Haldane-Anscombe correction: added to every cell before taking a per-child log
-# odds ratio, so children with an empty cell still contribute. It biases each
-# ratio toward 1, most strongly where counts are small — which is why the very
+# odds ratio, so children with an empty cell still contribute. It changes each
+# ratio, with a larger relative effect where counts are small — which is why the very
 # youngest / smallest-vocabulary bands below should not be read as point estimates.
 HALDANE = 0.5
 
@@ -84,9 +83,9 @@ def _cells() -> pd.DataFrame:
 
 
 def mantel_haenszel(df: pd.DataFrame) -> float:
-    """Mantel-Haenszel odds ratio with each child as its own stratum.
+    """Mantel-Haenszel odds ratio with each administration as its own stratum.
 
-    Stratifying by child removes between-child mixing, which a pooled ratio over
+    Stratifying by administration avoids pooling cell counts across administrations, which a pooled ratio over
     summed cells does not: a source whose children differ in vocabulary level can
     show a pooled ratio on the wrong side of every individual one.
     """
@@ -100,7 +99,7 @@ def mantel_haenszel(df: pd.DataFrame) -> float:
 
 
 def _log_or_and_weight(df: pd.DataFrame) -> pd.DataFrame:
-    """Per-child log odds ratio and its inverse-variance weight."""
+    """Per-administration log odds ratio and its approximate variance weight."""
     cells = df[["neither", "sign_only", "speak_only", "both"]] + HALDANE
     out = df.copy()
     out["log_or"] = np.log(
@@ -110,15 +109,28 @@ def _log_or_and_weight(df: pd.DataFrame) -> pd.DataFrame:
     return out[np.isfinite(out["log_or"]) & np.isfinite(out["weight"])]
 
 
-def _wls(y: np.ndarray, X: np.ndarray, w: np.ndarray):
-    """Weighted least squares. Returns (coefficients, standard errors, weighted SSR)."""
+def _wls(y: np.ndarray, X: np.ndarray, w: np.ndarray, groups):
+    """Weighted least squares with child-clustered sandwich standard errors."""
+    if np.linalg.matrix_rank(X) < X.shape[1]:
+        raise ValueError("Weighted regression design is rank deficient.")
     xtw = X.T @ np.diag(w)
     beta = np.linalg.solve(xtw @ X, xtw @ y)
     resid = y - X @ beta
     ssr = float((w * resid**2).sum())
     dof = len(y) - X.shape[1]
-    cov = (ssr / dof) * np.linalg.inv(xtw @ X)
+    labels, codes = np.unique(np.asarray(groups), return_inverse=True)
+    if len(labels) < 2 or dof <= 0:
+        return beta, np.full(X.shape[1], np.nan), ssr
+    scores = np.zeros((len(labels), X.shape[1]))
+    np.add.at(scores, codes, X * (w * resid)[:, None])
+    bread = np.linalg.inv(xtw @ X)
+    correction = len(labels) / (len(labels) - 1) * (len(y) - 1) / dof
+    cov = correction * bread @ (scores.T @ scores) @ bread
     return beta, np.sqrt(np.diag(cov)), ssr
+
+
+def _child_keys(frame):
+    return frame["study"].astype(str) + "::" + frame["subject_id"].astype(str)
 
 
 def report_association_by_source(cells: pd.DataFrame) -> None:
@@ -134,7 +146,7 @@ def report_association_by_source(cells: pd.DataFrame) -> None:
             "rows": len(group),
             "MH_odds_ratio": round(mantel_haenszel(group), 2),
             "reference_set": "within understood",
-            "per_child_OR_below_1": f"{(per_child < 1).mean():.0%}",
+            "administration_OR_below_1": f"{(per_child < 1).mean():.0%}",
             "non_vocal_also_spoken": f"{group['both'].sum() / non_vocal:.1%}",
         })
 
@@ -152,7 +164,7 @@ def report_association_by_source(cells: pd.DataFrame) -> None:
         "rows": len(nz),
         "MH_odds_ratio": round(mantel_haenszel(nz_cells), 2),
         "reference_set": "all 675 items",
-        "per_child_OR_below_1": f"{(np.exp(nz_scored['log_or']) < 1).mean():.0%}",
+        "administration_OR_below_1": f"{(np.exp(nz_scored['log_or']) < 1).mean():.0%}",
         "non_vocal_also_spoken":
             f"{nz_cells['both'].sum() / (nz_cells['sign_only'] + nz_cells['both']).sum():.1%}",
     })
@@ -167,14 +179,14 @@ def report_association_by_source(cells: pd.DataFrame) -> None:
         ("over all 674 items", round(mantel_haenszel(widened), 2)),
     ])
     console.print(
-        "[yellow]Magnitudes compare only within a reference set. The per-child sign "
-        "and the share-also-spoken column need no 'neither' cell and compare "
-        "throughout.[/yellow]"
+        "[yellow]Both the magnitude and the direction of an odds ratio require "
+        "the neither cell and a common reference set. The share of signed words "
+        "also spoken does not need that cell, but remains a different descriptive quantity.[/yellow]"
     )
 
 
 def report_age_confounding(cells: pd.DataFrame) -> None:
-    """Why psi carries no age term: the age gradient is between-study confounding."""
+    """Compare age and study associations with uncertainty grouped by child."""
     heading("Age: gradient or confounding?")
 
     scored = _log_or_and_weight(cells)
@@ -190,10 +202,10 @@ def report_age_confounding(cells: pd.DataFrame) -> None:
     ])
 
     # Age WITHOUT a study term is free to claim the between-study variation.
-    beta, se, ssr_age = _wls(y, np.column_stack([np.ones(len(y)), age_years]), w)
-    _, _, ssr_study = _wls(y, dummies, w)
-    _, _, ssr_both = _wls(y, np.column_stack([dummies, age_years]), w)
-    beta_adj, se_adj, _ = _wls(y, np.column_stack([dummies, age_years]), w)
+    beta, se, ssr_age = _wls(y, np.column_stack([np.ones(len(y)), age_years]), w, _child_keys(scored))
+    _, _, ssr_study = _wls(y, dummies, w, _child_keys(scored))
+    _, _, ssr_both = _wls(y, np.column_stack([dummies, age_years]), w, _child_keys(scored))
+    beta_adj, se_adj, _ = _wls(y, np.column_stack([dummies, age_years]), w, _child_keys(scored))
 
     dataframe_table(pd.DataFrame([
         {"model": "age only (no study term)", "age_slope_per_year": round(beta[1], 3),
@@ -207,7 +219,7 @@ def report_age_confounding(cells: pd.DataFrame) -> None:
     ]), title="Age versus study as an explanation", show_index=False)
     console.print(
         "[yellow]Age alone looks strong, but fits worse than study alone and adds "
-        "nothing on top of it. Study fixed effects absorb between-study age "
+        "an amount shown in the table after adjustment. Study fixed effects absorb between-study age "
         "differences by construction, so the adjusted slope answers only the "
         "WITHIN-study question.[/yellow]"
     )
@@ -231,7 +243,7 @@ def report_level_gradient(cells: pd.DataFrame) -> None:
     y, w = scored["log_or"].to_numpy(), scored["weight"].to_numpy()
     studies = sorted(scored["study"].unique())
     dummies = np.column_stack([(scored["study"] == s).astype(float) for s in studies])
-    beta, se, _ = _wls(y, np.column_stack([dummies, log_produced]), w)
+    beta, se, _ = _wls(y, np.column_stack([dummies, log_produced]), w, _child_keys(scored))
 
     rows = [{"scope": "pooled (study-adjusted)", "slope": round(beta[-1], 3),
              "SE": round(se[-1], 3), "z": round(beta[-1] / se[-1], 2), "n": len(scored)}]
@@ -239,7 +251,7 @@ def report_level_gradient(cells: pd.DataFrame) -> None:
         g = scored[scored["study"] == study]
         b, s, _ = _wls(g["log_or"].to_numpy(),
                        np.column_stack([np.ones(len(g)), np.log(g["produced"] + 1.0)]),
-                       g["weight"].to_numpy())
+                       g["weight"].to_numpy(), _child_keys(g))
         rows.append({"scope": study, "slope": round(b[1], 3), "SE": round(s[1], 3),
                      "z": round(b[1] / s[1], 2), "n": len(g)})
     dataframe_table(pd.DataFrame(rows),
@@ -248,9 +260,9 @@ def report_level_gradient(cells: pd.DataFrame) -> None:
     console.print(
         "[yellow]CIRCULAR COVARIATE: produced = sign_only + speak_only + both, three "
         "of the four cells that define psi. Raising produced at fixed comprehension "
-        "shrinks `neither` and mechanically LOWERS the ratio, so the induced bias is "
-        "negative. Positive slopes run against it and are conservative; negative ones "
-        "are not established.[/yellow]"
+        "shrinks `neither`, but also changes the other cells. The odds ratio can "
+        "rise or fall. Shared cells can induce association in either direction, "
+        "so neither slope sign establishes a developmental effect.[/yellow]"
     )
 
     # es_01 is the only source carrying a developmental measure external to the
@@ -273,7 +285,7 @@ def report_level_gradient(cells: pd.DataFrame) -> None:
                                   g["age"].to_numpy() / 12.0)]:
             b, s, _ = _wls(g["log_or"].to_numpy(),
                            np.column_stack([np.ones(len(g)), covariate]),
-                           g["weight"].to_numpy())
+                           g["weight"].to_numpy(), _child_keys(g))
             rows.append({"group": group, "covariate": label, "slope": round(b[1], 3),
                          "SE": round(s[1], 3), "z": round(b[1] / s[1], 2), "n": len(g)})
     dataframe_table(pd.DataFrame(rows),
@@ -318,9 +330,9 @@ def main() -> None:
     report_uk07_trial_arm(cells)
     heading("Conclusion")
     console.print(
-        "psi carries a STUDY-level term (delta_psi) and NO age term. The sources "
-        "disagree by an order of magnitude at matched ages; age alone fits worse "
-        "than study alone and adds nothing on top of it. See "
+        "The registered psi model has a study term and no age term. Read the "
+        "updated slopes and child-cluster standard errors above. Failure to find "
+        "an age association would not establish age invariance. See "
         "notes/202608121030-psi-heterogeneity-and-age-invariance.md."
     )
 

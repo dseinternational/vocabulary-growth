@@ -297,7 +297,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). This project requires R-hat no greater than 1.01 and ESS of at least 400 for **every** parameter before a fit may be reported at all. A fit reaching this page has therefore either met those thresholds or is published under a recorded exception — and if there is an exception, the block above states it, names the parameter, and gives the reason it was accepted. Read that block before reading anything else on this page.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Well-overlapping distributions indicate the sampler explored the posterior efficiently; a marginal energy distribution much wider than the transition distribution is the signature the BFMI diagnostic reports on.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
@@ -384,7 +384,7 @@ render_family_notes()
 ![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
-![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are uncertainty intervals on the zero-effect population trajectory — study and child effects set to zero, which is not an average across children — not the range individual children occupy; for that, read the predictive figures and the monthly tables.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+![Predictive count trajectories with 50% inner and 89% outer equal-tailed intervals. These draws include new-child variation and administration noise as well as parameter uncertainty. They are not intervals on the curve with all random effects set to zero.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ::: {.callout-warning title="Age restriction: what it costs, and what it buys"}
 
@@ -454,7 +454,7 @@ Each line runs across the full width of the reference inventory, but at the youn
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — the typical (median) child in the average study, which on the count scale is not the same thing as the average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — a profile with zero child and study effects, which need not be the median or mean of the joint expected count — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
 
 ```{python}
 #| echo: false
@@ -659,7 +659,7 @@ render_loo_section()
 ```
 
 
-Read any over-coverage here alongside the between-child scales in the Findings section rather than as a separate finding. The predictive distribution integrates over a **new** child's offset, so it is necessarily wider than the scatter of the observed rows, which come from children the model has already seen. The larger the between-child scale, the larger that difference — so a hierarchical model of this kind is expected to over-cover in-sample, and the calibration section's own caveat says so.
+These calibration checks replicate observations using fitted child effects. They are checks on the training data, so fitting and checking the same observations can affect coverage. They are distinct from the figures that draw new children. Over-coverage alone does not identify its cause or establish that the new-child predictions are calibrated.
 
 ## Limits {#sec-limits}
 

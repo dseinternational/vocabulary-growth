@@ -1,5 +1,8 @@
 # The within-child cross-lag: scope, and what the anomaly turned out to be
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The reported fits fail the stated R-hat threshold of 1.01. Their errors cannot be treated as calibrated estimates of statistical bias or a null reference distribution until sampling error is controlled. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

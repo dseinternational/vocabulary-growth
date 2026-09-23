@@ -1,5 +1,8 @@
 # Dispersion and `q`-GP prior recalibration: `b_kappa_mag`, `kappa_min`, `eta_q`
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Downward mean bias of a calibration estimator does not make each realised estimate a lower bound. For a Beta-Binomial with concentration k and trial count N, the conditional binomial component's share of total variance is k/(N+k), not (k+1)/(N+k). Numerical arguments that use the latter need recalculation. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Review status, 2026-09-17 (OpenAI Codex/GPT-6). Historical calibration record. Sections 18–23 replace the earlier concentration proposals. Use the prior guide and registered definitions for current settings. [Follow-up](../docs/models/PRIORS.md).
 

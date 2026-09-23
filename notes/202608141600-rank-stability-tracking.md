@@ -1,5 +1,8 @@
 # Do children keep their relative vocabulary standing? Tracking in the repeated measures
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The original ICC retained noise in child means, and the bootstrap held the age adjustment fixed. The revised script corrects both. Equal-probability binomial variance is not a lower error bound, and the classical Pearson attenuation identity does not justify dividing Spearman correlations by reliability. Negative variance remainders indicate incompatible assumptions; they do not establish that early speech cannot measure standing. The numerical ICC and corrected-correlation conclusions need rerunning. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

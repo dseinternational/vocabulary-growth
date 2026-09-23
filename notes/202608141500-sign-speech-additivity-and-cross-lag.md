@@ -1,5 +1,8 @@
 # Is signing additive? Between-child association and a sign→speech cross-lag
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The New Zealand forward regression included baseline speech share and sign-only share together, though they sum to one. Their separate coefficients are not identified. The revised audit drops the redundant speech predictor and cannot estimate an effect of sign-only share independent of that baseline speech share. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

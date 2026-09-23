@@ -246,7 +246,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
@@ -328,7 +328,7 @@ summary_q
 
 ### Comprehension-production gap
 
-The expected difference, in words, between what a child of a given age understands and what they say. It is not a constant fraction of vocabulary: it widens while comprehension outpaces production and narrows again once the production ratio catches up, so it has a peak at an intermediate age. The findings table above reports where that peak falls and how large it is.
+The expected comprehension-to-speech gap can change with age. Read the current curve, intervals and headline table to assess whether it has an interior peak within the reporting window. The model does not impose that shape.
 
 ![The expected number of words understood but not spoken, against age, with uncertainty intervals.](comprehension_production_gap.png){#fig-gap .lightbox fig-align="left"}
 
@@ -460,13 +460,13 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ![The same rate, smoothed for presentation.](expected_learning_rate_s_smoothed.png){#fig-rate-s-smooth .lightbox fig-align="left"}
 
-Comparing this figure with its comprehension counterpart is the clearest statement the model makes about the shape of development: the two outcomes do not grow fastest at the same age, and the findings table above gives both peaks and their intervals. The same cross-sectional caveat applies here as there.
+Compare this figure with its comprehension counterpart and the headline table to assess the ages of fastest estimated growth. The model does not require the peaks to differ. These derivatives describe age patterns in the fitted population, not the observed learning rate of an individual child.
 
 ### Dispersion
 
 ![How the dispersion parameter for words spoken changes with age, with uncertainty intervals.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
 
-Read this against the understood dispersion figure above: lower $\kappa$ at the same age means children are more spread out around the mean for that outcome.
+At fixed mean and trial count, a lower concentration gives more Beta-Binomial spread. The two outcomes use different means and, for paired speech, different trial counts. Compare full predictive distributions rather than ranking their concentrations as total child variation.
 
 ## Expected vocabulary by month {#sec-monthly}
 

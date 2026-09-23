@@ -56,7 +56,7 @@ from datetime import UTC, datetime
 import arviz as az
 import numpy as np
 import pandas as pd
-from scipy.special import expit
+from scipy.special import expit, logsumexp
 from scipy.stats import betabinom
 
 from vocab_growth.comparisons_provenance import fit_manifest_fingerprint
@@ -68,6 +68,7 @@ from vocab_growth.fit_consumers import (
 from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.models.subject_effects import slope_reference_age
+from vocab_growth.predictive_mixtures import conditioned_resample
 
 EPSILON = 1e-6
 AGE_BANDS = [0, 20, 24, 30, 36, 200]
@@ -298,11 +299,16 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials, definition):
         series.append(
             (
                 "spoken_given_observed_understood",
-                _betabinom_draw(
-                    rng,
-                    np.broadcast_to(frame["understood"].to_numpy()[None, :], q.shape),
-                    q,
-                    k_s,
+                conditioned_resample(
+                    _betabinom_draw(
+                        rng,
+                        np.broadcast_to(frame["understood"].to_numpy()[None, :], q.shape),
+                        q, k_s,
+                    ),
+                    betabinom.logpmf(
+                        frame["understood"].to_numpy()[None, :], n_trials,
+                        p_u * k_u, (1 - p_u) * k_u,
+                    ), rng,
                 ),
                 frame["spoken"].to_numpy(),
             )
@@ -453,18 +459,14 @@ def _normalised(logw):
 def within_child(
     post, x_plot, frame, draws, rng, n_trials, definition, n_candidates=160, chunk=250
 ):
-    """Item 3: condition on a child's first visit and predict their second.
+    """Predict visit two using a mixture conditioned on visit one.
 
-    Importance sampling over a candidate set of unseen children. Each candidate
-    carries its own study offset, drawn independently for the two outcomes at
-    the fitted between-study scales, on top of a child effect drawn from the
-    model's child structure. That makes the candidate set the exact per-child
-    prior of the quantity one visit identifies -- the sum of study and child
-    effect -- with the correlation applying to the child part only, as in the
-    model. Candidates are weighted by the visit-1 likelihood and one is
-    resampled per posterior draw for the visit-2 predictive sample; the
-    visit-2 log predictive density is the weighted average of the visit-2
-    likelihood over the same candidates.
+    Candidate weights span population parameters, child effects and study
+    effects. Speech densities and the conditional speech sample also condition
+    on observed comprehension at visit two. The joint speech sample instead
+    uses a simulated comprehension count and is a history-only prediction.
+    Each child's conditioning analysis is separate, rather than a joint update
+    using all children from the new study.
     """
     prof = engine_profile(post)
     if not prof["bivariate"]:
@@ -497,56 +499,57 @@ def within_child(
     sample_u = np.empty((nd, nc), dtype=np.int64)
     sample_s = np.empty((nd, nc), dtype=np.int64)
     sample_s_cond = np.empty((nd, nc), dtype=np.int64)
-    dens = {name: np.zeros(nc) for name in LPD_COLUMNS}
+    dens = {name: np.empty(nc) for name in LPD_COLUMNS}
 
-    for start in range(0, nd, chunk):
-        d = draws[start : start + chunk]
-        m = len(d)
-        f1, f2 = (_interp_draws(x_plot, curves["f"][d], a) for a in (a1, a2))
-        h1, h2 = (_interp_draws(x_plot, curves["h"][d], a) for a in (a1, a2))
-        ku1, ku2 = (
-            _interp_draws(x_plot, curves["ku"][d], a)[:, :, None] for a in (a1, a2)
-        )
-        ks1, ks2 = (
-            _interp_draws(x_plot, curves["ks"][d], a)[:, :, None] for a in (a1, a2)
-        )
-
-        params = draw_child_params(post, definition, structure, d, rng, (m, nc, nk))
-        params[..., 0] += _study_draw(post, prof["tau_u"], d, rng, (m, nc, nk))
-        params[..., 2] += _study_draw(post, prof["tau_q"], d, rng, (m, nc, nk))
-        cu1, cq1 = child_deltas(params, a1[:, None], ref)
-        cu2, cq2 = child_deltas(params, a2[:, None], ref)
-
-        p1 = np.clip(expit(f1[:, :, None] + cu1), EPSILON, 1 - EPSILON)
-        q1 = np.clip(expit(h1[:, :, None] + cq1), EPSILON, 1 - EPSILON)
-        ll_u1 = betabinom.logpmf(y_u1, n_trials, p1 * ku1, (1 - p1) * ku1)
-        ll_s1 = betabinom.logpmf(y_s1, y_u1, q1 * ks1, (1 - q1) * ks1)
-        w_both = _normalised(ll_u1 + ll_s1)
-        w_u = _normalised(ll_u1)
-
-        p2 = np.clip(expit(f2[:, :, None] + cu2), EPSILON, 1 - EPSILON)
-        q2 = np.clip(expit(h2[:, :, None] + cq2), EPSILON, 1 - EPSILON)
-        pm_u2 = np.exp(betabinom.logpmf(y_u2, n_trials, p2 * ku2, (1 - p2) * ku2))
-        pm_s2 = np.exp(betabinom.logpmf(y_s2, y_u2, q2 * ks2, (1 - q2) * ks2))
-        dens["lpd_understood_given_both"] += (w_both * pm_u2).sum(axis=2).sum(axis=0)
-        dens["lpd_spoken_given_both"] += (w_both * pm_s2).sum(axis=2).sum(axis=0)
-        dens["lpd_understood_given_understood"] += (w_u * pm_u2).sum(axis=2).sum(axis=0)
-        dens["lpd_spoken_given_understood"] += (w_u * pm_s2).sum(axis=2).sum(axis=0)
-
-        cum = np.cumsum(w_both, axis=2)
-        pick = (cum < rng.random((m, nc, 1))).sum(axis=2).clip(0, nk - 1)
-        idu = np.take_along_axis(cu2, pick[:, :, None], axis=2)[:, :, 0]
-        idq = np.take_along_axis(cq2, pick[:, :, None], axis=2)[:, :, 0]
-        pu2 = _betabinom_draw(rng, n_trials, expit(f2 + idu), ku2[:, :, 0])
-        sample_u[start : start + m] = pu2
-        sample_s[start : start + m] = _betabinom_draw(
-            rng, pu2, expit(h2 + idq), ks2[:, :, 0]
-        )
-        sample_s_cond[start : start + m] = _betabinom_draw(
-            rng,
-            np.broadcast_to(y_u2[0, :, 0][None, :], (m, nc)),
-            expit(h2 + idq),
-            ks2[:, :, 0],
+    # Process one child at a time. Weights span both parameter draws and child
+    # candidates. Normalising within each parameter draw would discard the
+    # information the first visit supplies about the population parameters.
+    for child in range(nc):
+        candidates = {name: [] for name in ("lu1", "ls1", "lu2", "ls2", "p2", "q2", "ku2", "ks2")}
+        for start in range(0, nd, chunk):
+            d = draws[start : start + chunk]
+            m = len(d)
+            def at(key, age, d=d):
+                return _interp_draws(x_plot, curves[key][d], np.array([age]))
+            f1, f2 = at("f", a1[child]), at("f", a2[child])
+            h1, h2 = at("h", a1[child]), at("h", a2[child])
+            ku1, ku2 = at("ku", a1[child]), at("ku", a2[child])
+            ks1, ks2 = at("ks", a1[child]), at("ks", a2[child])
+            params = draw_child_params(post, definition, structure, d, rng, (m, nk))
+            params[..., 0] += _study_draw(post, prof["tau_u"], d, rng, (m, nk))
+            params[..., 2] += _study_draw(post, prof["tau_q"], d, rng, (m, nk))
+            cu1, cq1 = child_deltas(params, a1[child], ref)
+            cu2, cq2 = child_deltas(params, a2[child], ref)
+            p1, q1 = (np.clip(expit(x), EPSILON, 1 - EPSILON) for x in (f1 + cu1, h1 + cq1))
+            p2, q2 = (np.clip(expit(x), EPSILON, 1 - EPSILON) for x in (f2 + cu2, h2 + cq2))
+            values = {
+                "lu1": betabinom.logpmf(y_u1[0, child, 0], n_trials, p1 * ku1, (1 - p1) * ku1),
+                "ls1": betabinom.logpmf(y_s1[0, child, 0], y_u1[0, child, 0], q1 * ks1, (1 - q1) * ks1),
+                "lu2": betabinom.logpmf(y_u2[0, child, 0], n_trials, p2 * ku2, (1 - p2) * ku2),
+                "ls2": betabinom.logpmf(y_s2[0, child, 0], y_u2[0, child, 0], q2 * ks2, (1 - q2) * ks2),
+                "p2": p2, "q2": q2, "ku2": np.broadcast_to(ku2, p2.shape),
+                "ks2": np.broadcast_to(ks2, p2.shape),
+            }
+            for name, value in values.items():
+                candidates[name].append(value.ravel())
+        v = {name: np.concatenate(parts) for name, parts in candidates.items()}
+        both = v["lu1"] + v["ls1"]
+        for suffix, history in (("both", both), ("understood", v["lu1"])):
+            history_norm = logsumexp(history)
+            parent_norm = logsumexp(history + v["lu2"])
+            dens[f"lpd_understood_given_{suffix}"][child] = parent_norm - history_norm
+            # Speech additionally conditions on comprehension at visit two.
+            dens[f"lpd_spoken_given_{suffix}"][child] = logsumexp(history + v["lu2"] + v["ls2"]) - parent_norm
+        def pick(log_weights):
+            weights = np.exp(log_weights - logsumexp(log_weights))
+            return rng.choice(len(weights), size=nd, p=weights)
+        selected = pick(both)
+        u = _betabinom_draw(rng, n_trials, v["p2"][selected], v["ku2"][selected])
+        sample_u[:, child] = u
+        sample_s[:, child] = _betabinom_draw(rng, u, v["q2"][selected], v["ks2"][selected])
+        selected_cond = pick(both + v["lu2"])
+        sample_s_cond[:, child] = _betabinom_draw(
+            rng, y_u2[0, child, 0], v["q2"][selected_cond], v["ks2"][selected_cond]
         )
 
     out = []
@@ -586,7 +589,7 @@ def within_child(
             "subject_id": second["subject_id"].to_numpy(),
             "age_t1": a1,
             "age_t2": a2,
-            **{name: np.log(dens[name] / nd + 1e-300) for name in LPD_COLUMNS},
+            **dens,
         }
     )
     return pd.concat(out, ignore_index=True), lpd

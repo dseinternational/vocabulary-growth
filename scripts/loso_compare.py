@@ -9,14 +9,17 @@ Leave-one-subject-out (LOSO) PSIS comparison across VG07, VG08 and VG09.
 
 For each model we compute:
 
-1. **Conditional LOSO** — sum per-observation log-likelihoods within each
-   subject, holding any subject RE at its posterior estimate. Biased
-   toward models that include subject REs.
+1. **Conditional LOSO** groups the conditional log likelihood by child and
+   uses importance sampling to remove that child's observations. The method can
+   target the same leave-child-out distribution as a refit, but fitted child
+   effects can make importance weights unstable. Read its Pareto diagnostics.
 
-2. **Marginal LOSO** — for each posterior draw and each subject, sample
-   K replicates from each subject RE's prior `Normal(0, tau_subj_*)` and
-   Monte-Carlo integrate the conditional log-likelihood over those
-   replicates. This is the honest "predict an unseen subject" answer.
+2. **Marginal LOSO** integrates each child's joint likelihood over fresh child
+   effects before importance sampling. This can improve weight stability, but
+   the numerical integration and importance approximation still need checking.
+
+An unstable approximation does not invalidate the prediction question. Exact
+leave-child-out refits provide the reference when importance sampling fails.
 
 Outputs:
 
@@ -320,12 +323,19 @@ def marginal_subject_loglik(
                     h_grid = h_obs_d[s_ix][None, :] + re_q[:, None]
                     q_grid = 1.0 / (1.0 + np.exp(-h_grid))
                     p_s_grid = p_u_for_s * q_grid
+                    # Paired speech counts use the observed comprehension total.
+                    # Only rows with missing comprehension use the fallback mean.
+                    paired = has_u[obs_idx_s[s_ix]]
+                    p_s_grid = np.where(paired[None, :], q_grid, p_s_grid)
+                    speech_trials = np.where(
+                        paired, analysis_df.iloc[obs_idx_s[s_ix]]["understood"].fillna(N_TRIALS).to_numpy(), N_TRIALS
+                    ).astype(int)
                     p_s_grid = np.clip(p_s_grid, EPSILON, 1 - EPSILON)
                     kappa_s_s = kappa_s_d[s_ix]
                     alpha_s = p_s_grid * kappa_s_s[None, :]
                     beta_s = (1 - p_s_grid) * kappa_s_s[None, :]
                     ll_s_grid = betabinom.logpmf(
-                        y_s[s_ix][None, :], N_TRIALS, alpha_s, beta_s
+                        y_s[s_ix][None, :], speech_trials[None, :], alpha_s, beta_s
                     )
                     ll_s_sum = ll_s_grid.sum(axis=1)
                 else:

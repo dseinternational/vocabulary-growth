@@ -1,5 +1,8 @@
 # A repeaters-calibrated prior does not repair VG12's geometry; pinning the split does
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The repeaters are part of the full dataset, so their fitted prior is not independent information. A narrow prior is not a cut posterior. Setting a different fixed value in each chain creates different targets and invalidates ordinary common-target chain diagnostics. Remaining divergences require investigation rather than an assumed target-accept explanation. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 

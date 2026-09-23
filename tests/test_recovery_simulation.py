@@ -440,8 +440,8 @@ def _written_simulation(tmp_path, definition):
     ).to_netcdf(tmp_path / TRUTH_FILENAME)
     (tmp_path / SIMULATION_FILENAME).write_text(
         json.dumps(
-            {"simulation": {"definition": normalise_for_json(definition),
-                            "truth_source": "prior"}}
+            {"model": {"definition": normalise_for_json(definition)},
+             "simulation": {"truth_source": "prior"}}
         )
     )
     return tmp_path
