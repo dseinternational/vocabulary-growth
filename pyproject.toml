@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.31.0"]
+requires = ["hatchling>=1.32.4"]
 build-backend = "hatchling.build"
 
 [project]
@@ -43,7 +43,7 @@ dependencies = [
 # `dev`, `uv run ruff` syncs the whole project environment — 174 packages,
 # PyMC and JAX among them — to run a self-contained Rust binary.
 lint = [
-  "ruff>=0.16.1"
+  "ruff>=0.16.8"
 ]
 # Static type checking, split out for the same reason `lint` is: mypy reads
 # source rather than importing it, so the narrow set of modules it covers can be
@@ -52,8 +52,8 @@ typecheck = [
   "mypy>=2.3.1"
 ]
 dev = [
-  "ipython>=9.13.0",
-  "ipywidgets>=8.1.8",
+  "ipython>=9.17.1",
+  "ipywidgets>=8.1.9",
   "pytest>=9.1.1",
   # The suite is dominated by a handful of model builds and sampler runs, which
   # parallelise cleanly: every model build writes under its own `tmp_path`, so
