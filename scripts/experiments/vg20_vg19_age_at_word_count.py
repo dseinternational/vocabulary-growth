@@ -197,9 +197,10 @@ def main() -> None:
             )
         frames.append(run(model))
     df = pd.concat(frames, ignore_index=True)
-    os.makedirs(env.comparisons_output_dir(), exist_ok=True)
+    experiment_dir = os.path.join(env.comparisons_output_dir(), "experiments", "age_at_word_count")
+    os.makedirs(experiment_dir, exist_ok=True)
     out = os.path.join(
-        env.comparisons_output_dir(), "age_at_word_count_vg20_vg19.csv"
+        experiment_dir, "age_at_word_count_vg20_vg19.csv"
     )
     df.to_csv(out, index=False)
     for outcome in ("understood", "spoken"):

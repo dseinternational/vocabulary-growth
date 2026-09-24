@@ -60,6 +60,7 @@ from vocab_growth.fit_artifacts import (
 from vocab_growth.loo_reff import sampled_parameter_reff
 from vocab_growth.models.common_bivariate_re import rebuild_model_context
 from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.likelihood_utils import nested_outcome_spec
 from vocab_growth.posterior_recompute import missing_deterministics, with_deterministics
 
 EPSILON = 1e-12
@@ -260,6 +261,9 @@ def marginal_subject_loglik(
     subj_u = analysis_df.loc[has_u, "subject_code"].to_numpy(int)
     subj_s = analysis_df.loc[has_s, "subject_code"].to_numpy(int)
 
+    speech = nested_outcome_spec(
+        analysis_df, parent_col="understood", outcome_col="spoken", n_trials=N_TRIALS,
+    )
     f_u_obs = post_thin["f_u_obs"].values
     h_obs = post_thin["h_obs"].values
     delta_u = post_thin["delta_u"].values
@@ -324,12 +328,10 @@ def marginal_subject_loglik(
                     q_grid = 1.0 / (1.0 + np.exp(-h_grid))
                     p_s_grid = p_u_for_s * q_grid
                     # Paired speech counts use the observed comprehension total.
-                    # Only rows with missing comprehension use the fallback mean.
-                    paired = has_u[obs_idx_s[s_ix]]
+                    # Missing or invalid parent totals use the engine's fallback.
+                    paired = speech.is_conditional[s_ix]
                     p_s_grid = np.where(paired[None, :], q_grid, p_s_grid)
-                    speech_trials = np.where(
-                        paired, analysis_df.iloc[obs_idx_s[s_ix]]["understood"].fillna(N_TRIALS).to_numpy(), N_TRIALS
-                    ).astype(int)
+                    speech_trials = speech.trials[s_ix]
                     p_s_grid = np.clip(p_s_grid, EPSILON, 1 - EPSILON)
                     kappa_s_s = kappa_s_d[s_ix]
                     alpha_s = p_s_grid * kappa_s_s[None, :]

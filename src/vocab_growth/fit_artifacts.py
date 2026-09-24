@@ -908,6 +908,15 @@ def validate_fit_output(
             errors.append("The current checkout is dirty, so an exact resume is unsafe.")
     if require_clean_fit and code_payload.get("dirty") is not False:
         errors.append("The fit was produced from a dirty or unverifiable checkout.")
+    if require_clean_fit:
+        retained = (manifest.get("artefacts") or {}).get("retained_sampling_manifest")
+        if retained is not None:
+            # On a second resume, intermediate manifests describe discarded
+            # reporting runs. The deepest retained manifest records sampling.
+            while isinstance(retained, dict) and (retained.get("artefacts") or {}).get("retained_sampling_manifest") is not None:
+                retained = retained["artefacts"]["retained_sampling_manifest"]
+            if not isinstance(retained, dict) or (retained.get("code") or {}).get("dirty") is not False:
+                errors.append("The retained trace was sampled from a dirty or unverifiable checkout.")
 
     if require_reporting_quality:
         try:

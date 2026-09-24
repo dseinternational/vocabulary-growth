@@ -519,15 +519,23 @@ def _verify() -> None:
     # DS_U=10(a-10); TD_U=20(a-2). Solve 20(t-2)=10(a-10) -> t = a/2 + ... check delay sign
     # Just assert delays are finite & expressive >= receptive monotonicity holds.
     assert np.isfinite(cea["delay_U"]).any()
-    # Below-percentile: DS == TD -> fraction ≈ pct/100.
-    p = np.full((nd, 5), 0.3)
-    k = np.full((nd, 5), 15.0)
-    frac = C.fraction_below_reference_percentile(p, k, p, k, 810, pct=10.0)
-    assert abs(float(np.mean(frac)) - 0.10) < 0.05, float(np.mean(frac))
+    # Exercise the nested-count path used by the report. These diffuse counts
+    # have small discrete jumps near their tenth percentile.
+    plan = C.TotalSpreadPlan("spoken", "plot", True, "p", "ku", None, "q", "ks")
+    values = {name: np.full((nd, 1), value)
+              for name, value in {"p": .3, "ku": 15., "q": .6, "ks": 20.}.items()}
+    frac = C.new_child_percentile_fraction((plan, values), (plan, values), [24.], 810,
+                                          children=32768, seed=47)
+    assert abs(float(np.mean(frac)) - 0.10) < 0.02, float(np.mean(frac))
+    # A floor mass can put nearly everyone at or below that discrete percentile.
+    values["p"][:] = 1e-12
+    tied = C.new_child_percentile_fraction((plan, values), (plan, values), [24.], 810,
+                                          children=4096, seed=47)
+    assert np.min(tied) > .99
     # Peak growth age: logistic inflection at 30.
     W = np.stack([1000 / (1 + np.exp(-(ages - 30) / 5))] * nd)
     assert abs(float(np.median(C.peak_growth_age(ages, W))) - 30) <= 1.0
-    print("self-check OK: Δ_exp recovers a known DiD; below-pct≈10% when DS==TD; "
+    print("self-check OK: Δ_exp recovers a known DiD; nested percentile comparison and discrete ties checked; "
           "peak age recovers a logistic inflection.\n")
 
 
@@ -536,6 +544,8 @@ def main() -> None:
     argv = sys.argv[1:]
     if "--verify" in argv:
         _verify()
+        if argv == ["--verify"]:
+            return
     allow_stale = "--allow-stale-fit" in argv
     os.makedirs(OUT_DIR, exist_ok=True)
     # Every fit this comparison reads is checked against the registered

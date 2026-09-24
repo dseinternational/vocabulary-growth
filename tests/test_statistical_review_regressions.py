@@ -133,9 +133,9 @@ def test_loso_uses_the_joint_nested_likelihood():
     from scipy.special import logit
 
     loso = script("loso_compare.py")
-    frame = pd.DataFrame({"understood": [400., np.nan], "spoken": [200., 100.],
-                          "subject_code": [0, 1], "study_code": [0, 0]})
-    data = {name: (("chain", "draw", "obs"), np.full((1, 1, 2), value))
+    frame = pd.DataFrame({"understood": [400., np.nan, 50.], "spoken": [200., 100., 100.],
+                          "subject_code": [0, 1, 2], "study_code": [0, 0, 0]})
+    data = {name: (("chain", "draw", "obs"), np.full((1, 1, 3), value))
             for name, value in {"f_u_obs": logit(.4), "h_obs": logit(.6),
                                 "kappa_u_obs": 3., "kappa_s_obs": 20.}.items()}
     data.update({name: (("chain", "draw", "study"), np.zeros((1, 1, 1)))
@@ -144,7 +144,8 @@ def test_loso_uses_the_joint_nested_likelihood():
     spec = loso.ModelSpec("VG07", "unused", False, False)
     actual = loso.marginal_subject_loglik(trace, frame, spec, n_re_samples=3, thin=1)
     expected = [betabinom.logpmf(400, 810, 1.2, 1.8) + betabinom.logpmf(200, 400, 12, 8),
-                betabinom.logpmf(100, 810, .24 * 20, .76 * 20)]
+                betabinom.logpmf(100, 810, .24 * 20, .76 * 20),
+                betabinom.logpmf(50, 810, 1.2, 1.8) + betabinom.logpmf(100, 810, .24 * 20, .76 * 20)]
     np.testing.assert_allclose(actual[0, 0], expected)
 
 
@@ -221,11 +222,19 @@ def test_weighted_cluster_standard_error_agrees_with_independent_implementation(
     np.testing.assert_allclose(se, expected.bse)
 
 
-def test_history_updates_parameter_mixture_before_second_visit_prediction():
+def test_history_updates_parameter_mixture_before_second_visit_prediction(monkeypatch):
     import xarray as xr
     from scipy.special import logit, logsumexp
 
     prediction = script("predict_new_study.py")
+    original_interp = prediction._interp_draws
+    interpolations = []
+
+    def counted_interp(*args, **kwargs):
+        interpolations.append(1)
+        return original_interp(*args, **kwargs)
+
+    monkeypatch.setattr(prediction, "_interp_draws", counted_interp)
     pu, q = np.array([.1, .9]), np.array([.2, .8])
     curves = {"f_u_plot": logit(pu), "h_plot": logit(q),
               "kappa_u_plot": [20., 20.], "kappa_s_plot": [20., 20.]}
@@ -235,13 +244,18 @@ def test_history_updates_parameter_mixture_before_second_visit_prediction():
     post = xr.Dataset(data)
     frame = pd.DataFrame({"subject_id": [1, 1], "timepoint": ["t1", "t2"],
                           "age": [12., 24.], "understood": [9, 9], "spoken": [8, 8]})
-    _, scores = prediction.within_child(post, np.array([12., 24.]), frame, np.array([0, 1]),
+    frame = pd.concat([frame, frame.assign(subject_id=2)], ignore_index=True)
+    summary, scores = prediction.within_child(post, np.array([12., 24.]), frame, np.array([0, 1]),
                     np.random.default_rng(8), 10, None, n_candidates=3, chunk=1)
     lu = betabinom.logpmf(9, 10, pu * 20, (1 - pu) * 20)
     ls = betabinom.logpmf(8, 9, q * 20, (1 - q) * 20)
     history = lu + ls
     assert scores["lpd_understood_given_both"].iloc[0] == pytest.approx(logsumexp(history + lu) - logsumexp(history))
     assert scores["lpd_spoken_given_both"].iloc[0] == pytest.approx(logsumexp(history + lu + ls) - logsumexp(history + lu))
+    assert len(interpolations) == 8
+    assert "importance_weight_ess" in summary.columns
+    assert len(scores.filter(like="importance_weight_ess").columns) == 4
+    assert np.isfinite(scores.filter(like="importance_weight_ess").to_numpy()).all()
 
 
 def test_publication_validation_happens_before_staging(monkeypatch):
@@ -282,7 +296,7 @@ def test_reusing_render_requires_matching_inputs_and_assets(tmp_path, monkeypatc
         receipt_path.unlink()
     monkeypatch.setattr(sys, "argv", ["publish_comparison.py", "--no-render", "--dry-run"])
     monkeypatch.setattr(publisher.env, "set_output_root", lambda _: None)
-    monkeypatch.setattr(publisher, "validate_inputs", lambda _: inputs)
+    monkeypatch.setattr(publisher, "validate_inputs", lambda _, **kwargs: inputs)
     collected = []
     monkeypatch.setattr(publisher, "collect", collected.append)
     with pytest.raises(SystemExit, match="stage and render"):
@@ -308,7 +322,7 @@ def test_matching_render_can_be_assembled_without_upload(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["publish_comparison.py", "--no-render", "--dry-run",
                                      "--work-dir", str(destination)])
     monkeypatch.setattr(publisher.env, "set_output_root", lambda _: None)
-    monkeypatch.setattr(publisher, "validate_inputs", lambda _: inputs)
+    monkeypatch.setattr(publisher, "validate_inputs", lambda _, **kwargs: inputs)
     publisher.main()
     assert (destination / "index.html").read_bytes() == (book / "index.html").read_bytes()
     assert (destination / "summary.csv").read_bytes() == (book / "summary.csv").read_bytes()

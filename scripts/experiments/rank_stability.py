@@ -147,10 +147,11 @@ def icc_ci(d: pd.DataFrame, n_boot: int) -> tuple[float, float]:
     intervals that did not contain their own point estimate, which is how the
     error was caught.
     """
-    rep = d.groupby("child").filter(lambda g: len(g) >= 2)
-    if rep.empty:
+    if not d.groupby("child").size().ge(2).any():
         return (np.nan, np.nan)
-    by_child = {c: g for c, g in rep.groupby("child", sort=False)}
+    # Match adjusted_scores: singleton children contribute to the adjustment,
+    # but only repeaters contribute to the reported variance decomposition.
+    by_child = {c: g for c, g in d.groupby("child", sort=False)}
     children = list(by_child)
     vals = []
     for _ in range(n_boot):
@@ -165,7 +166,8 @@ def icc_ci(d: pd.DataFrame, n_boot: int) -> tuple[float, float]:
             design = _design(resampled.age.to_numpy(float), resampled.study)
             beta = np.linalg.lstsq(design, resampled["logit"].to_numpy(), rcond=None)[0]
             resampled["resid"] = resampled["logit"].to_numpy() - design @ beta
-        v = icc(resampled, key="boot_key")
+        repeats = resampled.groupby("boot_key").filter(lambda g: len(g) >= 2)
+        v = icc(repeats, key="boot_key")
         if not np.isnan(v):
             vals.append(v)
     if not vals:

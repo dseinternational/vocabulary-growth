@@ -117,7 +117,7 @@ def test_publication_checks_contributor_quality_even_when_fingerprint_matches(di
                               contributing={fit.name: str(fit)}, outputs=["summary.csv"])
     calls = []
 
-    def quality(path, raw_hash):
+    def quality(path, raw_hash, **kwargs):
         calls.append((path, raw_hash))
         return ["failed hard convergence"]
 

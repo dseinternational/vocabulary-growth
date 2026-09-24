@@ -33,6 +33,14 @@ Remove `-NoUpload` only when the run includes publication. The driver prepares o
 
 A model is skipped only when its lifecycle is complete and its definition, prepared data, sampling effort, implementation and source revision satisfy resume validation. A trace alone is insufficient. `cores` is ignored when comparing statistical effort; an adequately sampled high-tuning fit can satisfy a `rep` request.
 
+For a retained trace that needs its summaries rebuilt, `scripts/resume_from_trace.py` checks the definition, prepared frame, sampling metadata and implementation identity. A reporting-only correction or a registered convergence exception changes the package signature even when the sampled model is unchanged. After reviewing the complete code difference, record the reason for reusing those samples:
+
+```bash
+uv run python scripts/resume_from_trace.py vg11 /path/to/retained-fit --config rep --allow-implementation-change "Registered convergence exception only; sampled model unchanged"
+```
+
+This explicit override applies only to code changes with recorded source hashes and unchanged numerical library versions. Matching definitions and frames alone cannot rule out a changed likelihood. The command still rejects a changed definition or frame, missing provenance, and changed numerical libraries. It records the reason and both signatures. The new manifest describes the current reporting code and runtime, preserves the original sampling settings, and archives the retained manifest under `artefacts.retained_sampling_manifest`. Publication requires clean recorded checkouts for both the sampling and the regenerated reports.
+
 ### Batch failure semantics
 
 A required-step failure stops downstream comparison and publication phases. Read the run log, `status.tsv` and the final `SUCCESS` or `FAILED` marker together. A launcher can return successfully while a detached child is still running, and a terminated driver may leave only `START` entries. Confirm process state before resuming.
@@ -214,7 +222,11 @@ The experimental singleton-quadrature path cannot pass strict sync or publicatio
 
 Use the documented `--allow-caveats` path only for fits whose limitations have been reviewed and recorded. `--allow-provisional` is for local development, not publication. Publication validation follows catalogue roles; a failing development model can be skipped, while a failing unclassified candidate blocks sync.
 
-Use `scripts/publish_comparison.py` to stage, render, upload and verify the comparison book. Before staging, it requires current comparison code and output hashes, input provenance and compatible registered reporting fits with complete diagnostics. This strict publisher currently requires clean convergence; the model-report caveat override does not bypass it. Sensitivity and recovery directories need their own validation path and are not imported into the comparison book as unverified inputs. `--no-render` requires a saved receipt matching the current inputs, report source, HTML and local assets. It is a publishing command, not a local-preview command. `--run-id` updates an existing publication.
+Use `scripts/publish_comparison.py` to stage, render, upload and verify the comparison book. Before staging, it requires current comparison code and output hashes, input provenance and compatible registered reporting fits with complete diagnostics. `--config` selects the reporting configuration, with `rep` as the default. `--allow-caveats` permits recorded convergence caveats, including a matching registered R-hat exception, under the same policy as model publication. It does not waive missing diagnostics, an unregistered R-hat failure or failed effective sample size checks. Review and disclose any accepted caveats in the comparison report. For example, use `--config rep-lite --allow-caveats` for a reviewed run using that configuration and policy.
+
+Comparison signatures include the package, the generating script and its recursively discovered local static imports. They use the same comment and docstring filter as fit signatures. Changing an unrelated script does not invalidate a comparison. A generator that loads local helpers dynamically needs an explicit provenance extension before using those helpers for published results.
+
+Sensitivity, recovery and exploratory subdirectories need their own validation paths and are not imported into the comparison book as unverified inputs. The age-at-word-count experiments write to `comparisons/experiments/age_at_word_count/`. Move or archive any older, unclaimed copies in the comparison root before publication; the publisher does not silently discard them. `--no-render` requires a saved receipt matching the current inputs, report source, HTML and local assets. It is a publishing command, not a local-preview command. `--run-id` updates an existing publication.
 
 **Do not upload traces to the public container.** Leave `--include-traces` off; traces contain observation-level data and identifiers. Use designated internal or local storage for trace archives.
 

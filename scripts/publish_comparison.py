@@ -50,10 +50,16 @@ import sys
 
 from vocab_growth import environment as env
 from vocab_growth.comparisons_provenance import (
+    COMPARISON_MANIFEST_FILENAME,
     _file_sha256,
     validate_comparison_manifest,
 )
-from vocab_growth.fit_artifacts import read_json, source_data_hash, write_json_atomic
+from vocab_growth.fit_artifacts import (
+    read_convergence_caveats,
+    read_json,
+    source_data_hash,
+    write_json_atomic,
+)
 from vocab_growth.publication_checks import (
     describe_failures,
     inspect_report,
@@ -74,15 +80,24 @@ PROJECT = "vocabulary-growth"
 KEEP = ("index.qmd",)
 
 
-def validate_inputs(comparisons_dir: str) -> dict[str, str]:
+def validate_inputs(comparisons_dir: str, *, config: str = "rep", allow_caveats: bool = False) -> dict[str, str]:
     """Require current inputs and publication-quality contributing fits first."""
     errors, warnings = validate_comparison_manifest(
         comparisons_dir, env.models_output_dir(), source_root=REPO_ROOT,
         current_source_data_hash=source_data_hash(env.DATA_DIR),
         require_publication=True,
+        publication_config=config, allow_caveats=allow_caveats,
     )
     if errors or warnings:
         raise SystemExit("Comparison publication refused:\n  " + "\n  ".join(errors + warnings))
+    if allow_caveats:
+        manifest = read_json(os.path.join(comparisons_dir, COMPARISON_MANIFEST_FILENAME))
+        fits = {label for entry in manifest["scripts"].values()
+                for label in (entry.get("contributing_fits") or {})}
+        for label in sorted(fits):
+            for caveat in read_convergence_caveats(os.path.join(env.models_output_dir(), label)):
+                print(f"Accepted caveat for {label}: {caveat}")
+                print("Disclose this caveat in the comparison report before publication.")
     return {
         name: _file_sha256(os.path.join(comparisons_dir, name))
         for name in sorted(os.listdir(comparisons_dir))
@@ -211,6 +226,9 @@ def verify(base_url: str, assets: list[str], timeout: float = 30.0) -> list[str]
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default=None, help="output root (see fit_model.py)")
+    parser.add_argument("--config", default="rep", help="Expected reporting sampling configuration.")
+    parser.add_argument("--allow-caveats", action="store_true",
+                        help="Permit recorded convergence caveats; hard convergence checks still apply.")
     parser.add_argument(
         "--run-id", default=None, help="republish into an existing upload id"
     )
@@ -232,7 +250,7 @@ def main() -> None:
 
     env.set_output_root(args.out)
     comparisons_dir = env.comparisons_output_dir()
-    inputs = validate_inputs(comparisons_dir)
+    inputs = validate_inputs(comparisons_dir, config=args.config, allow_caveats=args.allow_caveats)
     receipt_path = os.path.join(BOOK_DIR, "_publication_receipt.json")
     if args.no_render:
         check_staged_inputs(inputs)

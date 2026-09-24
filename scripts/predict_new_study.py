@@ -68,7 +68,7 @@ from vocab_growth.fit_consumers import (
 from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.models.subject_effects import slope_reference_age
-from vocab_growth.predictive_mixtures import conditioned_resample
+from vocab_growth.predictive_mixtures import conditioned_resample, importance_weights
 
 EPSILON = 1e-6
 AGE_BANDS = [0, 20, 24, 30, 36, 200]
@@ -296,20 +296,16 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials, definition):
                 frame["spoken"].to_numpy(),
             )
         )
+        conditional, conditional_ess = conditioned_resample(
+            _betabinom_draw(rng, frame["understood"].to_numpy()[None, :], q, k_s),
+            betabinom.logpmf(frame["understood"].to_numpy()[None, :], n_trials,
+                            p_u * k_u, (1 - p_u) * k_u),
+            rng, return_ess=True,
+        )
         series.append(
             (
                 "spoken_given_observed_understood",
-                conditioned_resample(
-                    _betabinom_draw(
-                        rng,
-                        np.broadcast_to(frame["understood"].to_numpy()[None, :], q.shape),
-                        q, k_s,
-                    ),
-                    betabinom.logpmf(
-                        frame["understood"].to_numpy()[None, :], n_trials,
-                        p_u * k_u, (1 - p_u) * k_u,
-                    ), rng,
-                ),
+                conditional,
                 frame["spoken"].to_numpy(),
             )
         )
@@ -322,6 +318,7 @@ def marginal_prediction(post, x_plot, frame, draws, rng, n_trials, definition):
             pd.DataFrame(
                 {
                     "outcome": name,
+                    "importance_weight_ess": conditional_ess if name == "spoken_given_observed_understood" else np.nan,
                     "subject_id": frame["subject_id"].to_numpy(),
                     "timepoint": frame["timepoint"].to_numpy(),
                     "age": frame["age"].to_numpy(),
@@ -496,10 +493,16 @@ def within_child(
     curves = {k: _flat(post, prof[k]) for k in ("f", "h", "ku", "ks")}
 
     nd, nc, nk = len(draws), len(first), n_candidates
+    interpolated = {
+        (key, visit): _interp_draws(x_plot, curve[draws], ages)
+        for key, curve in curves.items() for visit, ages in ((1, a1), (2, a2))
+    }
     sample_u = np.empty((nd, nc), dtype=np.int64)
     sample_s = np.empty((nd, nc), dtype=np.int64)
     sample_s_cond = np.empty((nd, nc), dtype=np.int64)
     dens = {name: np.empty(nc) for name in LPD_COLUMNS}
+    ess_names = ("history_both", "history_understood", "history_both_u2", "history_understood_u2")
+    weight_ess = np.empty((nc, len(ess_names)))
 
     # Process one child at a time. Weights span both parameter draws and child
     # candidates. Normalising within each parameter draw would discard the
@@ -509,12 +512,12 @@ def within_child(
         for start in range(0, nd, chunk):
             d = draws[start : start + chunk]
             m = len(d)
-            def at(key, age, d=d):
-                return _interp_draws(x_plot, curves[key][d], np.array([age]))
-            f1, f2 = at("f", a1[child]), at("f", a2[child])
-            h1, h2 = at("h", a1[child]), at("h", a2[child])
-            ku1, ku2 = at("ku", a1[child]), at("ku", a2[child])
-            ks1, ks2 = at("ks", a1[child]), at("ks", a2[child])
+            def at(key, visit, start=start, m=m, child=child):
+                return interpolated[key, visit][start:start + m, child:child + 1]
+            f1, f2 = at("f", 1), at("f", 2)
+            h1, h2 = at("h", 1), at("h", 2)
+            ku1, ku2 = at("ku", 1), at("ku", 2)
+            ks1, ks2 = at("ks", 1), at("ks", 2)
             params = draw_child_params(post, definition, structure, d, rng, (m, nk))
             params[..., 0] += _study_draw(post, prof["tau_u"], d, rng, (m, nk))
             params[..., 2] += _study_draw(post, prof["tau_q"], d, rng, (m, nk))
@@ -534,20 +537,21 @@ def within_child(
                 candidates[name].append(value.ravel())
         v = {name: np.concatenate(parts) for name, parts in candidates.items()}
         both = v["lu1"] + v["ls1"]
+        weights, weight_ess[child] = importance_weights(
+            np.column_stack([both, v["lu1"], both + v["lu2"], v["lu1"] + v["lu2"]]),
+            label=f"visit-two prediction for child {first['subject_id'].iloc[child]}",
+        )
         for suffix, history in (("both", both), ("understood", v["lu1"])):
             history_norm = logsumexp(history)
             parent_norm = logsumexp(history + v["lu2"])
             dens[f"lpd_understood_given_{suffix}"][child] = parent_norm - history_norm
             # Speech additionally conditions on comprehension at visit two.
             dens[f"lpd_spoken_given_{suffix}"][child] = logsumexp(history + v["lu2"] + v["ls2"]) - parent_norm
-        def pick(log_weights):
-            weights = np.exp(log_weights - logsumexp(log_weights))
-            return rng.choice(len(weights), size=nd, p=weights)
-        selected = pick(both)
+        selected = rng.choice(len(weights), size=nd, p=weights[:, 0])
         u = _betabinom_draw(rng, n_trials, v["p2"][selected], v["ku2"][selected])
         sample_u[:, child] = u
         sample_s[:, child] = _betabinom_draw(rng, u, v["q2"][selected], v["ks2"][selected])
-        selected_cond = pick(both + v["lu2"])
+        selected_cond = rng.choice(len(weights), size=nd, p=weights[:, 2])
         sample_s_cond[:, child] = _betabinom_draw(
             rng, y_u2[0, child, 0], v["q2"][selected_cond], v["ks2"][selected_cond]
         )
@@ -572,6 +576,7 @@ def within_child(
                     "subject_id": second["subject_id"].to_numpy(),
                     "age_t1": a1,
                     "age_t2": a2,
+                    "importance_weight_ess": weight_ess[:, 2 if name == "spoken_given_observed_understood" else 0],
                     "observed_t1": first[t1_column].to_numpy(),
                     "observed": observed,
                     "pred_median": np.median(sample, axis=0),
@@ -590,6 +595,7 @@ def within_child(
             "age_t1": a1,
             "age_t2": a2,
             **dens,
+            **{f"importance_weight_ess_{name}": weight_ess[:, i] for i, name in enumerate(ess_names)},
         }
     )
     return pd.concat(out, ignore_index=True), lpd

@@ -199,10 +199,39 @@ def test_loader_preserves_original_sampling_provenance(tmp_path, monkeypatch):
     loaded = []
     context = SimpleNamespace(model=SimpleNamespace(free_RVs=[SimpleNamespace(name="x")], coords={}),
                               reporting=SimpleNamespace(output_dir=str(tmp_path)), set_trace=loaded.append)
-    _MODULE._loader_stage("unused.nc", retained)(context)
+    _MODULE._loader_stage("unused.nc", retained, implementation_change_reason="Reporting correction only")(context)
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert loaded == [trace]
     assert asdict(context.sampling) == sampling
-    for field in ("sampling", "code", "runtime"):
-        assert saved[field] == retained[field]
+    assert saved["sampling"] == retained["sampling"]
+    assert saved["code"] == {"commit": "new"}
+    assert saved["runtime"] == {"host": "new"}
     assert saved["artefacts"]["retained_sampling_manifest"] == retained
+    assert saved["artefacts"]["implementation_change_review"]["reason"] == "Reporting correction only"
+
+
+@pytest.mark.parametrize("change", ["code", "packages", "missing", "frame"])
+def test_reviewed_resume_only_relaxes_code_identity(written_manifest, definition, change):
+    import json
+
+    directory = written_manifest()
+    path = Path(directory) / _MODULE.FIT_MANIFEST_FILENAME
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    implementation = manifest["model"]["implementation"]
+    implementation["sha256"] = "older-code"
+    if change == "packages":
+        implementation["packages"]["numpy"] = {"version": "0.0"}
+    elif change == "missing":
+        manifest["model"]["implementation"] = None
+    elif change == "frame":
+        manifest["data"]["analysis_frame_hash"] = "older-frame"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="implementation"):
+        _verify(directory, definition)
+    if change == "code":
+        assert _MODULE._verify(directory, MODEL_KEY, definition, CONFIG,
+                               implementation_change_reason="Reviewed reporting-only change") == manifest
+    else:
+        with pytest.raises(ValueError, match="implementation|prepared analysis frame"):
+            _MODULE._verify(directory, MODEL_KEY, definition, CONFIG,
+                            implementation_change_reason="Reviewed reporting-only change")

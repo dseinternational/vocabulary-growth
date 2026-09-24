@@ -1333,6 +1333,7 @@ def load_simulation(
     can ask for it, but every stage of ``fit_recovery.py`` passes it.
     """
     from vocab_growth.fit_artifacts import read_json
+    from vocab_growth.models.fit_identity import definition_differences
 
     record = read_json(os.path.join(directory, SIMULATION_FILENAME))
     if expected_definition is not None:
@@ -1342,13 +1343,9 @@ def load_simulation(
                 f"The simulation at {directory} records no model definition; "
                 "re-run the simulate step before fitting it."
             )
-        current = normalise_for_json(expected_definition)
-        if recorded != current:
-            differing = sorted(
-                key
-                for key in set(recorded) | set(current)
-                if recorded.get(key) != current.get(key)
-            )
+        differences = definition_differences(recorded, expected_definition)
+        if differences:
+            differing = [difference.describe() for difference in differences]
             raise ValueError(
                 f"The simulation at {directory} was generated from a different "
                 f"definition than the one now being fitted. Differing field(s): "

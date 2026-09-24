@@ -2889,21 +2889,11 @@ def _print_nested_outcome_split(manifest: dict, directory: str) -> None:
 
 
 def _print_kappa_identification(directory: str, definition: dict, suffixes: list) -> None:
-    """Name the parts of each kappa curve the data did not inform, or is straining.
+    """Report per-parameter changes in spread and prior-tail location.
 
-    Two readings, and the order matters. A parameter sitting in the far tail of
-    its prior is **pressing**, whatever its contraction: contraction is
-    ``1 - posterior sd / prior sd``, so a posterior that is *tightly* determined a
-    long way outside its prior has a spread much like the prior's and scores as
-    though the data never touched it. VG05, VG07 and VG08 put ``b_kappa_mag_s``
-    7.6 to 7.9 prior standard deviations out with a relative posterior spread of
-    13%, and the contraction statistic labels all three ``uninformed``. Only a
-    parameter that is *both* barely contracted *and* sitting mid-prior is
-    genuinely unestimated -- VG22's ``kappa_excess_young_s`` is that case.
-
-    The legacy form's intercept and slope are coupled through
-    ``kappa_min + exp(a - b_mag z)``, so when both are straining they are one
-    finding and are reported as one.
+    Each flagged parameter gets its own descriptive bullet. These summaries
+    cannot establish absent learning, a binding prior or parameter reliability.
+    Even coupled intercept and slope parameters retain separate summaries.
     """
     table = _read(directory, "prior_posterior_contraction")
     if table is None or "flags" not in table.columns:

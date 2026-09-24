@@ -97,6 +97,67 @@ def test_publish_validation_accepts_complete_compatible_reporting_fit(tmp_path):
     assert errors == []
 
 
+@pytest.mark.parametrize("current_dirty,retained_dirty", [(False, False), (True, False), (False, True), (True, True)])
+def test_resumed_publication_checks_both_code_provenances(tmp_path, current_dirty, retained_dirty):
+    output_dir = tmp_path / "fit"
+    _write_complete_output(output_dir)
+    path = output_dir / "fit_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["code"]["dirty"] = current_dirty
+    manifest["artefacts"] = {"retained_sampling_manifest": {"code": {"dirty": retained_dirty}}}
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    errors = validate_fit_output(str(output_dir), require_clean_fit=True)
+    assert bool(errors) is (current_dirty or retained_dirty)
+
+
+@pytest.mark.parametrize("original_dirty,intermediate_dirty", [(False, True), (True, False)])
+def test_repeated_resume_checks_sampling_not_intermediate_reporting(tmp_path, original_dirty, intermediate_dirty):
+    directory = tmp_path / "fit"
+    _write_complete_output(directory)
+    path = directory / "fit_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["artefacts"] = {"retained_sampling_manifest": {
+        "code": {"dirty": intermediate_dirty},
+        "artefacts": {"retained_sampling_manifest": {"code": {"dirty": original_dirty}}},
+    }}
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    errors = validate_fit_output(str(directory), require_clean_fit=True)
+    assert bool(errors) is original_dirty
+
+
+def test_comparison_accepts_registered_vg11_exception_only_with_caveats(tmp_path, monkeypatch):
+    import vocab_growth.analysis_frames as frames
+    from vocab_growth.comparisons_provenance import _publication_fit_errors
+    from vocab_growth.fit_artifacts import (
+        ACCEPTED_EXCEPTION_KEY,
+        CONVERGENCE_EXCEPTIONS,
+    )
+    from vocab_growth.models.definitions import VG11
+
+    directory = tmp_path / f"{VG11.model_id}-{VG11.config_name}"
+    _write_complete_output(directory, sampling_name="rep-lite")
+    path = directory / "fit_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["model"].update(model_id=VG11.model_id, config_name=VG11.config_name,
+                             definition=normalise_for_json(VG11))
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    write_fit_state(str(directory), "complete", model_id=VG11.model_id,
+                    config_name=VG11.config_name, sampling_config_name="rep-lite")
+    path = directory / "diagnostics_summary.json"
+    diagnostics = json.loads(path.read_text(encoding="utf-8"))
+    exception = CONVERGENCE_EXCEPTIONS["VG11"]
+    diagnostics.update(max_rhat=1.012, rhat_failing=["ell"],
+                       **{ACCEPTED_EXCEPTION_KEY: {"parameters": list(exception.parameters), "decided": exception.decided}})
+    diagnostics["checks"]["rhat"] = False
+    path.write_text(json.dumps(diagnostics), encoding="utf-8")
+    monkeypatch.setattr(frames, "expected_analysis_frame_hash", lambda *args: "sha256:frame")
+    assert _publication_fit_errors(str(directory), "sha256:data", config="rep-lite", allow_caveats=True) == []
+    assert any("Convergence caveat" in e for e in _publication_fit_errors(str(directory), "sha256:data", config="rep-lite"))
+    diagnostics["min_ess"] = 200
+    path.write_text(json.dumps(diagnostics), encoding="utf-8")
+    assert any("Hard convergence evidence" in e for e in _publication_fit_errors(str(directory), "sha256:data", config="rep-lite", allow_caveats=True))
+
+
 def test_experimental_singleton_quadrature_cannot_be_published(tmp_path):
     output_dir = tmp_path / "fit"
     _write_complete_output(output_dir)

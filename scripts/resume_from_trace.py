@@ -36,6 +36,9 @@ silently wrong summaries rather than an error:
   reason: the fingerprint covers every CSV in ``data/`` while a model reads the
   raw data only through its own prepared frame;
 * its sampling configuration name must equal the one being resumed under;
+* its implementation signature must match, unless a reviewed code-only change
+  is accepted with ``--allow-implementation-change REASON``. Missing evidence
+  or changed numerical packages cannot be excused by this option;
 * the trace's free variables and their dimensions must match the rebuilt model's.
 """
 
@@ -55,11 +58,11 @@ from vocab_growth import environment as env
 from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     FIT_MANIFEST_FILENAME,
-    normalise_for_json,
     source_data_hash,
 )
 from vocab_growth.models.common import run_fit_pipeline
 from vocab_growth.models.definitions import MODEL_REGISTRY
+from vocab_growth.models.fit_identity import definition_differences
 from vocab_growth.models.implementation_identity import (
     describe_difference,
     implementation_signature,
@@ -98,7 +101,7 @@ def _stages_for(model_key: str, definition):
         raise
 
 
-def _verify(retained_dir: str, model_key: str, definition, config: str) -> dict:
+def _verify(retained_dir: str, model_key: str, definition, config: str, *, implementation_change_reason: str | None = None) -> dict:
     """Fail closed unless the retained fit is the one we are about to resume."""
     manifest_path = os.path.join(retained_dir, FIT_MANIFEST_FILENAME)
     if not os.path.isfile(manifest_path):
@@ -107,7 +110,7 @@ def _verify(retained_dir: str, model_key: str, definition, config: str) -> dict:
         manifest = json.load(handle)
 
     recorded = manifest.get("model", {}).get("definition")
-    if recorded != normalise_for_json(definition):
+    if definition_differences(recorded, definition):
         raise ValueError(
             "The retained fit's model definition differs from the current "
             "registered definition; resuming would summarise one model's trace "
@@ -122,11 +125,19 @@ def _verify(retained_dir: str, model_key: str, definition, config: str) -> dict:
     recorded_implementation = manifest.get("model", {}).get("implementation")
     current_implementation = implementation_signature()
     if not matches(recorded_implementation, current_implementation):
-        raise ValueError(
-            "The retained implementation signature is missing or incompatible: "
-            + describe_difference(recorded_implementation, current_implementation)
-            + "; refit before generating new summaries."
+        code_only = (
+            isinstance(recorded_implementation, dict)
+            and bool(recorded_implementation.get("sha256"))
+            and bool(recorded_implementation.get("sources"))
+            and recorded_implementation.get("packages") == current_implementation["packages"]
         )
+        if not (code_only and implementation_change_reason and implementation_change_reason.strip()):
+            raise ValueError(
+                "The retained implementation signature is missing or incompatible: "
+                + describe_difference(recorded_implementation, current_implementation)
+                + "; refit, or review a code-only change and record why it preserves "
+                "the sampled model with --allow-implementation-change REASON."
+            )
     parameters = manifest.get("sampling", {}).get("parameters")
     if not isinstance(parameters, dict) or not parameters:
         raise ValueError("The retained fit records no sampling parameters; refit.")
@@ -165,7 +176,7 @@ def _verify(retained_dir: str, model_key: str, definition, config: str) -> dict:
     return manifest
 
 
-def _loader_stage(trace_path: str, retained_manifest: dict | None = None):
+def _loader_stage(trace_path: str, retained_manifest: dict | None = None, *, implementation_change_reason: str | None = None):
     """The stage that replaces sampling: load the retained trace and check it fits."""
 
     def load_retained_trace(context) -> None:
@@ -197,14 +208,21 @@ def _loader_stage(trace_path: str, retained_manifest: dict | None = None):
                 **retained_manifest["sampling"]["parameters"]
             )
             # The pipeline wrote a fresh manifest before loading this trace.
-            # Restore the provenance of sampling before any stage can publish it.
+            # Keep current code/runtime for the regenerated artefacts, and retain
+            # the original trace's settings and full sampling provenance.
             from vocab_growth.fit_artifacts import read_json, write_json_atomic
 
             path = os.path.join(context.reporting.output_dir, FIT_MANIFEST_FILENAME)
             current = read_json(path)
-            for field in ("sampling", "code", "runtime"):
-                current[field] = retained_manifest.get(field, {})
+            current["sampling"] = retained_manifest["sampling"]
             current.setdefault("artefacts", {})["retained_sampling_manifest"] = retained_manifest
+            if implementation_change_reason:
+                recorded = retained_manifest.get("model", {}).get("implementation")
+                current["artefacts"]["implementation_change_review"] = {
+                    "reason": implementation_change_reason.strip(), "retained": recorded,
+                    "current": current.get("model", {}).get("implementation"),
+                    "difference": describe_difference(recorded, implementation_signature()),
+                }
             write_json_atomic(path, current)
 
     return load_retained_trace
@@ -216,6 +234,8 @@ def main() -> int:
     parser.add_argument("retained_dir", help="Directory holding the retained trace.")
     parser.add_argument("--config", default="rep")
     parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--allow-implementation-change", metavar="REASON",
+                        help="After reviewing a code-only change, record why the sampled model is unchanged.")
     args = parser.parse_args()
 
     env.set_output_root(args.output_dir)
@@ -231,7 +251,8 @@ def main() -> int:
         return 1
 
     try:
-        manifest = _verify(args.retained_dir, args.model, definition, args.config)
+        manifest = _verify(args.retained_dir, args.model, definition, args.config,
+                           implementation_change_reason=args.allow_implementation_change)
     except (OSError, ValueError) as exc:
         console.print(f"[bold red]{exc}[/bold red]")
         return 1
@@ -259,7 +280,7 @@ def main() -> int:
     index = names.index(SAMPLING_STAGE_NAME)
     stages[index] = (
         f"{SAMPLING_STAGE_NAME} (loaded from retained trace)",
-        _loader_stage(trace_path, manifest),
+        _loader_stage(trace_path, manifest, implementation_change_reason=args.allow_implementation_change),
     )
     # Prior predictive checks re-draw from the prior and cost real time without
     # informing anything the posterior artefacts need; the retained fit already

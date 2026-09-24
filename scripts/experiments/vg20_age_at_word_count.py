@@ -171,8 +171,9 @@ def main() -> None:
     print(f"VG20  draws={d['f_u'].shape[0]}  ages={d['ages'].min():.0f}-{d['ages'].max():.0f} mo  scale={d['n_trials']}")
     print(f"tau_subj_u={d['tau_u'].mean():.3f}  tau_subj_q={d['tau_q'].mean():.3f}  rho_uq={d['rho'].mean():+.3f}")
     df = pd.DataFrame(understood_rows(d) + spoken_rows(d))
-    os.makedirs(env.comparisons_output_dir(), exist_ok=True)
-    out = os.path.join(env.comparisons_output_dir(), "age_at_word_count_vg20.csv")
+    experiment_dir = os.path.join(env.comparisons_output_dir(), "experiments", "age_at_word_count")
+    os.makedirs(experiment_dir, exist_ok=True)
+    out = os.path.join(experiment_dir, "age_at_word_count_vg20.csv")
     df.to_csv(out, index=False)
 
     for outcome, cap in (("understood", CAP_UNDERSTOOD), ("spoken", CAP_SPOKEN)):

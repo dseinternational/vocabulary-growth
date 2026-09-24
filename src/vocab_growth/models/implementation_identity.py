@@ -17,6 +17,10 @@ fit ask for it, while re-rendering an existing fit and provisional local syncs
 do not (:func:`vocab_growth.fit_artifacts.fit_validation_kwargs`). Editing a
 plot helper must not make a completed fit unrenderable.
 
+The retained-trace resume command also permits an explicit, recorded review of
+a code-only change, with unchanged numerical libraries, definition and frame.
+It preserves both signatures and the reason for retaining the original samples.
+
 The signature records the evidence, not just the digest: the per-module hashes
 and the library versions travel in the manifest, so a mismatch can be reduced
 to the modules and packages that actually moved (:func:`describe_difference`)
