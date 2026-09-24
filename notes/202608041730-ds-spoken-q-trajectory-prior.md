@@ -1,5 +1,8 @@
 # The Down syndrome spoken prior predictive: the `q` trend line and `eta_q`
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Using calibration from the analysis data to set a prior does not supply independent validation. The prior and its sensitivity are part of the model assumptions; agreement with that calibration cannot establish accuracy on its own. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

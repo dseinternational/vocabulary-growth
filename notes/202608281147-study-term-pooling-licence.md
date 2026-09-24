@@ -1,5 +1,8 @@
 # Why the study-level terms license pooling the gesture measure with the sign sources — and where the licence stops
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A zero-sum constraint does not give equal influence to each study's data. The shared curve and study effects are estimated jointly, and more precise studies can have more influence. In a two-study Gaussian example the first study can supply about 0.971 of the centre's data weight despite an exact zero-sum constraint. Study effects also do not establish measurement comparability. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The discussion of `es_01` reflects the evidence available on this date. The [later construct review](202609021903-es01-gesture-construct-revisited.md) revised the comparison between gesture and sign sources. Use the [current source note](../data/vocab_data_es_01.md) for the data definition.
 

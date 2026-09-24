@@ -1,5 +1,8 @@
 # VG11-VG13 review: verification and the immediate correctness and reporting fixes
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A predictive interval for a new child cannot be repaired by relabelling it as an interval for a zero-effect reference curve. The plotted random quantity and the caption must agree; the current model pages distinguish these targets. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 

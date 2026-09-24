@@ -1,5 +1,8 @@
 # The comprehension curve moved, and `us_03`'s departure went with it (#289 task 2.1)
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Empirical counts divided by each form's ceiling are not on the same scale as model probabilities defined against 810 words. A change of residual estimator as well as a refit prevents attributing a changed significance result to one study effect alone. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

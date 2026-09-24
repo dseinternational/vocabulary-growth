@@ -1,5 +1,8 @@
 # Item difficulty and the aggregate likelihood
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The sufficiency argument does not show that total scores carry no information about item difficulty. It conditions on the item parameters. The stated impossibility claim and any bound based on that converse are withdrawn. Specific item ordering still requires item-level evidence. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5, consolidated and revised by Claude Code/Opus 5).
 

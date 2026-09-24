@@ -75,6 +75,59 @@ def test_a_recorded_comparison_validates_against_its_own_fits(dirs):
     assert warnings == []
 
 
+@pytest.mark.parametrize("change, message", [
+    ("output", "changed after generation"),
+    ("code", "code is missing or changed"),
+    ("hash", "no recorded hash"),
+    ("source", "no contributing fit or data source"),
+    ("unclaimed", "not claimed"),
+])
+def test_strict_publication_refuses_stale_or_unproven_outputs(dirs, change, message):
+    models, comparisons = dirs
+    output = comparisons / "summary.csv"
+    output.write_text("x\n1\n", encoding="utf-8")
+    write_comparison_manifest(str(comparisons), script="summary.py", contributing={},
+                              outputs=[output.name], source_data_hash="current")
+    manifest_path = comparisons / COMPARISON_MANIFEST_FILENAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entry = manifest["scripts"]["summary.py"]
+    if change == "output":
+        output.write_text("x\n2\n", encoding="utf-8")
+    elif change == "code":
+        entry.pop("implementation")
+    elif change == "hash":
+        entry.pop("output_hashes")
+    elif change == "source":
+        entry.pop("source_data_hash")
+    else:
+        (comparisons / "unrecorded.csv").touch()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    errors, _ = validate_comparison_manifest(str(comparisons), str(models),
+                    current_source_data_hash="current", require_publication=True)
+    assert any(message in error for error in errors), errors
+
+
+def test_publication_checks_contributor_quality_even_when_fingerprint_matches(dirs, monkeypatch):
+    import vocab_growth.comparisons_provenance as cp
+
+    models, comparisons = dirs
+    fit = _write_fit(models, "VG10-x", created="2026-09-23")
+    (comparisons / "summary.csv").touch()
+    write_comparison_manifest(str(comparisons), script="summary.py",
+                              contributing={fit.name: str(fit)}, outputs=["summary.csv"])
+    calls = []
+
+    def quality(path, raw_hash, **kwargs):
+        calls.append((path, raw_hash))
+        return ["failed hard convergence"]
+
+    monkeypatch.setattr(cp, "_publication_fit_errors", quality)
+    errors, _ = validate_comparison_manifest(str(comparisons), str(models),
+                    current_source_data_hash="current", require_publication=True)
+    assert calls == [(str(fit), "current")]
+    assert "failed hard convergence" in errors
+
+
 def test_a_refitted_contributor_invalidates_the_comparison(dirs):
     """The defect: a comparison outliving the fit it was computed from."""
     models_dir, comparisons_dir = dirs

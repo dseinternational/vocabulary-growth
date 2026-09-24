@@ -1,5 +1,8 @@
 # Thinning VG08's replication to the typically developing profile reproduces the typically developing pathology
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Thinning changes information and the weighting of ages, children and studies. Two seeds do not establish seed independence, and a few unsuccessful parameterisations do not rule out all equivalent parameterisations. The singleton-count ordering stated in the original interpretation is not the ordering of its displayed counts. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 

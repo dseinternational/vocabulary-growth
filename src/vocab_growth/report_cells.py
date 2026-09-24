@@ -1309,10 +1309,10 @@ def render_headline_quantities(directory: str = ".") -> None:
             )
             rows.append(
                 (
-                    f"Fastest growth in {label}",
+                    f"Maximum median growth rate in {label}",
                     f"{peak['median_rate']:.1f} words/month around "
-                    f"{info['peak_age_median_months']:.0f} months",
-                    f"peak age {info['peak_age_ci_lo_months']:.0f} – "
+                    f"{peak['age_months']:.0f} months",
+                    f"draw-wise peak age {info['peak_age_ci_lo_months']:.0f} – "
                     f"{info['peak_age_ci_hi_months']:.0f} months; rate "
                     f"{peak['ci_lo']:.1f} – {peak['ci_hi']:.1f}{share_note}",
                 )
@@ -1923,17 +1923,12 @@ def render_loo_section(directory: str = ".") -> None:
         }:
             print()
             print(
-                "A large share is expected here and is not by itself evidence "
-                "of misfit. This model gives each child their own random "
-                "intercept, and a child's intercept is informed mostly by that "
-                "child's own observations — so removing one observation can move "
-                "the posterior substantially, which is precisely the situation "
-                "importance sampling approximates poorly. Leave-one-observation-out "
-                "is the wrong unit of prediction for a model with per-child "
-                "parameters. The question it half-answers — how well this "
-                "generalises beyond the data it saw — is better put to a grouped "
-                "check, which holds a child's rows out together rather than one "
-                "row at a time. "
+                "High Pareto k diagnoses an unreliable importance-sampling approximation; "
+                "it does not by itself invalidate the prediction question or establish model misfit. "
+                "Removing an observation can change a child's estimated effect substantially. "
+                "Exact refits or a suitable alternative are needed to assess the same holdout. "
+                "Holding all of a child's rows out instead asks about a new child. Choose the "
+                "holdout unit from the intended use; child effects alone do not decide it. "
                 + _held_out_check_sentence(read_manifest(directory))
             )
 
@@ -2519,13 +2514,13 @@ def render_prior_posterior_contraction(directory: str = ".") -> None:
         contraction = float(row.contraction)
         cdf = float(row.prior_cdf)
         if contraction <= 0.1:
-            reading = "prior-driven"
+            reading = "little reduction in spread"
             prior_driven.append(name)
         elif cdf >= 0.95 or cdf <= 0.05:
-            reading = "pressing against the prior"
+            reading = "posterior mean in a prior tail"
             pressing.append(name)
         else:
-            reading = "informed by the data"
+            reading = "posterior spread reduced"
         cells = [label]
         if has_prior:
             cells += [f"{float(row.prior_median):.3g}", f"{float(row.prior_sd):.3g}"]
@@ -2539,21 +2534,20 @@ def render_prior_posterior_contraction(directory: str = ".") -> None:
         print("| " + " | ".join(cells) + " |")
     print()
     summary = (
-        ": Contraction is 1 − posterior SD / prior SD: 1 means the data fixed the parameter, "
+        ": Contraction is 1 minus posterior SD / prior SD. A value of 1 means zero posterior SD, "
         "0 means the posterior is no narrower than the prior, and a value at or below 0.1 "
-        "is marked **prior-driven** — the reported value restates the prior rather than "
-        "estimating anything. The prior CDF at the posterior mean says where inside the "
-        "prior the data landed; near 0 or 1 the prior is a wall the likelihood is pushing "
-        "against. Computed from this fit's trace and its recorded definition by "
+        "is marked as little reduction in spread. This statistic does not measure changes "
+        "in location or shape and cannot establish that the data taught us nothing. "
+        "The prior CDF locates the posterior mean within the prior. A tail value "
+        "is a reason to inspect prior sensitivity, not proof of a binding boundary. Computed by "
         "`scripts/prior_vs_posterior.py`."
     )
     if prior_driven:
         summary += (
-            f" Prior-driven here: {', '.join(f'`{n}`' for n in prior_driven)} — any "
-            "conclusion resting on one of these is a restatement of its prior."
+            f" Little reduction in spread here: {', '.join(f'`{n}`' for n in prior_driven)}."
         )
     if pressing:
-        summary += f" Pressing against the prior: {', '.join(f'`{n}`' for n in pressing)}."
+        summary += f" Posterior means in prior tails: {', '.join(f'`{n}`' for n in pressing)}."
     print(summary)
 
 
@@ -2895,21 +2889,11 @@ def _print_nested_outcome_split(manifest: dict, directory: str) -> None:
 
 
 def _print_kappa_identification(directory: str, definition: dict, suffixes: list) -> None:
-    """Name the parts of each kappa curve the data did not inform, or is straining.
+    """Report per-parameter changes in spread and prior-tail location.
 
-    Two readings, and the order matters. A parameter sitting in the far tail of
-    its prior is **pressing**, whatever its contraction: contraction is
-    ``1 - posterior sd / prior sd``, so a posterior that is *tightly* determined a
-    long way outside its prior has a spread much like the prior's and scores as
-    though the data never touched it. VG05, VG07 and VG08 put ``b_kappa_mag_s``
-    7.6 to 7.9 prior standard deviations out with a relative posterior spread of
-    13%, and the contraction statistic labels all three ``uninformed``. Only a
-    parameter that is *both* barely contracted *and* sitting mid-prior is
-    genuinely unestimated -- VG22's ``kappa_excess_young_s`` is that case.
-
-    The legacy form's intercept and slope are coupled through
-    ``kappa_min + exp(a - b_mag z)``, so when both are straining they are one
-    finding and are reported as one.
+    Each flagged parameter gets its own descriptive bullet. These summaries
+    cannot establish absent learning, a binding prior or parameter reliability.
+    Even coupled intercept and slope parameters retain separate summaries.
     """
     table = _read(directory, "prior_posterior_contraction")
     if table is None or "flags" not in table.columns:
@@ -2951,84 +2935,24 @@ def _print_kappa_identification(directory: str, definition: dict, suffixes: list
         )
 
     notes = []
-    paired = set()
     for item in found:
-        # The legacy intercept and slope move together; two separate caveats
-        # would read as two problems where the fit has one. The pair is formed
-        # only when both are *pressing*: a mid-prior, barely-contracted intercept
-        # beside a pressing slope is two different facts and is reported as such.
-        if item["role"] != "level" or not item["pressing"]:
-            continue
-        mate = next(
-            (o for o in found
-             if o["role"] == "slope" and o["suffix"] == item["suffix"] and o["pressing"]),
-            None,
-        )
-        if mate is None:
-            continue
-        paired |= {item["name"], mate["name"]}
-        outcome = _OUTCOME_LABELS.get(item["suffix"], "words")
-        # Direction from the tails, not assumed: the slope parameter is a
-        # magnitude, so its upper tail is a steeper decline and its lower tail a
-        # gentler one, and the intercept moves the opposite way to compensate.
-        if mate["cdf"] >= 0.95:
-            reading = (
-                "the data wants a steeper decline with age than the slope prior allows, "
-                "and the height is pulled "
-                + ("down" if item["cdf"] <= 0.05 else "up")
-                + " to compensate"
-            )
-        else:
-            reading = (
-                "the data wants a gentler decline with age than the slope prior expects, "
-                "and the height is pulled "
-                + ("up" if item["cdf"] >= 0.95 else "down")
-                + " to compensate"
-            )
-        notes.append(
-            f"- **The shape of this curve** for {outcome} is set by a prior the data is "
-            f"straining against on both sides. `{item['name']}` (its height at the pool's "
-            f"mean age) sits at prior CDF {item['cdf']:.2f} and `{mate['name']}` (how "
-            f"steeply it falls with age) at prior CDF {mate['cdf']:.2f}. The two are "
-            "coupled — the curve is a floor plus an exponential in age — so this is one "
-            f"finding, not two: {reading}. Read the curve's overall level with more "
-            "confidence than its steepness."
-        )
-
-    for item in found:
-        if item["name"] in paired:
-            continue
         outcome = _OUTCOME_LABELS.get(item["suffix"], "words")
         if item["pressing"]:
-            direction = "above" if item["cdf"] >= 0.95 else "below"
-            note = (
-                f"- **{item['region']}** for {outcome} is **pressing against its prior**: "
-                f"`{item['name']}` sits at prior CDF {item['cdf']:.2f}, so the data wants a "
-                f"value {direction} what the prior comfortably allows. Read the level as a "
-                "bound the prior is setting rather than as an estimate, and see the "
-                "sensitivity analysis."
-            )
-            if item["contraction"] <= 0.05:
-                note += (
-                    f" Its contraction ({item['contraction']:.2f}) is low, which here does "
-                    "**not** mean the data was silent: a posterior held tightly a long way "
-                    "outside its prior has a spread much like the prior's, and the "
-                    "contraction statistic cannot tell the two apart."
-                )
-            notes.append(note)
+            reading = "its posterior mean lies in a prior tail"
         else:
-            notes.append(
-                f"- **{item['region']}** for {outcome} is **not estimated from this data**: "
-                f"`{item['name']}` has contraction {item['contraction']:.2f} while sitting "
-                f"mid-prior (CDF {item['cdf']:.2f}), so the posterior is no narrower than "
-                "the prior it started from. The figure draws a median there because the "
-                "curve is continuous, not because the data placed it."
-            )
+            reading = "its posterior spread is little reduced from its prior spread"
+        notes.append(
+            f"- **{item['region']}** for {outcome}: `{item['name']}` has contraction "
+            f"{item['contraction']:.2f} and prior CDF at its posterior mean "
+            f"{item['cdf']:.2f}; {reading}. These summaries do not establish a prior "
+            "boundary, absence of learning, or the reliability of the curve. Inspect "
+            "the full distributions and the prior sensitivity analysis."
+        )
 
     if not notes:
         print(
-            "Every dispersion parameter in this fit is informed by the data and sits "
-            "within its prior, so both ends of each curve can be read."
+            "No dispersion parameter meets these spread or prior-tail screening thresholds. "
+            "That alone does not establish data support or robustness to the prior."
         )
         print()
         return

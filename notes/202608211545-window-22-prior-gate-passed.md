@@ -1,5 +1,8 @@
 # The `window-22` closure is the data's, not the prior's
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Similar BFMI warnings do not guarantee equal estimation error or cancellation in a contrast. An interval spanning zero does not establish equivalence. Convergence and a scientifically meaningful tolerance are separate requirements. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

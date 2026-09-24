@@ -1,5 +1,8 @@
 # Our fitted trajectories against Gompertz growth curves
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Agreement among fits to overlapping data or the same fitted curve is not independent validation. The Gompertz growth coefficient has inverse-time units. Age-dependent mixtures of forms need not preserve peak age. A fixed-asymptote extrapolation cannot be declared wrong solely because it differs from another assumed extrapolation; these require external predictive checks. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

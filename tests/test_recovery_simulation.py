@@ -440,8 +440,8 @@ def _written_simulation(tmp_path, definition):
     ).to_netcdf(tmp_path / TRUTH_FILENAME)
     (tmp_path / SIMULATION_FILENAME).write_text(
         json.dumps(
-            {"simulation": {"definition": normalise_for_json(definition),
-                            "truth_source": "prior"}}
+            {"model": {"definition": normalise_for_json(definition)},
+             "simulation": {"truth_source": "prior"}}
         )
     )
     return tmp_path
@@ -476,6 +476,26 @@ def test_load_simulation_names_the_fields_that_differ(tmp_path):
 
     with pytest.raises(ValueError, match="report_max_age_understood"):
         load_simulation(str(directory), expected_definition=moved)
+
+
+@pytest.mark.parametrize("changed_default", [False, True])
+def test_load_simulation_uses_documented_definition_backfills(tmp_path, changed_default):
+    import dataclasses
+    import json
+
+    from vocab_growth.models.definitions import VG10
+    from vocab_growth.recovery.simulate import SIMULATION_FILENAME, load_simulation
+
+    directory = _written_simulation(tmp_path, VG10)
+    path = directory / SIMULATION_FILENAME
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    del saved["model"]["definition"]["include_same_day_disagreements"]
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    if changed_default:
+        with pytest.raises(ValueError, match="include_same_day_disagreements"):
+            load_simulation(str(directory), expected_definition=dataclasses.replace(VG10, include_same_day_disagreements=True))
+    else:
+        load_simulation(str(directory), expected_definition=VG10)
 
 
 def test_load_simulation_accepts_the_definition_it_was_written_from(tmp_path):

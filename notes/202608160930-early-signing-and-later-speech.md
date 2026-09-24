@@ -1,5 +1,8 @@
 # Does early signing predict later speech? What these data can and cannot answer
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Few study clusters and imbalanced outcomes limit information, but do not alone prove formal non-identifiability. The direction and size of estimation error require a defined data-generating model and converged recovery fits. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

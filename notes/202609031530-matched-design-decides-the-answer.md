@@ -1,5 +1,8 @@
 # Why matching on mental age and matching on comprehension give opposite answers
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Matching observed age or vocabulary does not isolate a causal mechanism. A contrast without a statistically significant difference does not establish equivalence, and the direction of matching or item-selection bias is not fixed. The identity for the selected nonzero pairs remains valid within that sample, but does not transport their average to all pairs. Read the later construct correction before using the proposed modality explanation. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

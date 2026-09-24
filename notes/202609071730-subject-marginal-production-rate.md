@@ -1,5 +1,8 @@
 # The conversion rate for a freshly drawn child was computed and thrown away
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The simulation writer stores its definition under model.definition. The old reader checked a different location and could miss a definition mismatch. The corrected writer-to-reader regression test now enforces the recorded definition before scoring. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

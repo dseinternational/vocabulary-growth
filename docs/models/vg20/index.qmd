@@ -121,7 +121,7 @@ render_glossary([
 
 **Nested model**
 
-: A model that is a special case of a larger one at particular parameter values. VG10 is VG20 at $\rho_{uq} = 0$: the two model graphs are otherwise identical, node for node, which is what makes the comparison between them readable.
+: A model that is a special case of a larger one at particular parameter values. The independent child-effect block is recovered at $\rho_{uq}=0$. Current VG20 also includes sex effects that VG10 lacks, so matching VG10 requires setting those effects to zero as well. A comparison of the registered models does not isolate correlation alone.
 
 **Cholesky parameterisation**
 
@@ -131,7 +131,7 @@ render_glossary([
 
 ## Statistical model
 
-The mean structure, the priors, the anchors, the dispersion blocks and the data are **VG10's**, unchanged. Words understood are a bounded count out of the reference inventory with a Beta-Binomial likelihood; on the logit scale the expected proportion understood is a straight-line trend in age plus an anchored Gaussian process, plus a study offset and a child offset. Words spoken are modelled as a fraction $q$ of words understood, with its own trend, GP, study offset and child offset.
+The base age functions, anchors and dispersion blocks follow VG10. Current VG20 also includes sex effects; VG10 does not. Words understood are a bounded count out of the reference inventory with a Beta-Binomial likelihood; on the logit scale the expected proportion understood is a straight-line trend in age plus an anchored Gaussian process, plus a study offset and a child offset. Words spoken are modelled as a fraction $q$ of words understood, with its own trend, GP, study offset and child offset.
 
 The single difference is in how the two **child** offsets are drawn.
 
@@ -157,7 +157,7 @@ $$
 \right)
 $$
 
-Both marginal spreads keep their meaning and their priors. **At $\rho_{uq} = 0$ this is the pair of independent draws above**, which is the sense in which VG10 is nested inside VG20 exactly rather than approximately: the two model graphs differ by $\rho_{uq}$ and by nothing else, a property pinned by a test that builds both models and differences their variables.
+Both marginal spreads keep their meaning and their priors. At $\rho_{uq}=0$ this child-effect block gives the independent draws above. Matching the whole VG10 model also requires zero sex effects in current VG20. Block-level nesting does not imply equal priors or fitted posteriors.
 
 ### Why the assumption was worth replacing
 
@@ -165,7 +165,7 @@ Two things make this more than a tidy generalisation.
 
 **It is a correction, not only an addition.** A child's spoken vocabulary is the product of what they understand and the share they say, so on the log scale $\log p_S = \log p_U + \log q$, and the variance of a sum of two correlated quantities gains twice their covariance. If the correlation is positive and the model assumes it away, the model understates how much children with Down syndrome differ from one another in speech. That is not a hypothetical: it is the one asymmetry in the report's Down-syndrome-versus-typically-developing between-child comparison that biases the number rather than merely complicating it, because the typically-developing comparator places a single intercept on the spoken logit and absorbs the covariance whether or not anyone names it.
 
-**Two earlier models already left evidence of it.** VG16 fits a cross-lag from earlier comprehension to later conversion, and *after* fitting it, the child offsets it realises still correlate with one another — the model has nowhere to put the association, because its two blocks are independent by construction. VG10's own fitted offsets show the same thing without any cross-lag at all. Both of those measurements are made under a prior that pulls them toward zero, so both are lower bounds rather than estimates. This model estimates the quantity instead of reading it off a residual.
+Fitted child effects from earlier models can show residual association worth examining. Shrinkage can alter their empirical correlation in either direction, so that correlation is not a lower bound on the population parameter. This model estimates an explicit correlation, conditional on its structural assumptions.
 
 ### What this model can do that VG16 cannot
 
@@ -233,13 +233,13 @@ $\eta = 1$ would be uniform across every correlation from $-1$ to $+1$. The valu
 
 ![The production ratio drawn from the prior alone.](prior_samples_q.png){#fig-prior-q .lightbox fig-align="left"}
 
-The check to make here is the usual one — that the prior admits the range of vocabularies real children have without concentrating on any part of it — and one specific to this model: because the correlation prior is symmetric about zero and the marginal spreads are unchanged from VG10, the prior predictive distribution of counts should be close to VG10's. A visible difference at this stage would mean the correlated block had changed something it was not meant to change.
+Check whether the prior generates plausible counts and joint patterns. Preserving the separate Gaussian effect scales does not preserve the distribution of their probability product. Adding correlation can change speech predictions even before fitting; the sex covariate is another difference from VG10.
 
 ### The child effects, which the three figures above do not contain
 
 Those three set every random effect to zero, so they test the mean function and nothing else — which is the right check for the trend and the GP, and useless for the prior this model was added for. The figures below fill that gap (they carry no count noise either; these do). Both are computed from the same prior draws, so nothing is added to the model graph ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233)).
 
-![Individual child trajectories around a fixed population curve, varying only the child effect. Under a constant offset the curves are parallel on the logit scale and never cross — the property VG19 relaxes.](prior_unseen_children.png){#fig-prior-children .lightbox fig-align="left"}
+![Child trajectories around a fixed reference curve. Constant offsets preserve the ordering of each separate latent logit. Products such as expected spoken counts can cross even with constant offsets. VG19 also lets each latent offset change with age.](prior_unseen_children.png){#fig-prior-children .lightbox fig-align="left"}
 
 ![Nested Beta-Binomial counts for one unseen child per draw: words understood drawn at the child's own $p_U$, then words spoken drawn **conditional on that count**.](prior_unseen_child_counts.png){#fig-prior-child-counts .lightbox fig-align="left"}
 
@@ -514,10 +514,10 @@ render_loo_section()
 - **Neither this model nor VG20 is the end of the line, and VG22 is the successor to both.** Each holds half of the same structure — VG19 gives children rates but decouples the two outcomes, VG20 couples them but freezes the spread in age — so the cross-outcome element Gate 1 found strongest, a child's comprehension *level* predicting their production-ratio *rate*, is estimated by neither. The answer is not an unrestricted $4 \times 4$: Gate 1 found that singular at maximum likelihood, with rank 3 reaching the identical likelihood. VG22 is the registered low-rank factor form, with `rank` fitted as a sensitivity family because the residual likelihood cannot choose it. Read the results here as one half of a comparison that VG22's fits will complete ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233), [`notes/202608221000`](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202608221000-four-by-four-gate1.md)).
 - **It is one number for the whole age range.** The correlation is constant in age. If the alignment between comprehension standing and conversion standing changes as children get older, this model reports an average over that change and gives no warning that it has done so.
 - **It is one number for the whole pool.** No study-level or subgroup variation in the correlation is estimated, and the pool spans several countries and languages.
-- **The reported population trajectories are VG10's.** Nothing in this model is intended to supersede them, and gate 3 of #224 confirmed it does not on the 2026-08-19 fits: expected words on both outcomes and the production ratio sat inside VG10's own 89% interval at every reported age (382 of 382 checks that day). A material difference here would be something to explain — against the interval widths and the predictive scores — before preferring either model's number, rather than proof that one of them is wrong. What this model does change is the **child-level** intervals, which is what it was built for.
+- **Reference trajectories must be compared after refitting.** The separate priors and likelihood factors overlap with VG10, but adding correlation and sex effects can change shared parameter posteriors. Historical agreement of curves is evidence about those fits, not a structural guarantee for a new fit.
 - **Role: model of record** for the Down syndrome joint understood + spoken estimands from **2026-08-19**, replacing VG10 on the study owner's instruction. VG10 becomes a development step and supplies no reported number.
 - **The early recovery run was too small to establish calibration.** In the run recorded against the 2026-08-19 fit, only one of three replicate fits converged. Results from the other two cannot establish recovery, and many correlated targets in one replicate are not independent coverage trials. Read the current recovery matrix for the present fit. Recovery under the fitted model also cannot test omitted reporter effects or a misspecified fallback likelihood.
 - **`tau_subj_u` comes back below its truth in every replicate (z = −1.94, −1.24, −1.58 on the 2026-08-19 recovery run) and in every VG10 replicate too.** Six of six across two models, neither of which carries `subject_variance_partition` — which is the mechanism the same bias was attributed to on VG12 ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)). The partition cannot be the whole cause. This is a lead for #225, not a finding of this model's, and six replicates cannot settle it.
-- **The correlation leans high, and the reason is structural rather than incidental.** The model has one place to put any co-movement between a child's two counts — the persistent child effects — because it carries no same-administration, informant or correlated-measurement-error term. Shared reporter tendency is therefore not merely hard to separate from persistent child association; it is not represented at all, and loads onto `rho_uq` by default. The exposure is large: most children in the frame are seen once (the composition table under Data gives the share), and those who carry both counts inform `rho_uq` only through the agreement between two counts on a single questionnaire completed by one parent. VG16's cross-lag reads the child's comprehension from a *different* administration and so avoids that artefact; disattenuated and converted to the correlation scale it implied about +0.24 [0.11, 0.38] against this model's +0.368 [0.287, 0.447] on the 2026-08-19 fits; the findings table above carries this fit's value. The two overlap, but the estimate that is immune to reporter bias is the lower one.
+- **Shared reporting effects remain a possible source of association.** This model has no separate same-administration or persistent reporter-error term, so correlated reporting can contribute to the estimated child-effect correlation. A cross-lag uses a different administration, but reporting tendencies can persist across visits. Neither quantity is immune to reporter bias, and their difference does not isolate the bias.
 - **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
 - **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common 810-word scale; it is a unit of measurement, not an instrument any child sat.

@@ -420,6 +420,7 @@ def test_the_produced_composition_keeps_its_parameters_unrenormalised():
 
 def _wide(has_lag_flags, lag, control, clean=None):
     return pd.DataFrame({
+        "subject_code": np.arange(len(lag)),
         "has_lag": has_lag_flags,
         "source_in_training": has_lag_flags if clean is None else clean,
         "elpd_spoken_lag": lag,
@@ -427,29 +428,18 @@ def _wide(has_lag_flags, lag, control, clean=None):
     })
 
 
-def test_unlagged_rows_change_the_standard_error_but_not_the_difference():
-    """Which is why the headline restricts to the rows a coefficient can move.
-
-    A row with no lag enters both arms identically, so its difference is exactly
-    zero: it leaves the total alone and shrinks the per-row spread the standard
-    error is built from, making the comparison look more precise than its
-    evidence.
-    """
+def test_unlagged_rows_can_change_predictions_after_separate_refits():
+    """Shared parameter posteriors can move even where the direct lag is zero."""
     lagged = _wide([True] * 4, [-1.0, -2.0, -3.0, -4.0], [-1.5, -2.5, -2.5, -4.5])
-    padded = _wide(
-        [True] * 4 + [False] * 20,
-        [-1.0, -2.0, -3.0, -4.0] + [-1.0] * 20,
-        [-1.5, -2.5, -2.5, -4.5] + [-1.0] * 20,
-    )
-
+    padded = _wide([True] * 4 + [False] * 2,
+                   [-1.0, -2.0, -3.0, -4.0, -2.0, -3.0],
+                   [-1.5, -2.5, -2.5, -4.5, -1.0, -1.0])
     a = wf.paired_difference(lagged, "elpd_spoken", restriction="lagged")
     b = wf.paired_difference(padded, "elpd_spoken", restriction="lagged")
     c = wf.paired_difference(padded, "elpd_spoken", restriction="all-later-waves")
-
-    assert a == b  # restricting recovers the lagged-only answer exactly
-    assert c["elpd_diff"] == pytest.approx(a["elpd_diff"])
-    assert c["se"] < a["se"]
-    assert c["n_rows"] == 24 and a["n_rows"] == 4
+    assert a == b
+    assert c["elpd_diff"] == pytest.approx(a["elpd_diff"] - 3.0)
+    assert c["n_rows"] == 6
 
 
 def test_the_headline_restriction_drops_rows_whose_source_was_held_out():

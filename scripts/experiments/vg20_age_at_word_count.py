@@ -50,6 +50,7 @@ from scipy.stats import norm
 
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
+from vocab_growth.censored_ages import summarise_crossing_ages
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
 MODEL = "vg20"
@@ -57,7 +58,7 @@ TARGETS = [50, 150, 300, 500, 750]
 SHARES = [0.50, 0.75, 0.90]
 N_CHILDREN = 2000          # synthetic cohort per posterior draw, spoken only
 DRAW_SUBSAMPLE = 2000      # posterior draws used for the spoken simulation
-HDI_PROB = 0.89
+INTERVAL_PROB = 0.89
 RNG = np.random.default_rng(20260823)
 
 CAP_UNDERSTOOD = MODEL_REGISTRY[MODEL].report_max_age_understood  # 72
@@ -103,31 +104,8 @@ def crossing_ages(Y: np.ndarray, ages: np.ndarray, level: float) -> np.ndarray:
 
 
 def summarise(values: np.ndarray, cap: float, floor: float) -> dict:
-    """Median and HDI of a crossing-age sample, with censoring made explicit.
-
-    Censored values are kept as +/-inf rather than dropped: discarding the draws
-    that never reach the target would pull the median toward the ages of the
-    draws that happened to reach it, which is exactly the bias that makes a
-    milestone look earlier than the model says.
-    """
-    beyond = float(np.mean(values > cap))
-    before = float(np.mean(values < floor))
-    median = float(np.median(values))
-    finite = np.isfinite(values)
-    lo, hi = (
-        C.hdi_from_samples(values[finite], HDI_PROB)
-        if finite.sum() > 1
-        else (np.nan, np.nan)
-    )
-    return {
-        "median": median if np.isfinite(median) and median <= cap else np.nan,
-        "lo": float(lo) if np.isfinite(lo) else np.nan,
-        "hi": float(hi) if np.isfinite(hi) else np.nan,
-        "frac_beyond_window": beyond,
-        "frac_before_window": before,
-        "censored": bool(beyond > 0.0 or before > 0.0),
-        "beyond_cap": bool(not (np.isfinite(median) and median <= cap)),
-    }
+    """Censor-aware median and 89% equal-tailed interval across all draws."""
+    return summarise_crossing_ages(values, cap, floor, INTERVAL_PROB)
 
 
 def understood_rows(d: dict) -> list[dict]:
@@ -193,8 +171,9 @@ def main() -> None:
     print(f"VG20  draws={d['f_u'].shape[0]}  ages={d['ages'].min():.0f}-{d['ages'].max():.0f} mo  scale={d['n_trials']}")
     print(f"tau_subj_u={d['tau_u'].mean():.3f}  tau_subj_q={d['tau_q'].mean():.3f}  rho_uq={d['rho'].mean():+.3f}")
     df = pd.DataFrame(understood_rows(d) + spoken_rows(d))
-    os.makedirs(env.comparisons_output_dir(), exist_ok=True)
-    out = os.path.join(env.comparisons_output_dir(), "age_at_word_count_vg20.csv")
+    experiment_dir = os.path.join(env.comparisons_output_dir(), "experiments", "age_at_word_count")
+    os.makedirs(experiment_dir, exist_ok=True)
+    out = os.path.join(experiment_dir, "age_at_word_count_vg20.csv")
     df.to_csv(out, index=False)
 
     for outcome, cap in (("understood", CAP_UNDERSTOOD), ("spoken", CAP_SPOKEN)):
@@ -208,11 +187,14 @@ def main() -> None:
             cells = []
             for share in SHARES:
                 r = sub[(sub.target == target) & (sub.share == share)].iloc[0]
-                if r["beyond_cap"]:
+                if r["before_floor"]:
+                    cells.append("before the grid".center(22))
+                elif r["beyond_cap"]:
                     cells.append(f"not by {cap:.0f} mo".center(22))
                 else:
                     hi = f"{r['hi']:.1f}" if np.isfinite(r["hi"]) and r["hi"] <= cap else f">{cap:.0f}"
-                    cells.append(f"{r['median']:5.1f}  [{r['lo']:.1f}, {hi}]".center(22))
+                    lo = f"{r['lo']:.1f}" if np.isfinite(r["lo"]) else "before grid"
+                    cells.append(f"{r['median']:5.1f}  [{lo}, {hi}]".center(22))
             print(f"{target:>6} | " + " | ".join(cells))
     print(f"\nwrote {out}")
 

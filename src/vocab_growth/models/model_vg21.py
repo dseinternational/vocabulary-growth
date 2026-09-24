@@ -5,8 +5,8 @@
 Model VG21: Joint words understood + spoken (TD, 8-22 months) with dataset-level
 study random intercepts.
 
-VG13 with its age window widened from 18 to 22 months. That is the whole change,
-and it exists because VG13 runs out of matched comprehension at about 221
+VG13 with its age window widened from 18 to 22 months and corresponding
+changes to anchors, process domain and amplitude prior. It exists because VG13 runs out of matched comprehension at about 221
 understood words, which is short of where the Down-syndrome-versus-typically-
 developing production-ratio contrast becomes interesting. This window reaches
 328.

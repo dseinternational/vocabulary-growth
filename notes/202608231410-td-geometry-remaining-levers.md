@@ -1,5 +1,8 @@
 # Remaining geometry levers for the TD hierarchical models, and the adopted order
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Exact integrated and conditional leave-one-out calculations agree when they use the same model and held-out singleton. Integrating can improve importance-sampling stability without changing that target. Existing-child versus new-child posterior-predictive replication is a different distinction. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 

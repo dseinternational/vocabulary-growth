@@ -305,7 +305,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
@@ -327,15 +327,12 @@ from vocab_growth.report_cells import render_prior_posterior_contraction
 render_prior_posterior_contraction()
 ```
 
-::: {.callout-important title="Is the VG09 geometry resolved? Yes."}
+::: {.callout-important title="Check the sampling geometry for this fit"}
 
-This is the question VG10 exists to answer, so it is answered here rather than left to the reader.
-
-VG09's failure was concentrated in the production-ratio block: its $q$ anchors, the $q$ GP hyperparameters, and the two $q$ random-effect scales showed marginal R-hat and tail-ESS problems, the signature of the trend/GP ridge described in @sec-gp-anchor. Under VG10's anchored geometry every one of those parameters clears both hard thresholds comfortably in the diagnostics table above — check the rows for `p_slope_low_q`, `p_slope_hi_q`, `eta_q`, `ell_q`, `ell_unit_q`, `tau_q` and `tau_subj_q`, and the pair plot for the ridges that produced the problem. The reported R-hat maximum and ESS minimum across the whole parameter set are in `diagnostics_summary.json` and are summarised by the gate; both pass.
-
-That is the whole of the claim. The anchor fixed a _sampling_ pathology, and a resolved geometry is a precondition for believing the numbers below — not itself a finding about vocabulary. Any soft-tier caveat this fit carries is disclosed in the block at the top of this section and applies on top of this verdict.
+The anchored process addresses overlap between the age trend and Gaussian process. Check the current diagnostic verdict, especially the production-ratio anchors, process parameters and random-effect scales. Rendering this page does not establish convergence. Read any recorded exception or remaining caveat alongside the estimates.
 
 :::
+
 
 ## Findings {#sec-findings}
 
@@ -347,15 +344,10 @@ from vocab_growth.report_cells import render_headline_quantities
 render_headline_quantities()
 ```
 
-Four things in that table carry the substance of the model.
+Read the current table for peak growth ages, the comprehension-to-speech gap and the production-ratio crossing. Their ordering and shape are empirical findings, not constraints of the model. Compare uncertainty as well as point estimates. The peak of the median growth curve and the median of draw-wise peak ages are different summaries.
 
-**Comprehension leads production, and the lead is measurable in both time and words.** The fastest growth in words understood arrives well before the fastest growth in words spoken, and the gap between what the reference (zero-effect) child understands and what they say opens, peaks, and then closes again over the reported range. That rise-and-fall shape is the model's central descriptive result: expressive vocabulary is not simply a smaller copy of receptive vocabulary, it is a delayed one.
+The variation table compares child and study effects on their stated logit scales. Their relative sizes depend on this fit and do not establish the cause of observed differences.
 
-**The production ratio is the mechanism.** $q$ rises across the whole reported range — the fraction of understood words that a child also says grows with age — and the table gives the age at which it reaches one half. That single crossing is the most quotable number the model produces, and it is read off the median curve rather than being the posterior median of the crossing itself.
-
-**Dispersion increases with age on both outcomes.** The variance-inflation readings in the last two rows grow, meaning that by school age an observation carries a small fraction of the information a Binomial count of the same size would. This is the quantitative reason the predictive bands widen so much at the top of the range, and it vindicates the prior change described under [Priors](#priors): the legacy slope prior was far too narrow for a concentration trend this steep, and the two-anchor form lets the dataset both its direction and its size.
-
-**Children differ more than studies do, and they differ most in conversion.**
 
 ```{python}
 #| echo: false
@@ -365,9 +357,7 @@ from vocab_growth.report_cells import render_variation_table
 render_variation_table()
 ```
 
-Both child scales exceed both study scales, so the pooled cohort is not simply an artefact of mixing studies with different recruitment. And the child scale on the production ratio exceeds the child scale on comprehension: children of the same age differ _more_ in how much of their comprehension they speak than in how much they comprehend. Expressive conversion is the more individually variable trait, which is a substantive claim about Down syndrome vocabulary development and not a modelling artefact.
-
-The practical consequence runs through every table below. Wherever a population-level and a subject-marginal interval are printed side by side, the second is several times the width of the first, and it is the second that answers a question about an individual child.
+A reference-curve interval describes uncertainty in that curve. A new-child predictive interval also includes variation between children and count noise. Use the latter for questions about possible individual counts, within the supported reporting ages.
 
 {{< include _bivariate_re_body.qmd >}}
 
@@ -445,17 +435,10 @@ else:
 
 The rows are the individual replicates and a pooled summary, read from the comparison harness's own output.
 
-Three caveats, all of which limit what this table can support.
+Score only replicates whose fits converged. The pooled row reports the number of assessable replicates. A small set can reveal a problem but cannot establish interval coverage. Coverage across correlated parameters is not a substitute for repeated simulation at fixed truths.
 
-**Coverage is below nominal, and it is not specific to this model.** Across three replicates VG10 covers 0.72 of its targets at the 89% level and 0.31 at the 50%, and two of the three replicates were not assessable because their own fits did not converge. The correlated successor VG20 was run at the same tier and replicate count and does better on every one of those figures (0.78 and 0.41), so this is a property of the engine and the `test` sampling tier rather than of either model's structure. It is a real limitation on what this table can certify, and it is the same limitation for both.
+Earlier text quoted the August 2026 VG10 and VG20 recovery runs as if they described whichever matrix was loaded here. Those results were specific to their definitions, data and sampling settings. Read the current matrix and its provenance before drawing a conclusion about this fit. Apparent bias in a few replicates does not establish its cause.
 
-**`tau_subj_u` comes back below its truth in every replicate** — z = −1.39, −2.28, −0.87 here, and −1.94, −1.24, −1.58 on VG20: six of six across the two models, none of which carries `subject_variance_partition`. That matters beyond this page, because the same downward bias in the between-child scale was found on VG12, which *does* carry the partition, and attributed to it ([#225](https://github.com/dseinternational/vocabulary-growth/issues/225)). Six replicates on two unpartitioned models say the partition cannot be the whole cause. Six replicates cannot say what is.
-
-**An earlier version of this section reported the `a1-tau-age-varying` variant instead**, on the stated grounds that no recovery had been run on VG10 as registered. One had, from 2026-08-16; the page went on disclaiming a near-neighbour for three days while the model's own matrix sat unread beside it. Corrected 2026-08-19.
-
-**Not every replicate is assessable.** A replicate is scored only if its own fit's convergence is confirmed; the `converged` column shows which were, and the pooled row names how many of the replicates it covers. A non-converged replicate is excluded rather than counted as a failure.
-
-**A handful of replicates is indicative only.** The harness says so in its own verdict, and the wording is worth taking literally: this is coverage measured over correlated quantities from a small number of draws, not simulation-based calibration. It can reveal a gross problem; it cannot certify that the posterior is calibrated. The quantities that fall outside their intervals most often are named in the full per-replicate files alongside this matrix, and they cluster on the production-ratio block and the random-effect scales — the parameters this model family finds hardest, which is the expected place for recovery to be weakest.
 
 ## Predictive calibration {#sec-calibration}
 

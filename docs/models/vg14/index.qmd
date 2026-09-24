@@ -60,8 +60,8 @@ render_reading_routes('development', instead='VG15')
 
 VG14 differs from VG15 in two ways, and the second matters more than the first:
 
-1. **It assumes signing and speaking are independent within a child**, so its total-expressive quantity $p_\text{any}$ is an over-count rather than an estimate. VG15 measures that association and finds it clearly positive.
-2. **It carries no study or child random effects at all.** Every observation is treated as independent, so its age curves absorb differences between studies and repeated visits by the same child. This is the larger of the two problems: the difference between the two models' totals is far bigger than the part attributable to independence alone. VG15's `posterior_summary_p_any.csv` sizes the independence part on its own, by reporting its identified total and the independence bound side by side; comparing that file with this page's `posterior_summary_p_any.csv` sizes the rest.
+1. **It assumes conditional independence between signing and speaking.** Its total-expressive estimate depends on that assumption. At fixed margins, positive association makes the independence total too high; negative association makes it too low. Use the current VG15 posterior to assess the association.
+2. **It carries no study or child random effects.** Its likelihood treats administrations as independent given age, so age patterns can also reflect study composition and repeated visits. A comparison with VG15 changes this structure as well as the association assumption. It does not isolate either change's effect. VG15 reports an independence comparison at its own fitted margins for that purpose.
 
 **What still stands on this page** is the _shape_ of the signing story — the signed trajectory, the rise and fall of the signed ratio, the sparsity of the signing data, and the direct check of the independence assumption against `uk_02`'s raw cross-tabulation. **What does not stand** is any number derived from the union of signing and speech: the $p_\text{any}$ figure, the $p_\text{any}$ table, and the sign-to-speech crossover timing. Each of those carries its own warning below.
 
@@ -397,7 +397,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality. so this fit cleared them.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 
@@ -463,7 +463,7 @@ This section assumes independence between signing and speaking within the unders
 
 ![Expected vocabulary by modality, including the derived total-expressive quantity. The total curve assumes independence between the two modalities. Each curve stops at its own quantity's reporting cap; the total, a ratio of understood built from the signed ratio, stops at the tighter of the comprehension and signing caps.](modality_trajectories.png){#fig-modality .lightbox fig-align="left"}
 
-The table below is the same quantity at the query ages. Its `Ey_any_*` columns are word counts on the reference inventory under the independence assumption; they are an over-count, and they are the columns most likely to be copied out of this page by mistake.
+The table below is the same quantity at the query ages. Its `Ey_any_*` columns are word counts on the reference inventory under the independence assumption; they can be too high or too low when the independence assumption fails.
 
 ```{python}
 summary_p_any = pd.read_csv("posterior_summary_p_any.csv")
@@ -779,7 +779,7 @@ render_loo_section()
 - **The dispersion priors were calibrated for a different graph.** The anchored $\kappa$ blocks are the conditional (random-effects) calibration shared with VG09/VG10/VG15/VG16/VG20; VG14's marginal dispersion is a different estimand, and a calibration matching this graph would sit far lower. See the priors section.
 - **The likelihood is a pragmatic composite, not exact marginalisation.** Rows with a usable understood count use a conditional ratio likelihood and rows without fall back to a marginal one, and both share a single dispersion curve per outcome — but a conditional ratio and its marginal product do not generally share a Beta-Binomial dispersion, so the two row types mix generative variance meanings.
 - **The total assumes independence.** VG14 cannot determine how much signed and spoken vocabulary overlap. Its total is not a general upper or lower bound; VG15 estimates the association.
-- **The signed peak age is a knot, not a finding.** It is fixed at the middle anchor by construction.
+- **The middle signed anchor is fixed.** The Gaussian-process departure can shift the peak of the complete signed-ratio curve, and multiplying by comprehension can shift the peak of signed counts again.
 - **Signing rests on a minority of the studies and thins sharply with age.** See the support tables above before quoting anything at the edges of the range.
 - **The independence check rests on one study.** It reads `uk_02` only, over a narrow age window; `uk_07`, `es_01` and `nz_01` also carry cross-tabulations with materially different associations, so this is a uk_02-specific check, not a general validation of conditional independence. VG15 identifies the association from all four.
 - **`uk_01`'s signing is masked, and the alternative is not a fitted sensitivity.** Reinstating it means changing the model definition and refitting; no such variant exists on disk, unlike the fitted sensitivity variants of VG10 and VG15.

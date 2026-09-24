@@ -120,20 +120,17 @@ def main() -> None:
     p_u_query_marg = 1.0 / (1.0 + np.exp(-f_u_query_marg))
     q_plot_marg = 1.0 / (1.0 + np.exp(-h_plot_marg))
     q_query_marg = 1.0 / (1.0 + np.exp(-h_query_marg))
-    p_s_plot_marg = p_u_plot_marg * q_plot_marg
-    p_s_query_marg = p_u_query_marg * q_query_marg
-
-    # Sample one BetaBinomial count per (draw, age) under the marginal probability.
-    def _sample_bb(p, kappa):
+    # Draw comprehension first, then speech conditional on that realised count.
+    def _sample_bb(p, kappa, n=N_TRIALS):
         p_c = np.clip(p, EPSILON, 1 - EPSILON)
         alpha = p_c * kappa
         beta = (1 - p_c) * kappa
-        return betabinom.rvs(N_TRIALS, alpha, beta, random_state=rng)
+        return betabinom.rvs(n, alpha, beta, random_state=rng)
 
     y_u_plot = _sample_bb(p_u_plot_marg, kappa_u_plot)    # (N, n_plot)
     y_u_query = _sample_bb(p_u_query_marg, kappa_u_query)  # (N, n_query)
-    y_s_plot = _sample_bb(p_s_plot_marg, kappa_s_plot)
-    y_s_query = _sample_bb(p_s_query_marg, kappa_s_query)
+    y_s_plot = _sample_bb(q_plot_marg, kappa_s_plot, y_u_plot)
+    y_s_query = _sample_bb(q_query_marg, kappa_s_query, y_u_query)
 
     # Plot functions expect shape (n_grid, n_samples).
     y_u_plot_T = y_u_plot.T

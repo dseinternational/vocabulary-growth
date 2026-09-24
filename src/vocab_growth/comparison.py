@@ -43,7 +43,7 @@ import numpy as np
 import pandas as pd
 
 from vocab_growth import environment as env
-from vocab_growth import intervals
+from vocab_growth import intervals, reporting_ages
 from vocab_growth.models import subject_effects
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
@@ -133,7 +133,7 @@ def _load_reshaped_draws(
 
 
 def load_population_trajectory(
-    path: str, n_trials_: int
+    path: str, n_trials_: int, *, definition=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return ``(ages, U, S)`` for a fitted model's population-level trajectory.
 
@@ -142,11 +142,12 @@ def load_population_trajectory(
     must match the checklist size used at fit time (see definitions.py).
     """
     ages, (p_u, p_s), _ = _load_reshaped_draws(path, ("p_u_plot", "p_s_plot"))
+    ages, p_u, p_s = _cap_loaded_trajectory(path, definition, ("understood", "spoken"), ages, p_u, p_s)
     return ages, p_u * n_trials_, p_s * n_trials_
 
 
 def load_population_trajectory_weighted(
-    path: str, n_trials_: int, frame, *, bandwidth: float = 3.0
+    path: str, n_trials_: int, frame, *, bandwidth: float = 3.0, definition=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """``(ages, U, S)`` for the administration-weighted child of a joint RE model.
 
@@ -161,6 +162,20 @@ def load_population_trajectory_weighted(
     administrations, ``bandwidth`` months), which is the child the sample
     medians describe. Report both; the gap is the study-coverage sensitivity.
     """
+    ages, u, s = _weighted_population_trajectory(path, n_trials_, frame, bandwidth=bandwidth)
+    return _cap_loaded_trajectory(path, definition, ("understood", "spoken"), ages, u, s)
+
+
+def load_weighted_outcome_trajectory(path, n_trials_, frame, outcome, *, bandwidth=3.0, definition=None):
+    """One weighted outcome, limited by its own cap rather than a joint cap."""
+    if outcome not in {"understood", "spoken"}:
+        raise ValueError(f"Unsupported weighted outcome {outcome!r}")
+    ages, u, s = _weighted_population_trajectory(path, n_trials_, frame, bandwidth=bandwidth)
+    return _cap_loaded_trajectory(path, definition, (outcome,), ages, u if outcome == "understood" else s)
+
+
+def _weighted_population_trajectory(path, n_trials_, frame, *, bandwidth):
+    """Raw weighted arrays; public callers apply the requested quantity's cap."""
     d = az.from_netcdf(path)
     post = _dataset(d, "posterior")
     cdata = _dataset(d, "constant_data")
@@ -227,7 +242,7 @@ SIGN_SPEECH_SERIES = (
 
 
 def load_sign_speech_trajectory(
-    path: str, n_trials_: int
+    path: str, n_trials_: int, *, definition=None,
 ) -> tuple[np.ndarray, dict[str, np.ndarray]]:
     """Return ``(ages, series)`` for the joint sign/speech engine's trajectory.
 
@@ -254,6 +269,7 @@ def load_sign_speech_trajectory(
     because it is a ratio by construction and a word count of it is meaningless.
     """
     ages, arrays, _ = _load_reshaped_draws(path, SIGN_SPEECH_SERIES)
+    ages, *arrays = _cap_loaded_trajectory(path, definition, ("sign_ratio", "spoken"), ages, *arrays)
     p_u, q, p_any, p_any_indep, r, sign_only, both, speak_only = arrays
     understood = p_u * n_trials_
     return ages, {
@@ -269,7 +285,7 @@ def load_sign_speech_trajectory(
 
 
 def load_univariate_trajectory(
-    path: str, n_trials_: int
+    path: str, n_trials_: int, *, definition=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(ages, W)`` for a single-outcome model's population trajectory.
 
@@ -278,11 +294,13 @@ def load_univariate_trajectory(
     :func:`load_population_trajectory`.
     """
     ages, (p,), _ = _load_reshaped_draws(path, ("p_plot",))
+    definition = _trajectory_definition(path, definition)
+    ages, p = _cap_loaded_trajectory(path, definition, (definition.outcome,), ages, p)
     return ages, p * n_trials_
 
 
 def load_univariate_trajectory_weighted(
-    path: str, n_trials_: int, frame, *, bandwidth: float = 3.0
+    path: str, n_trials_: int, frame, *, bandwidth: float = 3.0, definition=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """``(ages, W)`` for the administration-weighted child of a single-outcome RE model.
 
@@ -324,7 +342,8 @@ def load_univariate_trajectory_weighted(
         if not np.any(w):
             continue
         W += w * sig(f + d_s[:, k][:, None])
-    return ages_sorted, W * n_trials_
+    definition = _trajectory_definition(path, definition)
+    return _cap_loaded_trajectory(path, definition, (definition.outcome,), ages_sorted, W * n_trials_)
 
 
 def population_trajectory(key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -627,15 +646,13 @@ def save_panel(out_dir, filename, ax_setup, draw, *, figsize=(8.0, 5.0)) -> None
 # ----------------------------------------------------------------------------
 # Cross-model population contrasts (separate-model, per-draw)
 # ----------------------------------------------------------------------------
-# These support contrasting a DS RE-model against a TD RE-model. Because the DS
-# and TD datasets are disjoint, the joint posterior factorises and any per-draw
-# pairing is valid, so a difference-of-draws gives an *exact* credible interval
-# for the contrast (no joint model required). All curves are read at the
-# population level (study/subject random effects excluded) so the estimand is
-# consistent on both sides. Contrasts are meaningful only over the age range
-# where both models have data; callers restrict to that overlap. A joint/stacked
-# model that makes the TD-DS gap a generative object is a separate exercise
-# (the reserved VG16), not provided here.
+# These contrast separately fitted DS and TD models. Disjoint likelihoods and
+# independent priors imply a factorised joint posterior. Pairing independent
+# draws then gives a Monte Carlo approximation to the contrast distribution;
+# its interval retains sampling error. Curves exclude study and child effects.
+# Loaders enforce each quantity's reporting cap before downstream comparisons;
+# callers also restrict to the common age range. Shared parameters or priors
+# would require a joint posterior instead of this independent pairing.
 
 
 def load_outcome_trajectory(
@@ -673,7 +690,45 @@ def load_outcome_trajectory(
         )
 
     ages, (p, k), _ = _load_reshaped_draws(trace_path(key), (p_name, k_name))
+    ages, p, k = restrict_reporting_trajectory(key, outcome, ages, p, k)
     return ages, p, k, n_trials(key)
+
+
+def restrict_reporting_trajectory(key, outcome, ages, *arrays):
+    """Trim before inversion or differentiation, including an interpolated cap."""
+    cap = reporting_ages.max_age_for(MODEL_REGISTRY[key], reporting_ages.quantity_for_outcome(outcome))
+    return _restrict_at_cap(cap, ages, *arrays)
+
+
+def _trajectory_definition(path, definition=None):
+    """Resolve reporting policy from the registered path or an explicit definition."""
+    from vocab_growth.fit_consumers import model_key_for_dir
+
+    if definition is not None:
+        return definition
+    key = model_key_for_dir(os.path.dirname(path))
+    if key is None:
+        raise ValueError(f"{path}: supply a definition to establish reporting age limits.")
+    return MODEL_REGISTRY[key]
+
+
+def _cap_loaded_trajectory(path, definition, outcomes, ages, *arrays):
+    """Joint transformations stop at the tightest participating quantity's cap."""
+    definition = _trajectory_definition(path, definition)
+    caps = [reporting_ages.max_age_for_sign_ratio(definition) if outcome == "sign_ratio"
+            else reporting_ages.max_age_for(definition, reporting_ages.quantity_for_outcome(outcome))
+            for outcome in outcomes]
+    return _restrict_at_cap(min((cap for cap in caps if cap is not None), default=None), ages, *arrays)
+
+
+def _restrict_at_cap(cap, ages, *arrays):
+    ages = np.asarray(ages)
+    if cap is None or cap >= ages[-1]:
+        return (ages, *arrays)
+    if cap < ages[0]:
+        raise ValueError("No supported trajectory grid below its reporting cap.")
+    grid = np.unique(np.r_[ages[ages <= cap], cap])
+    return (grid, *(interp_draws(ages, array, grid) for array in arrays))
 
 
 def product_marginal_kappa(
@@ -732,6 +787,7 @@ def load_marginal_spoken_trajectory(
     ages, (p_u, k_u, q, k_s), _ = _load_reshaped_draws(
         trace_path(key), ("p_u_plot", "kappa_u_plot", "q_plot", "kappa_s_plot")
     )
+    ages, p_u, k_u, q, k_s = restrict_reporting_trajectory(key, "spoken", ages, p_u, k_u, q, k_s)
     return ages, p_u * q, product_marginal_kappa(p_u, k_u, q, k_s), n_trials(key)
 
 
@@ -846,7 +902,8 @@ def child_scale_of_age(
     interpretable. At ``age == ref_age_months`` the scale is exactly ``tau0``,
     which is why the reference age is a definition field rather than a constant
     — ``tau0`` is a spread with a stated age attached. And the curve is a
-    parabola in age with its minimum at ``D = -rho01 tau0 / tau1``: a negative
+    square root of a quadratic in age, with its minimum at
+    ``D = -rho01 tau0 / tau1`` when ``tau1 > 0``: a negative
     ``rho01`` puts the tightest point in the future and children fan out on
     both sides of it, which is a real qualitative claim the constant-offset model
     cannot make and should be read off the figure rather than assumed.
@@ -1633,22 +1690,13 @@ def subject_effect_correlation(
     an internal detail. VG20 estimates the correlation as a free parameter
     (``rho_uq``), which is the fix rather than the measurement.
 
-    This function keeps both roles. On a model that does not estimate the
-    correlation it is the only check available without a refit; on one that does,
-    it is an *internal consistency check* — the realised deviations should
-    reproduce the fitted ``rho_uq``, and on VG20 they do (0.371 against 0.369).
+    Returns ``(correlations, n_children)``: the empirical correlation across
+    fitted child effects within each retained posterior draw. This includes
+    uncertainty in those effects, but is not the population correlation parameter.
+    A finite fitted sample need not reproduce that parameter exactly. Shrinkage,
+    differing observation patterns and selection can move empirical correlations
+    in either direction. They are not lower bounds on a population correlation.
 
-    Returns ``(correlations, n_children)``: one correlation per retained draw —
-    computed across children within the draw — so the result carries posterior
-    uncertainty, unlike a single correlation of the posterior *means*, which is
-    inflated by the shrinkage the two effects share.
-
-    Two cautions, and they apply only to the uncorrelated models. The estimate is
-    shrunk toward zero by the independence prior, so its magnitude is a lower
-    bound — VG10's realised +0.151 against VG20's fitted +0.369 measures how much
-    that prior suppresses. And because ``log p_S = log p_U + log q``, a positive
-    correlation means the independent-draw derivation **understates** the spoken
-    between-child spread; a negative one means it overstates it.
 
     ``thin`` keeps every ``thin``-th draw: the correlation is over hundreds of
     children per draw, so a few thousand draws already resolve the interval.
@@ -1902,11 +1950,12 @@ def fraction_below_reference_percentile(
     p_td: np.ndarray, k_td: np.ndarray,
     n_trials_: int, pct: float = 10.0,
 ) -> np.ndarray:
-    """Per-draw fraction of the DS Beta-Binomial child distribution at/below the
+    """Per-draw fraction of a simple Beta-Binomial distribution at/below the
     TD ``pct``-th percentile word count, on a common grid.
 
-    A clinically legible "how atypical" estimand: at each age, what share of DS
-    children fall below the TD ``pct``-th centile. ``p_*``/``k_*`` are
+    This helper excludes child random effects and is not the nested speech
+    distribution. Use ``new_child_percentile_fraction`` for those models.
+    ``p_*``/``k_*`` are
     ``(n_draw, n_grid)`` population mean proportions and Beta-Binomial
     concentrations. Returns ``(n_draw, n_grid)``.
     """
@@ -1916,6 +1965,64 @@ def fraction_below_reference_percentile(
     a_ds, b_ds = p_ds * k_ds, (1.0 - p_ds) * k_ds
     thresh = betabinom.ppf(pct / 100.0, n_trials_, a_td, b_td)
     return betabinom.cdf(thresh, n_trials_, a_ds, b_ds)
+
+
+def predictive_count_inputs(key, outcome, grid, draws):
+    """Pointwise new-child distribution at zero study effect and reference sex."""
+    plan = total_spread_plan(MODEL_REGISTRY[key], outcome)
+    native, arrays, scalars = _load_reshaped_draws(trace_path(key), plan.grid_variables, plan.scalar_variables)
+    values = {name: interp_draws(native, array[draws], grid)
+              for name, array in zip(plan.grid_variables, arrays, strict=True)}
+    values.update({name: array[draws] for name, array in scalars.items()})
+    return plan, values
+
+
+def new_child_count_sample(plan, values, ages, n, draw, children, rng):
+    """Pointwise count samples with child variation and nested observation noise.
+
+    Samples across ages are not individual trajectories. The prediction fixes
+    the study effect and sex at the values of the supplied reference curves.
+    """
+    shape = np.asarray(values[plan.p_name]).shape
+    def scale(source):
+        tau = _child_scale_values(source, values, ages, plan.slope_ref_age_months)
+        return np.zeros(shape[1]) if tau is None else _tau_to_draw_age(tau, shape, what="predictive scale")[draw]
+    def count(trials, p, k):
+        p = np.clip(p, 1e-12, 1 - 1e-12)
+        return rng.binomial(trials, rng.beta(p * k, (1 - p) * k))
+    zu, zq = rng.normal(size=(2, children, len(ages)))
+    p = _sigmoid(_logit_of(values[plan.p_name][draw]) + zu * scale(plan.scale))
+    parent = count(n, p, values[plan.kappa_name][draw])
+    if not plan.nested:
+        return parent
+    rho = 0.0 if plan.rho_name is None else float(values[plan.rho_name][draw])
+    q = _sigmoid(_logit_of(values[plan.q_name][draw]) + scale(plan.scale_q) * (rho * zu + np.sqrt(max(0, 1 - rho**2)) * zq))
+    return count(parent, q, values[plan.kappa_s_name][draw])
+
+
+def new_child_percentile_fraction(ds_inputs, td_inputs, ages, n, *, pct=10.0, children=4096, seed=47):
+    """Monte Carlo fractions at or below each draw's TD predictive percentile.
+
+    Parameter uncertainty is represented by rows. Each row integrates child
+    and observation variation by simulation, so it also has Monte Carlo error.
+    For a fixed threshold its maximum binomial Monte Carlo SE is 0.5/sqrt(M);
+    estimating the TD threshold adds uncertainty, especially with discrete ties.
+    """
+    if children < 2 or not 0 < pct < 100:
+        raise ValueError("Need at least two children and a percentile between 0 and 100.")
+    ds_plan, ds_values = ds_inputs
+    td_plan, td_values = td_inputs
+    nd = len(ds_values[ds_plan.p_name])
+    if len(td_values[td_plan.p_name]) != nd:
+        raise ValueError("Posterior draws must be paired before comparing percentiles.")
+    rng = np.random.default_rng(seed)
+    fractions = np.empty((nd, len(ages)))
+    for draw in range(nd):
+        td = new_child_count_sample(td_plan, td_values, ages, n, draw, children, rng)
+        threshold = np.quantile(td, pct / 100, axis=0, method="inverted_cdf")
+        ds = new_child_count_sample(ds_plan, ds_values, ages, n, draw, children, rng)
+        fractions[draw] = np.mean(ds <= threshold, axis=0)
+    return fractions
 
 
 def peak_growth_age(ages: np.ndarray, W: np.ndarray) -> np.ndarray:
@@ -1930,7 +2037,7 @@ def peak_growth_age(ages: np.ndarray, W: np.ndarray) -> np.ndarray:
 
 
 def load_p_any_trajectory(
-    path: str, n_trials_: int
+    path: str, n_trials_: int, *, definition=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(ages, p_any_words)`` for a trivariate/joint model's total
     expressive trajectory ``p_any = P(word produced in any modality)``.
@@ -1939,6 +2046,7 @@ def load_p_any_trajectory(
     grid (signing included), for the DS sign-inclusive expressive contrast.
     """
     ages, (p_any,), _ = _load_reshaped_draws(path, ("p_any_plot",))
+    ages, p_any = _cap_loaded_trajectory(path, definition, ("sign_ratio", "spoken"), ages, p_any)
     return ages, p_any * n_trials_
 
 

@@ -1,5 +1,8 @@
 # Signing and speech: what the sign–speech association tells us, in plain language
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. An odds ratio below one does not mean that most signed words are unspoken. It compares conditional odds relative to independence. The overlap share answers a different question, and independence allows overlap. The claim of demonstrated age invariance also needs the corrected repeated-child analysis. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

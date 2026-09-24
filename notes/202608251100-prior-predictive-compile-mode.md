@@ -1,5 +1,8 @@
 # The prior-predictive compile mode: 26x for identical draws
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Double-precision machine epsilon is about 2.22e-16. A relative difference of 3.4e-15 exceeds epsilon, though it can still be acceptable for this computation. Checks on one graph and host do not establish an environment-wide error or runtime guarantee. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

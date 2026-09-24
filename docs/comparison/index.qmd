@@ -284,6 +284,8 @@ pd.DataFrame(rows).set_index("Age (mo)")
 
 This is the predicted fraction of DS counts at or below the TD 10th-percentile count at the same age. It compares fitted distributions within their shared age range. The 10th percentile is a reference for this comparison, not a clinical threshold or a norm established for the DS population.
 
+The distributions include new-child effects and count noise at the reference sex and zero study effect. Speech is drawn conditional on simulated comprehension. Each of up to 2,000 paired posterior draws uses 4,096 simulated children per population. These estimates have Monte Carlo error. At a fixed threshold the fraction's simulation standard error is at most 0.8 percentage points; estimating the TD threshold adds uncertainty. Discrete ties can put more than 10% of TD counts at or below that percentile. Check stability with larger simulation sizes before interpreting a small difference.
+
 ![Fraction of DS below TD 10th centile, spoken](ds_td_below_td_p10_spoken.png){#fig-bp-s .lightbox fig-align="left"}
 
 ![Fraction of DS below TD 10th centile, understood](ds_td_below_td_p10_understood.png){#fig-bp-u .lightbox fig-align="left"}

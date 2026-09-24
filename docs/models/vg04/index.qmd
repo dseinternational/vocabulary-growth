@@ -214,7 +214,7 @@ descriptive_stats
 
 ::: {.callout-important title="Where the comprehension data stop"}
 
-The maximum age in this table is the oldest administration in the fitted frame, and it is **younger** than the oldest age this report quotes in its selected-age summary. The trajectory, derivative, dispersion and monthly figures are all drawn on the observed age grid and therefore stop at the last observation; the selected-age table and the per-age count-distribution figures continue past it on the model's extrapolation alone. Read anything above the last observed age as the model speaking, not the data: those rows are the widest in the table precisely because nothing constrains them. The monthly companion table near the end of this report stops at the last observation and is the reliable guide to where the evidence ends.
+The age range in this table describes the fitted comprehension data. The report applies a 25-month comprehension cap to selected-age summaries and count-distribution figures. Read that cap together with the observed age support. A reporting limit prevents unsupported ages from appearing in a table; it does not guarantee precise estimates at the edge of the retained range.
 
 :::
 
@@ -250,7 +250,7 @@ diagnostics = pd.read_csv("diagnostics.csv", index_col=0)
 style_diagnostics_table(diagnostics)
 ```
 
-The table above reports, for each parameter, whether the chains agree with one another (R-hat) and how many independent samples the correlated draws are worth (ESS). Reporting requires R-hat no greater than 1.01 and effective sample sizes of at least 400 for the checked variables, or a documented exception. Read the recorded convergence status and warnings above; rendering this page does not itself establish reporting quality.
+The table above reports agreement between chains (R-hat) and effective sample size (ESS). Reporting requires R-hat no greater than 1.01 and ESS of at least 400 for the checked variables, or a valid recorded exception. Read the diagnostic verdict and caveats from this fit above. Rendering the page does not establish that those checks passed.
 
 ![Energy distribution of the sampler. Compare the distributions alongside BFMI and the other sampling diagnostics; overlap alone does not establish reliable sampling.](energy_plot.png){#fig-energy .lightbox width=480 fig-align="left"}
 

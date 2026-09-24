@@ -67,8 +67,8 @@ def _save_png_svg(
 MIN_ADMINISTRATIONS_FOR_TRAJECTORY = 3
 
 #: An observation at or above this share of its **own** form's item count is
-#: marked. Its value is compressed by the instrument rather than by the child, and
-#: it is the usual explanation for an apparent plateau or reversal.
+#: marked. The form may limit the recorded count, but this flag does not establish
+#: the cause of a plateau or reversal.
 NEAR_CEILING_SHARE = 0.90
 
 #: Neutral grey for the observed trajectories. They are data, not another modelled
@@ -101,9 +101,8 @@ def _draw_subject_trajectories(
     more than one form; a child near the ceiling of a short form can record
     *fewer* words on a longer form a month later. One real child in this pool
     scores 393 understood on a 416-item form at 47 months and 347 on an 810-item
-    form at 48. Joining that with a plain line draws a developmental reversal
-    that did not happen, which is the whole hazard of turning a scatter into a
-    set of trajectories.
+    form at 48. Joining those counts without marking the form change invites a
+    developmental interpretation that the records alone cannot establish.
 
     Returns the counts the caller needs for the legend, so the figure states its
     own composition rather than relying on a caption written elsewhere.

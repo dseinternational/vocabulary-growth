@@ -359,13 +359,13 @@ def check_link_tables(ie: pd.DataFrame) -> None:
 
 
 def check_frame_counts(merged: pd.DataFrame) -> None:
-    print("§9 and §10 — frame counts and the Edgin anchor")
+    print("Current frame counts (2026-09-23); historical note counts refer to their own revision")
     # Re-pinned 2026-09-14 (note §15 item 12): the pool grew with the us_03
     # ingestion and moved with the masking and withholding rules added since
     # August (1,636 / 845 / 413 / 432 then).
     with_age = merged.dropna(subset=["age"])
     raw_pairs = with_age.groupby(["study", "subject_id"]).size()
-    check("raw view: observations / children / singletons / repeated", [len(with_age), len(raw_pairs), (raw_pairs == 1).sum(), (raw_pairs > 1).sum()], [1918, 1024, 487, 537])
+    check("raw view: observations / children / singletons / repeated", [len(with_age), len(raw_pairs), (raw_pairs == 1).sum(), (raw_pairs > 1).sum()], [1917, 1024, 488, 536])
 
     # The note's frame and understood-pool figures (§9, §8 item 3, §12 item 6)
     # are counted through the package itself. Two hand-derived versions of the
@@ -388,15 +388,15 @@ def check_frame_counts(merged: pd.DataFrame) -> None:
         check(
             f"{FITTED_MODEL} analysis frame: rows / children / singletons / repeated",
             [len(frame), len(pairs), (pairs == 1).sum(), (pairs > 1).sum()],
-            [1708, 943, 504, 439],
+            [1707, 943, 505, 438],
         )
         understood = pool[pool["understood"].notna()]
         native = understood[understood["survey_vocab_max"] == 810]
-        check("understood observations after all masking", len(understood), 1301)
+        check("understood observations after all masking", len(understood), 1300)
         check(
             "dse-native understood observations / children / sources",
             [len(native), native["subject_id"].nunique(), native["study"].nunique()],
-            [250, 170, 4],
+            [139, 105, 3],
         )
 
     us_01 = merged[merged["study"] == "us_01"]

@@ -2208,6 +2208,12 @@ def test_us03_older_subsample_is_dropped_by_default_and_reinstatable(
     )
     reinstated = reinstated[reinstated["study"] == "us_03"]
     assert sorted(reinstated["age"].tolist()) == [20.0, 70.0]
+    public = data_utils.load_data(Population.DOWN_SYNDROME, ["age", "understood", "study"],
+                                 include_structurally_distinct_subsamples=True)
+    assert sorted(public.loc[public["study"] == "us_03", "age"].tolist()) == [20.0, 70.0]
+    with pytest.raises(ValueError, match="DS|Down|down|only"):
+        data_utils.load_data(Population.TYPICALLY_DEVELOPING, ["age", "understood"],
+                             include_structurally_distinct_subsamples=True)
 
 
 def test_the_subsample_rule_does_not_drop_older_children_from_other_studies(
