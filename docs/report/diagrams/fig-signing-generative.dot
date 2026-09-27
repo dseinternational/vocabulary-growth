@@ -6,9 +6,9 @@
 // Regenerate after editing:
 //   dot -Tpng -Gdpi=300 diagrams/fig-signing-generative.dot -o diagrams/fig-signing-generative.png
 digraph SigningGenerative {
-    graph [rankdir=LR]
-    edge [arrowsize=0.75]
-    node [fontsize=12]
+    graph [rankdir=LR, fontname="Noto Sans"]
+    edge [arrowsize=0.75, fontname="Noto Sans"]
+    node [fontsize=12, fontname="Noto Sans"]
     z  [label="age (z)", shape=box]
     pU [label=<p<SUB>und</SUB>(z)>, shape=ellipse]
     q  [label=<q(z)>, shape=ellipse]

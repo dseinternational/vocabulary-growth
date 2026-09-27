@@ -3,6 +3,11 @@ project:
 
   output-dir: ../../output/report
 
+  # Pandoc does not carry the reference document's math font into a DOCX, so
+  # Word would set equations in Cambria Math; this restores Noto Sans Math.
+  post-render:
+    - ../../scripts/restore_docx_math_settings.py
+
   preview:
     port: 4200
     browser: true
@@ -92,7 +97,25 @@ format:
   html:
     code-fold: true
     theme: default
+    # Noto Sans for text, Noto Sans Mono for code and Noto Sans Math for
+    # equations. The style below sets the code font because the theme's code
+    # rules ignore Quarto's `monofont`. MathML rather than MathJax, whose own
+    # math fonts cannot be replaced: the browser typesets MathML with the font
+    # named below, using its OpenType MATH table.
+    mainfont: "Noto Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    html-math-method: mathml
+    include-in-header:
+      - text: |
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300..700;1,300..700&family=Noto+Sans+Math&family=Noto+Sans+Mono:wght@400..700&display=swap">
+          <style>
+            code, kbd, pre, samp { font-family: "Noto Sans Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+            math { font-family: "Noto Sans Math", math; }
+          </style>
   docx:
+    # The template sets Noto Sans, Noto Sans Mono and Noto Sans Math; see
+    # `post-render` above.
     reference-doc: ../template.docx
   pdf:
     documentclass: report
@@ -100,10 +123,25 @@ format:
     colorlinks: true
     link-citations: true
     fontsize: 11pt
-    mainfont: "Source Sans 3"
-    sansfont: "Source Sans 3"
-    monofont: "Monaspace Neon"
-    monofontoptions: "Scale=0.8125"
+    # The faces are named because, with the whole Noto Sans family installed,
+    # fontspec otherwise takes ExtraBold for bold. Noto Sans Mono has no italic,
+    # so AutoFakeSlant slants the upright; the scale keeps code lines narrow.
+    mainfont: "Noto Sans"
+    mainfontoptions:
+      - BoldFont=Noto Sans Bold
+      - ItalicFont=Noto Sans Italic
+      - BoldItalicFont=Noto Sans Bold Italic
+    sansfont: "Noto Sans"
+    sansfontoptions:
+      - BoldFont=Noto Sans Bold
+      - ItalicFont=Noto Sans Italic
+      - BoldItalicFont=Noto Sans Bold Italic
+    mathfont: "Noto Sans Math"
+    monofont: "Noto Sans Mono"
+    monofontoptions:
+      - Scale=0.8125
+      - BoldFont=Noto Sans Mono Bold
+      - AutoFakeSlant
     linestretch: 1.25
     geometry:
       - top=25mm
