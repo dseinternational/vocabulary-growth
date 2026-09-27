@@ -732,7 +732,9 @@ def plot_posterior_predictive_cdf(
         plt.step(k, cdf, where="post", lw=2, label=f"{a:.0f}m")
 
     plt.xlabel(x_label)
-    plt.ylabel("Posterior predictive CDF  P(Y ≤ k)")
+    # Mathtext rather than a literal "≤": the plot font, Noto Sans, has no glyph
+    # for it, and matplotlib does not fall back to another font for plain text.
+    plt.ylabel(r"Posterior predictive CDF  $P(Y \leq k)$")
     plt.title("Posterior predictive CDFs at selected ages")
     plt.xlim(x_lo, x_hi)
     plt.ylim(0, 1)
