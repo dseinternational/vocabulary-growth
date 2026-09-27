@@ -1828,7 +1828,8 @@ def plot_sign_speech_crossover(
     ax.set_ylim(0, 1)
     _shade_extrapolation(ax, support_range)
     ax.legend(loc="upper left", frameon=True)
-    ax.set_title("Sign → speech hand-off: r(a) vs q(a)")
+    # Mathtext arrow: the plot font, Noto Sans, has no glyph for a literal "→".
+    ax.set_title(r"Sign $\rightarrow$ speech hand-off: r(a) vs q(a)")
 
     if output_dir is not None and filename is not None:
         fig.savefig(os.path.join(output_dir, f"{filename}.png"), dpi=300)

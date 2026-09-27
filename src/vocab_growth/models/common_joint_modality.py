@@ -2432,7 +2432,8 @@ def run_joint_plots(context: JointContext):
     ax.set_ylabel("Fraction of understood words")
     ax.set_ylim(0, 1)
     ax.legend(loc="upper right", frameon=True)
-    ax.set_title("Within-understood composition (sign-only → both → speak-only)")
+    # Mathtext arrows: the plot font, Noto Sans, has no glyph for a literal "→".
+    ax.set_title(r"Within-understood composition (sign-only $\rightarrow$ both $\rightarrow$ speak-only)")
     fig.savefig(os.path.join(od, "four_cell_composition.png"), dpi=300)
     fig.savefig(os.path.join(od, "four_cell_composition.svg"))
     plot_io.save_plot_data(

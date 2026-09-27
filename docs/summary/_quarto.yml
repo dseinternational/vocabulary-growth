@@ -7,6 +7,11 @@ project:
   # export; a bare render also builds the review document, which needs LaTeX.
   # (Excluding all.qmd from the project made Quarto treat it as a standalone
   # document and write its output beside the source.)
+  #
+  # Pandoc does not carry the reference document's math font into a DOCX, so
+  # Word would set any equation in Cambria Math; this restores Noto Sans Math.
+  post-render:
+    - ../../scripts/restore_docx_math_settings.py
 
 jupyter: python3
 

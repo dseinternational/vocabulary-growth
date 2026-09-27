@@ -131,7 +131,7 @@ wheels = [
 
 [[package]]
 name = "arviz-base"
-version = "1.3.0"
+version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "lazy-loader" },
@@ -139,35 +139,35 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "xarray" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/52/b5/d9f4cb875e3603c74bd19b053993db32e0bae862df10e2b6a6bc5a78554d/arviz_base-1.3.0.tar.gz", hash = "sha256:285fe0ac413f515d1962644b471d916327446d58247ae7f331043b1bed5a4d5b", size = 1410820, upload-time = "2026-08-11T06:54:49.299Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d1/e6/4cbf049a330a6b36cb4c2ed6913564965d397e30304b1e1ac13067630d26/arviz_base-1.3.1.tar.gz", hash = "sha256:f83c49d1842ca93821d38bc03f1d75df18d56d507694804a07ce6c1b3bbf2d6c", size = 1410984, upload-time = "2026-09-25T09:43:21.898Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a6/16/fec3fa651558bfc9d619f548b5cd55054950a4c7baf86d81be77725e5126/arviz_base-1.3.0-py3-none-any.whl", hash = "sha256:9f3d66353434ee81db78cb54fe00efd74ae2fc5519d20c593dd2dceae8f247b7", size = 1427874, upload-time = "2026-08-11T06:54:47.709Z" },
+    { url = "https://files.pythonhosted.org/packages/34/8f/1cdf6dbab034fdf9fea31c05599497b1d14e2f62d51a6045c1a647d93af4/arviz_base-1.3.1-py3-none-any.whl", hash = "sha256:4b4d60807f0e136af295a3c64aa13d87d3b7ba78b54acb015f6cb515ffd4b8fd", size = 1428088, upload-time = "2026-09-25T09:43:20.071Z" },
 ]
 
 [[package]]
 name = "arviz-plots"
-version = "1.3.1"
+version = "1.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "arviz-base" },
     { name = "arviz-stats", extra = ["xarray"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/cb/715d68622d1f040d858a35b64fa67652a81b7c424c4ad442cdde06c675b4/arviz_plots-1.3.1.tar.gz", hash = "sha256:0d17cbb98754ecce4484552dce7bd43cf5b040d6135a4e7b02383a50d817f1ae", size = 167577, upload-time = "2026-08-21T14:08:18.663Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/08/ff7e5f5edb4e019017a5754a9a211a4589c9d3d51127b64a7b61bf2da941/arviz_plots-1.3.2.tar.gz", hash = "sha256:040b5672f186e39ea21554f8fa60c01786798bd10eb0853cab1fc09e54eacead", size = 167771, upload-time = "2026-09-25T18:17:09.383Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/92/c2/9e82a644471d34e4e0d6a46046e48409a30fce58e5e1205cf714a2a00e99/arviz_plots-1.3.1-py3-none-any.whl", hash = "sha256:78bfca8c87c71dad467e2790aa0c1dd6e505907c1376d9f4abbf39dc1212b983", size = 253058, upload-time = "2026-08-21T14:08:17.385Z" },
+    { url = "https://files.pythonhosted.org/packages/38/b8/d4c4938e3d3dfbb331c61c9e32b824ab692229eb750c87f705d896b7a2cd/arviz_plots-1.3.2-py3-none-any.whl", hash = "sha256:17d66e373eef7340ca25d8a318a4eebe29532ea76dc4723924d4608e21ed3c64", size = 253332, upload-time = "2026-09-25T18:17:07.804Z" },
 ]
 
 [[package]]
 name = "arviz-stats"
-version = "1.3.2"
+version = "1.3.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/53/8c8fddbf953749fa5e9004245f771b949d25c10cdb0443dd2ea3aa2b79df/arviz_stats-1.3.2.tar.gz", hash = "sha256:7b8296f4416757e706b829273d5391c97f4dd52702bc279059dfca0fe90681fd", size = 168154, upload-time = "2026-09-05T16:47:26.493Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/80/e0/3d6815e0026a12b8719ff4dfdbaa7cc45d0c0e0cc7ae371d768fc08d2c6e/arviz_stats-1.3.3.tar.gz", hash = "sha256:3fed50cc2a9bb8e2719fd675691b1c332c15394e13d4b7a2bef64f6a6c2a6ccf", size = 180679, upload-time = "2026-09-25T10:20:45.105Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/de/958207b63243f38fca2b7bbb977b6ac0ba2556c77c8900a6ae93b7397381/arviz_stats-1.3.2-py3-none-any.whl", hash = "sha256:bf186dc22ff6fd2a5e6897c640b55f846dd39aa1f22f8e7e08cc515d09a1ad16", size = 195361, upload-time = "2026-09-05T16:47:24.628Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/c5/b68639b3a766469838d7053b6929e092679d014e8d336034b67441cd0da7/arviz_stats-1.3.3-py3-none-any.whl", hash = "sha256:2fdd79ac91a95235c3820343a31ada37437a195a6d544b7561122429ba54771d", size = 209422, upload-time = "2026-09-25T10:20:42.934Z" },
 ]
 
 [package.optional-dependencies]
@@ -566,8 +566,8 @@ wheels = [
 
 [[package]]
 name = "dse-research-utils"
-version = "0.15.2"
-source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.15.2#3d804d76c21cd54e498af241b180ba495d750fc1" }
+version = "0.16.0"
+source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.16.0#3c5b4d994248ec1df2a9d2f9d677f911f10412af" }
 dependencies = [
     { name = "arviz" },
     { name = "arviz-base" },
@@ -587,7 +587,6 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pymc" },
     { name = "pytensor" },
-    { name = "pyyaml" },
     { name = "rich" },
     { name = "scikit-learn" },
     { name = "scipy" },
@@ -645,7 +644,7 @@ typecheck = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.15.2" }]
+requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.16.0" }]
 
 [package.metadata.requires-dev]
 dev = [

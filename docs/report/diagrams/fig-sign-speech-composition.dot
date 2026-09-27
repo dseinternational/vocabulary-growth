@@ -7,9 +7,9 @@
 // Chrome. Regenerate after editing:
 //   dot -Tpng -Gdpi=300 diagrams/fig-sign-speech-composition.dot -o diagrams/fig-sign-speech-composition.png
 digraph SignSpeechComposition {
-    graph [rankdir=LR]
-    edge [arrowsize=0.75]
-    node [fontsize=12]
+    graph [rankdir=LR, fontname="Noto Sans"]
+    edge [arrowsize=0.75, fontname="Noto Sans"]
+    node [fontsize=12, fontname="Noto Sans"]
     z   [label="age (z)", shape=box]
     pU  [label=<p<SUB>und</SUB>(z)>, shape=ellipse]
     q   [label=<q(z)>, shape=ellipse]
