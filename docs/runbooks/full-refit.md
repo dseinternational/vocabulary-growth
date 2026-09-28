@@ -1,7 +1,7 @@
 # Reporting-quality refits
 
 > [!NOTE]
-> Drafted with assistance from Claude Code and OpenAI Codex. Revised by OpenAI Codex/GPT-6.
+> Drafted with assistance from Claude Code and OpenAI Codex. Revised by OpenAI Codex/GPT-6 and Claude Code/Claude Opus 5.5.
 
 Use `scripts/run_replication.ps1` for a resumable reporting run. Its default scope covers reporting models and unclassified candidates. Use `-Scope all` when the work requires every registered model.
 
@@ -143,6 +143,8 @@ Launch long runs in a terminal or scheduled task that outlives the controlling s
 The policy is in `reporting_ages.py` and the [inventory](../models/README.md#reporting-ages-6-monthly-tables-whole-month-companions). Check generated tables and figures, including age labels embedded in column names.
 
 `regenerate_plots.py` reruns the plot stage only and requires a compatible `full` fit. It cannot repair stale summary-stage output or bypass a changed definition. `--render-only` restages the Quarto source and includes but reads the CSVs already on disk. Set reporting caps before fitting and use `tests/test_reporting_age_policy.py` to check outputs when available.
+
+For the bivariate random-effect and joint engines, `regenerate_plots.py` also reruns the posterior predictive from the sampling seed. That reproduces the stored draws only on the fit's own numerical stack. The script therefore compares the rerun draws with the stored ones and refuses the model if any differ, naming what has changed since the fit. Every write, including the prior-density figures and the model graph, is staged and copied into the fit directory only when the whole redraw succeeds.
 
 ### Do not edit tracked files while a fit is launching
 
