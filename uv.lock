@@ -566,8 +566,8 @@ wheels = [
 
 [[package]]
 name = "dse-research-utils"
-version = "0.16.0"
-source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.16.0#3c5b4d994248ec1df2a9d2f9d677f911f10412af" }
+version = "0.16.1"
+source = { git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.16.1#874a27358080579ff851abaa77f241036322b983" }
 dependencies = [
     { name = "arviz" },
     { name = "arviz-base" },
@@ -644,7 +644,7 @@ typecheck = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.16.0" }]
+requires-dist = [{ name = "dse-research-utils", extras = ["columnar", "graphs", "io", "jax", "notebook", "viz"], git = "https://github.com/dseinternational/research.git?subdirectory=src%2Fpython&tag=v0.16.1" }]
 
 [package.metadata.requires-dev]
 dev = [

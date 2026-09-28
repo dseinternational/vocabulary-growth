@@ -1,6 +1,9 @@
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5.5).
 
+> [!IMPORTANT]
+> Correction added on 28 September 2026 with assistance from Claude Code/Opus 5.5. Adding Noto Sans Math to `font.family` does work under matplotlib 3.11.2 for plain-text symbols, provided it is set before the text is created and the style is not applied again afterwards. `dse-research-utils` 0.16.1 now sets such a list, and `tests/test_figure_text_glyphs.py` has been removed. See the [0.16.1 upgrade](202609281111-research-utils-0161-upgrade.md). The original account below remains as a dated record.
+
 <!-- cspell:words cachedir fontlist mathtext Noto pingouin -->
 
 # Shared library 0.16.0 upgrade

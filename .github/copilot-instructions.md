@@ -35,7 +35,7 @@ npm ci
 
 Refresh `uv.lock` only for an intentional dependency change. The lock covers CPU installations; GPU support is a separate, host-specific setup.
 
-Figures, model graphs and reports use Noto Sans for text and Noto Sans Math for equations; reports use Noto Sans Mono for code. Install these fonts wherever figures or reports are rendered, then delete `fontlist-*.json` from `matplotlib.get_cachedir()`; without them matplotlib silently falls back to DejaVu Sans. Quarto is needed to render reports, and the report book's PDF format also needs a XeLaTeX distribution. HTML sets equations as MathML, not MathJax, so that the math font applies. Graphviz `dot` supplies model diagrams; a missing binary produces a warning during fitting but leaves the report without that figure. Node.js supplies the documentation tools. Run `quarto check` to inspect the rendering environment.
+Figures, model graphs and reports use Noto Sans for text and Noto Sans Math for equations; reports use Noto Sans Mono for code. Install these fonts wherever figures or reports are rendered, then delete `fontlist-*.json` from `matplotlib.get_cachedir()`; without them matplotlib silently sets text in another installed sans-serif font, such as Arial, and mathematics in DejaVu Sans. Quarto is needed to render reports, and the report book's PDF format also needs a XeLaTeX distribution. HTML sets equations as MathML, not MathJax, so that the math font applies. Graphviz `dot` supplies model diagrams; a missing binary produces a warning during fitting but leaves the report without that figure. Node.js supplies the documentation tools. Run `quarto check` to inspect the rendering environment.
 
 ## Checks
 

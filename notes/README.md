@@ -170,4 +170,5 @@ The September documentation review removed the May meeting summary, August proje
 | [202609160500](202609160500-vg11-length-scale-exception.md)                      | VG11 length scale exception                                  | Dated analysis                              |
 | [202609161440](202609161440-vg11-eta-sigma-0.4.md)                               | VG11 eta sigma 0.4                                           | Decision record                             |
 | [202609231200](202609231200-statistical-review-corrections.md)                   | Statistical review and corrections                           | Methodological correction record            |
-| [202609271730](202609271730-research-utils-016-upgrade.md)                       | Research utils 016 upgrade                                   | Implementation record                       |
+| [202609271730](202609271730-research-utils-016-upgrade.md)                       | Research utils 016 upgrade                                   | Implementation record; see successor notice |
+| [202609281111](202609281111-research-utils-0161-upgrade.md)                      | Research utils 0.16.1 upgrade                                | Implementation record                       |
