@@ -191,14 +191,14 @@ GLOSSARY: dict[str, str] = {
     ),
     "Population-level and subject-marginal": (
         "Two different predictions. A **population-level** curve sets all random "
-        "effects to zero. Because the effects are symmetric around zero on the "
-        "logit scale, that is the *typical* (median) child in the typical study "
-        "-- not the arithmetic average of children's counts, which the nonlinear "
-        "link shifts away from the median wherever children differ. Its interval "
+        "effects to zero. It describes a reference profile. For a single "
+        "inverse-logit with a symmetric effect this gives the median latent "
+        "proportion, but a product of two such probabilities need not have its "
+        "median at zero effects. Neither is generally a mean across children. Its interval "
         "reflects uncertainty in that curve. A **subject-marginal** prediction "
         "draws a new child's random effect too: it answers *where would one more "
-        "child fall?* and is much wider. Confusing them is the single easiest "
-        "way to misread these reports."
+        "child fall?* Include observation noise too when predicting a questionnaire "
+        "count. The width and target must be read from the reported quantity."
     ),
     # -- Reading the numbers --
     "Credible interval": (
@@ -297,9 +297,9 @@ GLOSSARY: dict[str, str] = {
     # -- Signing models --
     "Copula": (
         "A construction that joins two outcomes into a joint distribution while "
-        "leaving each one's own distribution unchanged. It is what lets the "
-        "sign/speech model add a single association parameter without altering "
-        "the separately estimated signing and speaking trajectories."
+        "preserving the marginal distributions at fixed parameter values. "
+        "Refitting a joint model can change the estimated marginal trajectories "
+        "because its parameters share information across likelihood terms."
     ),
     "Association parameter ($\\psi$)": (
         "The odds ratio measuring how much signing and speaking a given "

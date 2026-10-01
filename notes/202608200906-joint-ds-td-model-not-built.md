@@ -1,5 +1,8 @@
 # The generative joint DS–TD model: why it is not built
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A derived contrast inherits a prior and regularisation from its components. Disjoint records alone do not imply posterior factorisation; that also requires the appropriate independent priors and likelihood structure. A shared study only creates dependence when the model links its parameters or observations. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

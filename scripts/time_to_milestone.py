@@ -42,7 +42,6 @@ import pandas as pd
 from vocab_growth import comparison as C
 from vocab_growth import environment as env
 from vocab_growth.comparison import (
-    load_population_trajectory,
     load_univariate_trajectory,
     milestone_table,
 )
@@ -132,6 +131,7 @@ def process_univariate(key: str, merged: list[dict], *,
     )
     ages, W = load_univariate_trajectory(trace, d.n_trials)
     pop, outcome = d.population.value.upper(), d.outcome.value
+    ages, W = C.restrict_reporting_trajectory(key, outcome, ages, W)
     model_dir = C.model_dir(key)
     _emit(
         milestone_table(W, ages, TARGETS), d.model_id, pop, outcome,
@@ -152,12 +152,13 @@ def process_bivariate(key: str, merged: list[dict], *,
         key, C.model_dir(key), consumer="time_to_milestone.py",
         allow_stale=allow_stale,
     )
-    ages, U, S = load_population_trajectory(trace, d.n_trials)
     pop = d.population.value.upper()
     model_dir = C.model_dir(key)
-    for outcome, W, suffix in (("understood", U, "u"), ("spoken", S, "s")):
+    for outcome, suffix in (("understood", "u"), ("spoken", "s")):
+        report_ages, p, _, n = C.load_outcome_trajectory(key, outcome)
+        W = p * n
         _emit(
-            milestone_table(W, ages, TARGETS), d.model_id, pop, outcome,
+            milestone_table(W, report_ages, TARGETS), d.model_id, pop, outcome,
             os.path.join(model_dir, f"time_to_milestone_{suffix}.csv"),
             f"Time-to-milestone — {d.model_id} ({pop}, {outcome})",
             os.path.join(model_dir, f"time_to_milestone_{suffix}"), merged,

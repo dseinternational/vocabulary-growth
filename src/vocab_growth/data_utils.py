@@ -1370,7 +1370,7 @@ months, all at exactly 396 spoken; 62 Words & Sentences at 31-88 months, 61 at e
 680; and 13 Words & Sentences at 24-30 months whose counts every other rule already
 masks, so removing them changes no estimate.
 
-**Why a provenance criterion rather than an age one.** A near-ceiling count is a defect
+**An outcome-dependent exclusion motivated by source concerns.** A near-ceiling count is a defect
 signature only in infancy, where the Berglund benchmark rules it out. At older ages it
 is ordinary: an eight-year-old with Down syndrome knowing 658 of 680 words is expected.
 Removing the age scope from :data:`IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS` would
@@ -1378,8 +1378,10 @@ therefore mask 19 apparently legitimate records across six other studies (uk_01 
 months with 658 of 680, ie_01 at 69 with 741 of 810, es_01 at 54 with 637 of 651, and
 so on). Age and count together cannot separate the Edgin batch from those. What does
 separate them is that **the batch children have no non-ceiling record of their own** --
-a fact about how the data were prepared, not about the values, so it is not selection
-on the outcome.
+a criterion defined by the observed outcomes. It is therefore selection on the
+outcome, even though source concerns motivate it. Retain this documented primary
+rule and use ``include_ceiling_only_children=True`` to assess sensitivity; the
+primary result alone cannot establish that genuine ceiling-level children are unaffected.
 
 **Why it is study-scoped where the duplicated-outcome rule deliberately is not.** That
 rule's evidence is developmental and so applies to any study. This one's evidence is a
@@ -2386,6 +2388,7 @@ def load_data(
             include_comprehension_below_production
         ),
         "include_same_day_disagreements": include_same_day_disagreements,
+        "include_structurally_distinct_subsamples": include_structurally_distinct_subsamples,
     }
     if population == Population.DOWN_SYNDROME:
         df = load_combined_data(

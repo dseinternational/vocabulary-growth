@@ -16,13 +16,12 @@ Since 2026-08-19 the model of record does estimate it: VG20's ``rho_uq``, +0.368
 [0.287, 0.447]. The script therefore now serves two different purposes depending
 on the model it is pointed at.
 
-* On an **uncorrelated** model (vg09, vg10, vg16) it bounds the magnitude rather
-  than estimating it — the fitted deviations are shrunk toward zero by the
-  independence prior, and VG10's +0.151 against VG20's fitted +0.368 measures how
-  much shrinkage that prior imposes.
-* On a **correlated** model (vg20) it is an internal consistency check: the
-  realised deviations should reproduce the fitted parameter, and they do
-  (+0.371 against +0.369).
+* On an **uncorrelated** model (vg09, vg10, vg16), the empirical correlation
+  describes the fitted deviations. Shrinkage can move a correlation in either
+  direction, so it is not a lower bound on the population correlation.
+* On a **correlated** model (vg20), compare the realised deviations with the
+  population parameter while allowing for finite-child variation and the
+  information in their observations. The two quantities need not be identical.
 
 Writes ``<comparisons>/ds_subject_effect_correlation.csv``::
 

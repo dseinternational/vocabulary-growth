@@ -1,5 +1,8 @@
 # Issue #266 remediation: what was verified, what was fixed, what still needs a refit
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Uniform pairwise factor correlations apply to the specified rank-three construction, not every rank. Rank-two angles imply an arcsine correlation distribution; rank one gives discrete signs. Rank sensitivity changes these induced priors. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

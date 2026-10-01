@@ -1,5 +1,8 @@
 # The production ratio at a comprehension milestone: the curve is not the children
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. These are observational conditional comparisons, not estimates of the causal effect of extra months or a single developmental process. Comprehension is measured with error and conditioning on it does not isolate a mechanism. The tables count administrations where repeated children occur. Overlapping intervals or a contrast near zero do not establish equivalence without a stated tolerance. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

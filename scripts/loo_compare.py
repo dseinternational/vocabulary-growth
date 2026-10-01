@@ -70,6 +70,7 @@ from vocab_growth.fit_consumers import (
     add_allow_stale_argument,
     require_current_fit,
 )
+from vocab_growth.loo_policy import suppressed_outcomes
 from vocab_growth.loo_reff import reff_or_default
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelType
 
@@ -288,8 +289,14 @@ def per_model_loo(*, allow_stale: bool = False) -> dict[str, list[dict]]:
             )
             _warn_if_unusable(short, row)
         else:
-            _attach_joint_log_likelihood(idata)
+            suppressed = suppressed_outcomes(short)
+            if suppressed:
+                suppressed.add("y_joint")
+            else:
+                _attach_joint_log_likelihood(idata)
             for var in ("y_u_obs", "y_s_obs", "y_joint"):
+                if var in suppressed:
+                    continue
                 try:
                     loo = az.loo(idata, pointwise=True, var_name=var, reff=reff)
                 except Exception as exc:  # noqa: BLE001 - any LOO failure -> skip

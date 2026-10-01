@@ -1,5 +1,8 @@
 # The sign–speech association: between-study heterogeneity, and why it is not age
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The original weighted regressions treated repeated administrations as independent. Their standard errors and claim that age adds nothing need reassessment with child-cluster uncertainty. Both the magnitude and sign of an odds ratio depend on its neither cell and reference set. The model assumes constant association with age; this audit does not establish it. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

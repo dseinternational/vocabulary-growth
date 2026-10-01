@@ -1,7 +1,7 @@
 # Agent instructions
 
 > [!NOTE]
-> Maintained with assistance from LLM-based AI tools, including OpenAI Codex/GPT-6.
+> Maintained with assistance from LLM-based AI tools, including OpenAI Codex/GPT-6 and Claude Code/Opus 5.5.
 
 Keep this file, `CLAUDE.md` and `.github/copilot-instructions.md` identical. Update all three together.
 
@@ -35,7 +35,7 @@ npm ci
 
 Refresh `uv.lock` only for an intentional dependency change. The lock covers CPU installations; GPU support is a separate, host-specific setup.
 
-Quarto is needed to render reports. The report book's PDF format also needs a XeLaTeX distribution and the Source Sans 3 and Monaspace Neon fonts. Graphviz `dot` supplies model diagrams; a missing binary produces a warning during fitting but leaves the report without that figure. Node.js supplies the documentation tools. Run `quarto check` to inspect the rendering environment.
+Figures, model graphs and reports use Noto Sans for text and Noto Sans Math for equations; reports use Noto Sans Mono for code. Install these fonts wherever figures or reports are rendered, then delete `fontlist-*.json` from `matplotlib.get_cachedir()`; without them matplotlib silently sets text in another installed sans-serif font, such as Arial, and mathematics in DejaVu Sans. Quarto is needed to render reports, and the report book's PDF format also needs a XeLaTeX distribution. HTML sets equations as MathML, not MathJax, so that the math font applies. Graphviz `dot` supplies model diagrams; a missing binary produces a warning during fitting but leaves the report without that figure. Node.js supplies the documentation tools. Run `quarto check` to inspect the rendering environment.
 
 ## Checks
 
@@ -114,7 +114,7 @@ These checks answer different questions. Do not replace one with another:
 
 - The serialised definition records graph, data, reporting and identity fields. Every difference fails validation unless a checked `fit_identity.BACKFILL_DEFAULTS` entry establishes that an absent field had exactly the recorded default behaviour.
 - The prepared-frame hash checks the actual rows and values used by a model. A matching frame can excuse a changed raw-data fingerprint, because another population's input may have changed without affecting this model.
-- The executable-code signature hashes the package's Python AST, excluding comments and docstrings, and records numerical library versions. Resume, sync and publication enforce it. Rendering and provisional sync do not. `expected_implementation=None` means the signature is not checked.
+- The executable-code signature hashes the package's Python AST, excluding comments and docstrings, and records numerical library versions. Resume, sync and publication enforce it. For a reviewed code-only change, `resume_from_trace.py --allow-implementation-change REASON` records why the retained samples remain valid; numerical library versions must still match. The regenerated manifest records current reporting provenance and retains the original sampling manifest. Publication checks both checkouts for uncommitted changes. Rendering and provisional sync do not enforce the signature. `expected_implementation=None` means the signature is not checked.
 - Lifecycle, sampling quality and clean provenance checks determine whether a fit is complete and suitable for publication.
 
 Trace-reading scripts use `fit_consumers`, which checks definitions and data compatibility. Its explicit `--allow-stale-fit` override reports what it bypassed. New trace consumers and comparison writers must join the relevant coverage registries or record a justified exemption. Comparison manifests link outputs to their contributing fits or input-data fingerprint.

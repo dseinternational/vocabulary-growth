@@ -8,6 +8,22 @@ format:
   html:
     code-fold: true
     theme: cosmo
+    # Noto Sans for text, Noto Sans Mono for code and Noto Sans Math for
+    # equations. The style below sets the code font because the theme's code
+    # rules ignore Quarto's `monofont`. MathML rather than MathJax, whose own
+    # math fonts cannot be replaced: the browser typesets MathML with the font
+    # named below, using its OpenType MATH table.
+    mainfont: "Noto Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
+    html-math-method: mathml
+    include-in-header:
+      - text: |
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,300..700;1,300..700&family=Noto+Sans+Math&family=Noto+Sans+Mono:wght@400..700&display=swap">
+          <style>
+            code, kbd, pre, samp { font-family: "Noto Sans Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+            math { font-family: "Noto Sans Math", math; }
+          </style>
     number-sections: true
     toc: true
     toc-depth: 2
@@ -336,7 +352,7 @@ render_family_notes()
 
 ![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
-![The same two trajectories with 50% inner and 89% outer equal-tailed intervals. These are intervals on the zero-effect population trajectory — study and child effects set to zero, which is not an average across children.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
+![Predictive count trajectories with 50% inner and 89% outer equal-tailed intervals. These draws include new-child variation and administration noise as well as parameter uncertainty. They are not intervals on the curve with all random effects set to zero.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
 ![The fitted production ratio against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 

@@ -135,7 +135,9 @@ class EngineAdapter:
     eleven models' replot behaviour with nothing to notice.
 
     ``None`` means the replot re-runs :attr:`posterior_predictive`, which is seeded
-    from the sampling configuration and so reproduces the stored draws. Whether an
+    from the sampling configuration. That reproduces the stored draws only on the
+    fit's own numerical stack, so ``regenerate_plots.py`` compares the re-run draws
+    with the stored ones and refuses a model whose draws have moved. Whether an
     engine that could expose an extractor *should* is a separate decision; these
     declarations record what each engine does today.
     """

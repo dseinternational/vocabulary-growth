@@ -55,6 +55,8 @@ def written_manifest(tmp_path, definition, monkeypatch):
     Both hashes are stubbed rather than computed: this file is about the guard's
     logic, and building a real frame would make every case a data-loading test.
     """
+    from dataclasses import asdict
+
     from vocab_growth.fit_artifacts import normalise_for_json
 
     monkeypatch.setattr(
@@ -66,8 +68,10 @@ def written_manifest(tmp_path, definition, monkeypatch):
         import json
 
         payload = {
-            "model": {"definition": normalise_for_json(definition)},
-            "sampling": {"configuration_name": CONFIG},
+            "model": {"definition": normalise_for_json(definition),
+                      "implementation": _MODULE.implementation_signature()},
+            "sampling": {"configuration_name": CONFIG,
+                         "parameters": asdict(_MODULE.sampling.get_sampling_configuration(CONFIG))},
             "data": {"source_data_hash": raw},
         }
         if frame is not None:
@@ -151,3 +155,83 @@ def test_a_changed_sampling_configuration_is_still_refused(written_manifest, def
     """Likewise the sampling-configuration guard."""
     with pytest.raises(ValueError, match="sampling configuration"):
         _MODULE._verify(written_manifest(), MODEL_KEY, definition, "dev")
+
+
+@pytest.mark.parametrize("implementation", [None, {"schema_version": 1, "package_ast_sha256": "changed"}])
+def test_missing_or_different_implementation_is_refused(written_manifest, definition, implementation):
+    import json
+
+    directory = written_manifest()
+    path = Path(directory) / _MODULE.FIT_MANIFEST_FILENAME
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    manifest["model"]["implementation"] = implementation
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="implementation"):
+        _verify(directory, definition)
+
+
+def test_missing_sampling_parameters_are_refused(written_manifest, definition):
+    import json
+
+    directory = written_manifest()
+    path = Path(directory) / _MODULE.FIT_MANIFEST_FILENAME
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    del manifest["sampling"]["parameters"]
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="sampling parameters"):
+        _verify(directory, definition)
+
+
+def test_loader_preserves_original_sampling_provenance(tmp_path, monkeypatch):
+    import json
+    from dataclasses import asdict
+    from types import SimpleNamespace
+
+    import xarray as xr
+
+    sampling = asdict(_MODULE.sampling.get_sampling_configuration("dev"))
+    retained = {"sampling": {"configuration_name": "dev", "parameters": sampling},
+                "code": {"commit": "original", "dirty": True}, "runtime": {"host": "original"}}
+    path = tmp_path / _MODULE.FIT_MANIFEST_FILENAME
+    path.write_text(json.dumps({"code": {"commit": "new"}, "runtime": {"host": "new"}}), encoding="utf-8")
+    trace = xr.DataTree.from_dict({"posterior": xr.Dataset({"x": (("chain", "draw"), [[1.]])})})
+    monkeypatch.setattr(_MODULE.xr, "open_datatree", lambda _: trace)
+    loaded = []
+    context = SimpleNamespace(model=SimpleNamespace(free_RVs=[SimpleNamespace(name="x")], coords={}),
+                              reporting=SimpleNamespace(output_dir=str(tmp_path)), set_trace=loaded.append)
+    _MODULE._loader_stage("unused.nc", retained, implementation_change_reason="Reporting correction only")(context)
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert loaded == [trace]
+    assert asdict(context.sampling) == sampling
+    assert saved["sampling"] == retained["sampling"]
+    assert saved["code"] == {"commit": "new"}
+    assert saved["runtime"] == {"host": "new"}
+    assert saved["artefacts"]["retained_sampling_manifest"] == retained
+    assert saved["artefacts"]["implementation_change_review"]["reason"] == "Reporting correction only"
+
+
+@pytest.mark.parametrize("change", ["code", "packages", "missing", "frame"])
+def test_reviewed_resume_only_relaxes_code_identity(written_manifest, definition, change):
+    import json
+
+    directory = written_manifest()
+    path = Path(directory) / _MODULE.FIT_MANIFEST_FILENAME
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    implementation = manifest["model"]["implementation"]
+    implementation["sha256"] = "older-code"
+    if change == "packages":
+        implementation["packages"]["numpy"] = {"version": "0.0"}
+    elif change == "missing":
+        manifest["model"]["implementation"] = None
+    elif change == "frame":
+        manifest["data"]["analysis_frame_hash"] = "older-frame"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="implementation"):
+        _verify(directory, definition)
+    if change == "code":
+        assert _MODULE._verify(directory, MODEL_KEY, definition, CONFIG,
+                               implementation_change_reason="Reviewed reporting-only change") == manifest
+    else:
+        with pytest.raises(ValueError, match="implementation|prepared analysis frame"):
+            _MODULE._verify(directory, MODEL_KEY, definition, CONFIG,
+                            implementation_change_reason="Reviewed reporting-only change")

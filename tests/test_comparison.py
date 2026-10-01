@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 import os
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -446,7 +447,7 @@ def test_sign_speech_cells_are_scaled_by_comprehension(tmp_path):
     cells = ([0.5, 0.4, 0.2], [0.1, 0.2, 0.3], [0.1, 0.2, 0.4])  # sign, both, speak
     path = _sign_speech_trace(tmp_path, ages, p_u, [0.3, 0.4, 0.5], [0.6, 0.6, 0.5], cells)
 
-    got_ages, s = comparison.load_sign_speech_trajectory(path, 810)
+    got_ages, s = comparison.load_sign_speech_trajectory(path, 810, definition=comparison.MODEL_REGISTRY["vg15"])
     np.testing.assert_allclose(got_ages, ages)
     # sign_only words = p_u * pi_sign_only * n_trials
     np.testing.assert_allclose(s["sign_only"][0], np.array(p_u) * np.array(cells[0]) * 810)
@@ -464,7 +465,7 @@ def test_sign_speech_spoken_is_reconstructed_from_p_u_and_q(tmp_path):
         tmp_path, ages, p_u, q, [0.6, 0.6, 0.5],
         ([0.5, 0.4, 0.2], [0.1, 0.2, 0.3], [0.1, 0.2, 0.4]),
     )
-    _, s = comparison.load_sign_speech_trajectory(path, 810)
+    _, s = comparison.load_sign_speech_trajectory(path, 810, definition=comparison.MODEL_REGISTRY["vg15"])
     np.testing.assert_allclose(s["spoken"][0], np.array(p_u) * np.array(q) * 810)
     np.testing.assert_allclose(s["understood"][0], np.array(p_u) * 810)
 
@@ -476,7 +477,7 @@ def test_sign_speech_r_stays_a_fraction(tmp_path):
         tmp_path, [12.0, 24.0, 36.0], [0.02, 0.10, 0.30], [0.3, 0.4, 0.5], r,
         ([0.5, 0.4, 0.2], [0.1, 0.2, 0.3], [0.1, 0.2, 0.4]),
     )
-    _, s = comparison.load_sign_speech_trajectory(path, 810)
+    _, s = comparison.load_sign_speech_trajectory(path, 810, definition=comparison.MODEL_REGISTRY["vg15"])
     np.testing.assert_allclose(s["r"][0], r)
     assert s["r"].max() <= 1.0
 
@@ -826,7 +827,7 @@ def test_univariate_weighted_child_follows_the_studies_present_at_each_age(tmp_p
     path = tmp_path / "univariate_re.nc"
     xr.DataTree.from_dict({"posterior": post, "constant_data": const}).to_netcdf(str(path))
 
-    got_ages, W = comparison.load_univariate_trajectory_weighted(str(path), 810, frame, bandwidth=3.0)
+    got_ages, W = comparison.load_univariate_trajectory_weighted(str(path), 810, frame, bandwidth=3.0, definition=SimpleNamespace(outcome="spoken", ages_query=(60,)))
     np.testing.assert_array_equal(got_ages, ages)
     assert W.shape == (n_draw, len(ages))
     # Only study 0 is sampled at 12 months, only study 1 at 60: the weighted
@@ -862,7 +863,7 @@ def test_joint_weighted_child_matches_the_univariate_construction(tmp_path):
     path = tmp_path / "joint_re.nc"
     xr.DataTree.from_dict({"posterior": post, "constant_data": const}).to_netcdf(str(path))
 
-    got_ages, U, S = comparison.load_population_trajectory_weighted(str(path), 810, frame, bandwidth=3.0)
+    got_ages, U, S = comparison.load_population_trajectory_weighted(str(path), 810, frame, bandwidth=3.0, definition=comparison.MODEL_REGISTRY["vg20"])
     np.testing.assert_array_equal(got_ages, ages)
     np.testing.assert_allclose(U[:, 0], expit(1.0) * 810, rtol=1e-9)
     np.testing.assert_allclose(S[:, 0], expit(1.0) * expit(-1.0) * 810, rtol=1e-9)

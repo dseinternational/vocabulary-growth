@@ -1,5 +1,8 @@
 # Four sensitivity variants, and the gate that could not see the one thing VG16 measures
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Observed current comprehension does not imply observed earlier comprehension, which supplies the lag. Paired-only sensitivity changes the analysed population as well as likelihood support. A 0.5 continuity correction at one word out of 810 shifts the logit by about 0.405, so the claimed 0.002 bound away from the boundary is incorrect. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

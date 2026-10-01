@@ -1,5 +1,8 @@
 # A forward projection of VG20's understood and spoken trajectories to 11 years
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A finite-basis Gaussian process does not guarantee simple reversion outside observed ages. An interval for a latent curve is different from a predictive interval for a child's count. The median of a product of dependent probabilities is not generally their zero-effect product. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 

@@ -201,8 +201,10 @@ def build_child_factor(
     ``4 + (k - 1) * (k / 2 + 4 - k)`` free covariance parameters: 4, 7 and 9 at
     ranks 1, 2 and 3, reproducing the rank table in
     ``notes/202608221000-four-by-four-gate1.md`` §4. Which rows anchor is a
-    gauge choice -- it changes neither ``Sigma`` nor the counts -- but it is not
-    a free one: a diagonal only pins its column's sign if the row it sits on has
+    choice of coordinates that preserves the representable covariance set
+    and parameter count. Reassigning independent priors after changing the
+    anchor order can change the induced covariance prior. The choice also
+    affects sampling: a diagonal only pins its column's sign if the row it sits on has
     real between-child variance, because a row whose ``tau`` is ~0 contributes
     ~0 to ``L`` whatever its direction, and its constraint then pins nothing.
     The anchors are therefore :data:`CHILD_FACTOR_ANCHOR_ORDER`,

@@ -1,5 +1,8 @@
 # Full reporting-config fit run of VG01–VG16 (810 scale) — run record and findings
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The paired-form crosswalk describes its observed sample. Agreement there does not establish a universal conversion between instruments. Differences in children, item content and administration can affect transport to other data. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 4.8).
 

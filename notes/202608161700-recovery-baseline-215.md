@@ -1,5 +1,8 @@
 # Parameter recovery against the #215 refit: three models, three different answers
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A few selected recovery replicates cannot bound the error in the production fit or identify a unique cause of that error. Replicates that fail convergence do not supply calibration evidence. Coverage across correlated parameters is not a set of independent repeated-data trials. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

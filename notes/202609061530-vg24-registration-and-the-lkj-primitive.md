@@ -1,5 +1,8 @@
 # VG24 registered, and why it is not built on `pm.LKJCorr`
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Few new signing observations do not imply an unchanged signing posterior when the likelihood shares parameters with other outcomes. Reporting error does not necessarily inflate every correlation involving a conditional production ratio. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Status reviewed with assistance from OpenAI Codex/GPT-6 on 2026-09-17. The registration status below is historical. The [role decision](202609091600-model-roles-settled.md) adopted VG24 for the sign-conversion child correlation only. VG15 remains the source for signing trajectories, within-word association and total expressive vocabulary.
 

@@ -144,7 +144,9 @@ def td_form_alignment_table(
     word universe. Under nesting, forms of different length record similar raw
     counts at a given age; under proportional sampling the shorter forms sit
     systematically lower on raw counts and align instead on the proportion of
-    their own inventory. This table lets a reader see which holds: for each age
+    their own inventory. This table describes those patterns, but language,
+    recruitment and study differences prevent it from establishing which
+    measurement assumption holds. It reports, for each age
     in ``age_range`` (inclusive) and each ``(language, form)`` present, the
     median ``outcome`` count as recorded (``median_count``) and as a proportion
     of the form's word-item count (``median_proportion``), with ``n``

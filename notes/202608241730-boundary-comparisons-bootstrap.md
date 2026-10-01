@@ -1,5 +1,8 @@
 # Gate 1's boundary comparisons: a valid reference distribution, and what it says about the withdrawn p-value
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Two exceedances in 250 simulations give an imprecise tail estimate and do not establish that the half-chi-square approximation is worse. The residual-based experiment is conditional on its first-stage quantities. A linear rank-one child effect is also different from the nonlinear A1 scale function. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

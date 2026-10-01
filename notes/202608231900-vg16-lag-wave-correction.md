@@ -1,5 +1,8 @@
 # VG16 lag correction: the administration wave, the source rule, and what was rebuilt on them
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Treating every shorter form as a nested subset of the reference inventory is a harmonisation assumption. A largest-count rule needs that assumption checked against item content. The note reports that the rule does not affect its current rows. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 

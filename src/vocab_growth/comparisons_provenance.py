@@ -37,8 +37,11 @@ source is caught the way one that outlives a refit is.
 
 from __future__ import annotations
 
+import ast
+import hashlib
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 
 from dse_research_utils.metadata.provenance import sha256_file
 
@@ -82,6 +85,73 @@ def _file_sha256(path: str) -> str:
     still compares equal.
     """
     return f"sha256:{sha256_file(path)}"
+
+
+def comparison_code_signature(script: str) -> dict:
+    """Package plus generating script and its local Python imports.
+
+    The package check stays conservative. Unrelated scripts are excluded.
+    Script labels may include arguments after the Python filename. Local static
+    imports are followed recursively, using the same prose filter as fits.
+    """
+    from vocab_growth import environment as env
+    from vocab_growth.models.implementation_identity import (
+        executable_source,
+        implementation_signature,
+    )
+
+    root = (Path(env.ROOT_DIR) / "scripts").resolve()
+    filename = script.split()[0] if script.strip() else ""
+    generator = (root / filename).resolve()
+    if not filename or not generator.is_relative_to(root) or generator.suffix != ".py":
+        raise ValueError("Comparison generator must name a Python file inside scripts/.")
+    modules = {p.relative_to(root).with_suffix("").as_posix().replace("/", "."): p
+               for p in root.rglob("*.py")}
+    pending = [generator]
+    sources = {}
+    while pending:
+        path = pending.pop()
+        relative = path.relative_to(root).as_posix()
+        if relative in sources:
+            continue
+        if not path.is_file():
+            # Old test fixtures and unknown generators cannot provide evidence.
+            sources[relative] = None
+            continue
+        source = path.read_text(encoding="utf-8-sig")
+        sources[relative] = hashlib.sha256(executable_source(source).encode()).hexdigest()
+        for node in ast.walk(ast.parse(source)):
+            names = []
+            qualified = False
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                base = node.module or ""
+                if node.level:
+                    parent = path.relative_to(root).parent.parts
+                    prefix = parent[:len(parent) - node.level + 1]
+                    base = ".".join((*prefix, base)).strip(".")
+                    qualified = True
+                names = [base, *(f"{base}.{alias.name}".strip(".") for alias in node.names)]
+            for name in names:
+                if name == "scripts" or name.startswith("scripts."):
+                    if "__init__" in modules:
+                        pending.append(modules["__init__"])
+                    name = name.removeprefix("scripts").lstrip(".")
+                elif not qualified:
+                    # Direct script execution puts the generator's directory
+                    # on sys.path, including for imports in its helpers.
+                    local = ".".join((*generator.relative_to(root).parent.parts, name))
+                    if local in modules or local + ".__init__" in modules:
+                        name = local
+                if name in modules:
+                    pending.append(modules[name])
+                # Package initialisers can also execute code on import.
+                for end in range(1, len(name.split(".")) + 1):
+                    init = ".".join(name.split(".")[:end]) + ".__init__"
+                    if init in modules:
+                        pending.append(modules[init])
+    return {"package": implementation_signature(), "script_sources": dict(sorted(sources.items()))}
 
 
 def fit_manifest_fingerprint(model_output_dir: str) -> dict:
@@ -196,6 +266,8 @@ def write_comparison_manifest(
     entry: dict = {
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "outputs": sorted(outputs),
+        "output_hashes": {name: _file_sha256(os.path.join(comparisons_dir, name)) for name in sorted(outputs)},
+        "implementation": comparison_code_signature(script),
         "contributing_fits": {
             label: fit_manifest_fingerprint(model_dir)
             for label, model_dir in sorted(contributing.items())
@@ -223,6 +295,9 @@ def validate_comparison_manifest(
     *,
     source_root: str | None = None,
     current_source_data_hash: str | None = None,
+    require_publication: bool = False,
+    publication_config: str = "rep",
+    allow_caveats: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Validate every recorded comparison against the current fitted output.
 
@@ -253,13 +328,58 @@ def validate_comparison_manifest(
     except Exception as exc:  # noqa: BLE001 - reported, not raised
         return [f"Could not read {manifest_path}: {exc}"], warnings
 
+    if not isinstance(payload, dict) or not isinstance(payload.get("scripts"), dict):
+        return ["Comparison manifest has no valid scripts record."], warnings
     claimed: set[str] = set()
+    checked_fits: set[str] = set()
     for script, entry in sorted((payload.get("scripts") or {}).items()):
-        claimed.update(entry.get("outputs") or [])
+        if not isinstance(entry, dict):
+            errors.append(f"{script}: malformed provenance entry.")
+            continue
+        outputs = entry.get("outputs")
+        hashes = entry.get("output_hashes") or {}
+        if not isinstance(outputs, list) or not all(isinstance(name, str) for name in outputs) or not isinstance(hashes, dict):
+            errors.append(f"{script}: malformed output record.")
+            continue
+        if any(not isinstance(entry.get(key) or {}, dict) for key in ("contributing_fits", "source_files")):
+            errors.append(f"{script}: malformed input record.")
+            continue
+        claimed.update(outputs)
+        if require_publication:
+            try:
+                current_code = comparison_code_signature(script)
+            except (ValueError, OSError, SyntaxError) as exc:
+                errors.append(f"{script}: cannot verify comparison code: {exc}")
+                continue
+            if entry.get("implementation") != current_code or any(
+                value is None for value in current_code["script_sources"].values()
+            ):
+                errors.append(f"{script}: comparison code is missing or changed; regenerate outputs.")
+            if not any(entry.get(key) for key in ("contributing_fits", "source_files", "source_data_hash")):
+                errors.append(f"{script}: no contributing fit or data source is recorded.")
+        for name in outputs:
+            path = os.path.join(comparisons_dir, name)
+            if os.path.basename(name) != name:
+                errors.append(f"{script}: output must be a basename: {name}.")
+            elif not os.path.isfile(path):
+                errors.append(f"{script}: output {name} is missing.")
+            elif name in hashes and _file_sha256(path) != hashes[name]:
+                errors.append(f"{script}: output {name} changed after generation.")
+            elif require_publication and name not in hashes:
+                errors.append(f"{script}: output {name} has no recorded hash.")
         for label, recorded in sorted(
             (entry.get("contributing_fits") or {}).items()
         ):
+            if not isinstance(recorded, dict) or os.path.basename(label) != label:
+                errors.append(f"{script}: malformed contributing fit {label}.")
+                continue
             model_dir = os.path.join(models_dir, label)
+            if require_publication and label not in checked_fits:
+                checked_fits.add(label)
+                errors.extend(_publication_fit_errors(
+                    model_dir, current_source_data_hash,
+                    config=publication_config, allow_caveats=allow_caveats,
+                ))
             manifest_file = os.path.join(model_dir, FIT_MANIFEST_FILENAME)
             if not os.path.isfile(manifest_file):
                 errors.append(
@@ -288,6 +408,9 @@ def validate_comparison_manifest(
             )
         root = os.getcwd() if source_root is None else source_root
         for label, recorded in sorted((entry.get("source_files") or {}).items()):
+            if not isinstance(recorded, dict):
+                errors.append(f"{script}: malformed source file {label}.")
+                continue
             path = os.path.join(root, recorded.get("path") or "")
             if not os.path.isfile(path):
                 errors.append(
@@ -312,4 +435,34 @@ def validate_comparison_manifest(
                 f"{COMPARISON_MANIFEST_FILENAME} entry; its provenance is "
                 "unrecorded."
             )
+    if require_publication:
+        errors.extend(warnings)
+        warnings = []
     return errors, warnings
+
+
+def _publication_fit_errors(
+    model_dir: str, raw_hash: str | None, *, config: str = "rep", allow_caveats: bool = False,
+) -> list[str]:
+    """Validate the fit itself as well as the comparison's link to that fit."""
+    from dataclasses import asdict
+
+    import dse_research_utils.statistics.models.sampling as sampling
+
+    from vocab_growth.analysis_frames import expected_analysis_frame_hash
+    from vocab_growth.fit_artifacts import fit_validation_kwargs, validate_fit_output
+    from vocab_growth.fit_consumers import model_key_for_dir
+    from vocab_growth.models.definitions import MODEL_REGISTRY
+
+    key = model_key_for_dir(model_dir)
+    if key is None:
+        return [f"{model_dir}: no registered publication validation for this variant."]
+    definition = MODEL_REGISTRY[key]
+    policy = fit_validation_kwargs(
+        "publish-with-caveats" if allow_caveats else "publish", expected_definition=definition,
+        expected_sampling_config_name=config,
+        expected_sampling_parameters=asdict(sampling.get_sampling_configuration(config)),
+        current_source_data_hash=raw_hash,
+        current_analysis_frame_hash=expected_analysis_frame_hash(key, definition),
+    )
+    return [f"{key}: {error}" for error in validate_fit_output(model_dir, **policy)]

@@ -1,5 +1,8 @@
 # Gate 1 for the 4x4: the coupling is level-to-rate, and the covariance is not four-dimensional
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A singular maximum-likelihood covariance can reflect precise evidence near a boundary as well as weak information. It does not by itself establish non-identifiability or prior dominance. Optimisation checks do not calibrate a statistical reference distribution. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

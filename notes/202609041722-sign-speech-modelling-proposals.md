@@ -1,5 +1,8 @@
 # Modelling the sign–speech link: a correlated subject block on VG15 first, a sign → speech cross-lag deferred
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A small number of study clusters limits precision but does not alone prove formal non-identifiability. Directional attenuation claims need a stated measurement model. Shared parameters can keep the relevant posterior quantities dependent even when the likelihood separates their direct roles. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Review status, 2026-09-17 (OpenAI Codex/GPT-6). The proposed models are now registered as VG24 and VG25. This note records their motivation; the inventory and model pages describe the current designs. [Follow-up](../docs/models/README.md).
 

@@ -1,5 +1,8 @@
 # VG16 parameter recovery, and the blocker that was not there
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. One replicate provides a recovery error, not an estimate of repeated-data bias. A coverage fraction across correlated parameters is descriptive and does not constitute independent trials of nominal coverage. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

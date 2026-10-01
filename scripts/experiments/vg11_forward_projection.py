@@ -331,8 +331,8 @@ def project(args, trace_path, n_trials, out_dir):
         print(f"  {a:3d} mo  {np.median(kappa_out[:, i]):7.2f}")
 
     # The age the median child reaches a given count. Interesting because it is
-    # far better supported than a count at 5 years: the count grows slowly above
-    # the window under every continuation, so an age read off it moves little.
+    # sensitive to extrapolation: age-at-count has derivative 1 / growth rate.
+    # A slowly rising curve can give a large age change for a small count change.
     print("\n== age (months) the population median child reaches a count")
     print(f"  {'words':>6s}  " + "  ".join(f"{lv:>23s}" for lv in AGE_AT_COUNT_LEVELS))
     for target in args.counts:

@@ -1,5 +1,8 @@
 # What the 200-row study threshold costs, and how thin the age support really is
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The presence of several studies does not establish that they overlap in age or provide enough information to separate age from study effects. Counts of studies should be read alongside their age and outcome support. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

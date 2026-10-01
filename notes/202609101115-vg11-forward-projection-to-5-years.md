@@ -1,5 +1,8 @@
 # A forward projection of VG11's typically-developing spoken trajectory to 5 years
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Age-at-count sensitivity is the reciprocal of the count curve's slope. A flatter curve makes the inverse less stable, not more stable. The earlier extrapolation reassurance has the direction reversed. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

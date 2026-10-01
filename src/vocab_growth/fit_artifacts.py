@@ -440,6 +440,7 @@ def fit_validation_kwargs(
             require_reporting_quality=True,
             require_rendered_report=True,
             require_clean_fit=True,
+            require_convergence_evidence=True,
             require_clean_convergence=not purpose.endswith("-with-caveats"),
         )
     elif purpose != "render":
@@ -614,7 +615,11 @@ def accepted_rhat_exception(
         return None
     if not diagnostics_scan_completed(gate_summary) or not diagnostics_assessable(gate_summary):
         return None
-    if gate_summary.get("ess_failing") or (gate_summary.get("checks") or {}).get("ess") is False:
+    if (
+        gate_summary.get("ess_failing")
+        or (gate_summary.get("checks") or {}).get("ess") is False
+        or float(gate_summary["min_ess"]) < 400
+    ):
         return None
     max_rhat = gate_summary.get("max_rhat")
     if max_rhat is None or float(max_rhat) > exception.max_rhat:
@@ -689,9 +694,8 @@ def convergence_caveats(gate_summary: dict | None) -> list[str]:
 def read_convergence_caveats(output_dir: str) -> list[str]:
     """Soft-tier caveats for a fit, read from its diagnostics payload.
 
-    An unreadable or absent payload yields no caveats: the hard gate already
-    fails closed when its own scan does not complete, so a missing summary is
-    reported by the lifecycle checks rather than duplicated here.
+    An unreadable or absent payload yields no caveats. This display helper does
+    not establish convergence; publication separately requires readable evidence.
     """
     path = os.path.join(output_dir, DIAGNOSTICS_SUMMARY_FILENAME)
     if not os.path.isfile(path):
@@ -717,6 +721,7 @@ def validate_fit_output(
     require_rendered_report: bool = False,
     require_clean_fit: bool = False,
     require_clean_checkout: bool = False,
+    require_convergence_evidence: bool = False,
     require_clean_convergence: bool = False,
 ) -> list[str]:
     """Return every reason that fitted output is unsuitable for its intended use.
@@ -760,10 +765,40 @@ def validate_fit_output(
         errors.append("trace.nc is missing.")
     if os.path.isfile(os.path.join(output_dir, CONVERGENCE_FAILURE_FILENAME)):
         errors.append(f"{CONVERGENCE_FAILURE_FILENAME} is present.")
-    if require_clean_convergence:
+    diagnostics = None
+    if require_convergence_evidence or require_clean_convergence:
+        if (manifest.get("model", {}).get("definition") or {}).get("singleton_marginalisation") is not None:
+            errors.append("Experimental singleton quadrature is not validated for publication; use the explicit child-effect model.")
+        try:
+            diagnostics = read_json(os.path.join(output_dir, DIAGNOSTICS_SUMMARY_FILENAME))
+            if not isinstance(diagnostics, dict):
+                raise FitValidationError("Diagnostics summary must be a JSON object.")
+            # Never allow a recorded, more permissive threshold to redefine the
+            # reporting gate. An exception is checked against the live registry.
+            assessed = {**diagnostics, "thresholds": {"rhat_max": 1.01, "ess_threshold": 400}}
+            status = hard_tier_status(assessed)
+            exception = accepted_rhat_exception(
+                (manifest.get("model") or {}).get("model_id"), assessed
+            )
+            recorded_exception = diagnostics.get(ACCEPTED_EXCEPTION_KEY)
+            if status is not HardConvergenceStatus.PASSED and not (
+                status is HardConvergenceStatus.FAILED
+                and exception is not None
+                and isinstance(recorded_exception, dict)
+                and recorded_exception.get("parameters") == list(exception.parameters)
+                and recorded_exception.get("decided") == exception.decided
+            ):
+                errors.append(f"Hard convergence evidence is {status.value}; a complete passing scan is required.")
+            checks = diagnostics.get("checks") or {}
+            if any(not isinstance(checks.get(name), bool) for name in ("divergences", "bfmi")):
+                errors.append("Convergence evidence lacks the divergence or BFMI assessment.")
+        except (FitValidationError, TypeError, ValueError, AttributeError) as exc:
+            errors.append(f"Convergence evidence is missing or malformed: {exc}")
+            diagnostics = None
+    if require_clean_convergence and diagnostics is not None:
         # Read the diagnostics payload rather than the marker file, so a fit made
         # before the marker existed is judged on its actual diagnostics.
-        for caveat in read_convergence_caveats(output_dir):
+        for caveat in convergence_caveats(diagnostics):
             errors.append(
                 "Convergence caveat (cleared R-hat/ESS but not the soft tier): "
                 + caveat.split(":", 1)[0]
@@ -873,6 +908,15 @@ def validate_fit_output(
             errors.append("The current checkout is dirty, so an exact resume is unsafe.")
     if require_clean_fit and code_payload.get("dirty") is not False:
         errors.append("The fit was produced from a dirty or unverifiable checkout.")
+    if require_clean_fit:
+        retained = (manifest.get("artefacts") or {}).get("retained_sampling_manifest")
+        if retained is not None:
+            # On a second resume, intermediate manifests describe discarded
+            # reporting runs. The deepest retained manifest records sampling.
+            while isinstance(retained, dict) and (retained.get("artefacts") or {}).get("retained_sampling_manifest") is not None:
+                retained = retained["artefacts"]["retained_sampling_manifest"]
+            if not isinstance(retained, dict) or (retained.get("code") or {}).get("dirty") is not False:
+                errors.append("The retained trace was sampled from a dirty or unverifiable checkout.")
 
     if require_reporting_quality:
         try:

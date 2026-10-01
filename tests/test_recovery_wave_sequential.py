@@ -301,6 +301,17 @@ def test_vg16_simulates_and_the_finished_frame_reproduces_its_own_predictor(
 
     # The synthetic frame's counts are the model's, not the study's.
     real = MODEL_REGISTRY["vg16"]
+    from dataclasses import replace
+
+    import pandas as pd
+
+    from vocab_growth.recovery.simulate import load_simulation
+
+    loaded, _, record = load_simulation(result.directory, expected_definition=real)
+    pd.testing.assert_frame_equal(loaded, frame)
+    assert record["model"]["definition"]["use_cross_lag"] is True
+    with pytest.raises(ValueError, match="definition"):
+        load_simulation(result.directory, expected_definition=replace(real, use_cross_lag=False))
     _, has_lag, _ = prev_wave_lag_for_frame(frame, real.n_trials, real)
     assert has_lag.sum() > 0, "a cross-lag simulation with no lagged row proves nothing"
 

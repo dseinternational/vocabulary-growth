@@ -2,64 +2,24 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Is VG15's four-group ``psi`` hierarchy recoverable, and is its prior the cause?
+"""Explore prior sensitivity in a reduced Gaussian study hierarchy.
 
-The question
-------------
-[#226](https://github.com/dseinternational/vocabulary-growth/issues/226) reports
-``psi`` and ``psi_study`` recovering biased low, through a ``tau_psi`` that is
-itself underestimated, and proposes the standard few-groups pathology: with four
-informing sources the between-study spread is barely identified, and
-``tau_psi ~ HalfNormal(1.0)`` -- prior median 0.67 against truths of 0.9-1.3 --
-pulls it down, which over-shrinks the group estimates. The issue's evidence is
-three ``test``-tier VG15 replicates, one of which cleared the convergence gate.
+The association block follows VG15's zero-sum study effects. The observation
+model is a Gaussian approximation with fixed, estimated within-study variances.
+These variances use observed within-understood margins, not their joint fitted
+distribution. Produced-only sources such as nz_01 are excluded because their
+observed shares do not identify within-understood probabilities.
 
-Refitting VG15 more times would cost days and still confound the hierarchy with
-everything else in a joint three-outcome model. This isolates the hierarchy.
+This experiment tests the reduced hierarchy. It neither reproduces full VG15
+recovery nor bounds its bias. Omitting jointly estimated margins, concentration
+and their dependence can change bias in either direction. Its normal likelihood
+also differs from the Dirichlet-Multinomial likelihood in VG15. Repeated visits
+receive a design-effect sensitivity, not a fitted dependence model.
 
-The reduction
--------------
-VG15's association block is, exactly::
-
-    log_psi     ~ Normal(log_psi_mu, log_psi_sigma)
-    tau_psi     ~ HalfNormal(tau_psi_sigma)
-    z_psi       ~ ZeroSumNormal(sigma=sqrt(J/(J-1)), shape=J)
-    log_psi_j    = log_psi + tau_psi * z_psi[j]
-
-and each informing study's cross-tab enters through a Dirichlet-Multinomial over
-a Plackett composition. Replace only that last line by its Laplace
-approximation -- ``y_j ~ Normal(log_psi_j, s_j^2)``, with ``s_j`` computed from
-that study's *actual* cells -- and the whole model becomes Gaussian, with a
-closed-form posterior. No MCMC, no convergence gate, no sampling noise, and
-thousands of replicates in seconds instead of three in a day.
-
-What that buys, and what it costs:
-
-* **Buys** a clean answer to items 2 and 3 of #226. The prior on ``tau_psi`` can
-  be swept against a *fixed* truth, which is the comparison the fitting harness
-  could not make until the cross-definition seam landed alongside this, and
-  which registered-variant robustness runs cannot make at all.
-* **Costs** each study's likelihood departing from a normal one, the joint
-  estimation of ``r``, ``q`` and ``conc`` alongside ``psi``, and every
-  correlation between ``psi`` and the rest of VG15. So a bias found here is a
-  *lower bound* on VG15's: it is the part attributable to the hierarchy alone.
-  A bias NOT found here would have been the interesting outcome, because it
-  would have located the problem elsewhere.
-
-The ``s_j`` are not invented. They come from the observed information of the
-model's own Dirichlet-Multinomial likelihood, evaluated on the real cross-tab
-cells with each row's own observed margins -- so the *relative* precision of the
-four sources is the data's, not an assumption.
-
-The design effect
------------------
-#226's sharpest observation is that the pattern tracks **children**, not
-administrations: ``nz_01`` has the second-largest number of administrations and
-the fewest children, and is shrunk hardest. Independent administrations would
-make ``s_j`` scale with administrations; perfectly redundant repeats within a
-child would make it scale with children. ``--design-rho`` sweeps between
-(``0`` = administrations, ``1`` = children), so the study can say whether that
-observation is reproduced by the hierarchy or needs another explanation.
+Conditional on tau, the Gaussian posterior is analytic. Integration over tau
+uses numerical quadrature, so numerical error still needs checking. Simulated
+replicates also carry Monte Carlo uncertainty. The oracle recovery slope uses
+the zero-sum prior covariance once in the Gaussian conditioning formula.
 
 Usage
 -----
@@ -86,9 +46,6 @@ from scipy.stats import norm
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from vocab_growth import environment as env  # noqa: E402
-from vocab_growth.models.common_joint_modality import (  # noqa: E402
-    PROD_CELL_COLUMNS,
-)
 from vocab_growth.models.definitions import MODEL_REGISTRY  # noqa: E402
 from vocab_growth.reporting import (  # noqa: E402
     console,
@@ -180,10 +137,10 @@ def _observed_information(log_likelihood, at, step=1e-3):
 
 
 def study_information(analysis_df, *, conc, log_psi_truth):
-    """Per-study Fisher information for ``log psi_j``, from the real cells.
+    """Observed curvature for ``log psi_j`` at fixed four-cell margins.
 
     Each row contributes its own Dirichlet-Multinomial term at its own observed
-    margins, so the four sources' *relative* precision is the data's. Rows are
+    margins, so this is a fixed-margin approximation for four-cell sources only. Rows are
     added because the model treats them as conditionally independent given the
     study's ``psi_j``; whether that overstates the information is exactly what
     ``--design-rho`` puts a number on.
@@ -214,29 +171,11 @@ def study_information(analysis_df, *, conc, log_psi_truth):
             }
         )
 
-    if "prod_signed_spoken" in analysis_df.columns:
-        prod = analysis_df[analysis_df["prod_signed_spoken"].notna()]
-        for study, block in prod.groupby("study"):
-            counts = block[PROD_CELL_COLUMNS].to_numpy(dtype=float)
-            total = counts.sum(axis=1)
-            # Within-produced margins: the renormalised composition's own r and
-            # q are the produced shares, which is what nz_01 observes.
-            r = (counts[:, 0] + counts[:, 2]) / total
-            q = (counts[:, 1] + counts[:, 2]) / total
-
-            def log_likelihood(value, counts=counts, r=r, q=q):
-                pi = produced_pi(r, q, float(np.exp(value)))
-                return float(dirichlet_multinomial_logpmf(counts, conc * pi).sum())
-
-            rows.append(
-                {
-                    "study": study,
-                    "source": "produced",
-                    "administrations": len(block),
-                    "children": int(block["subject_id"].nunique()),
-                    "information": _observed_information(log_likelihood, log_psi_truth),
-                }
-            )
+    # Produced shares do not identify the within-understood margins required
+    # by four_cell_pi. This approximation therefore excludes produced-only
+    # sources; a full joint-model recovery is needed to include their information.
+    if "prod_signed_spoken" in analysis_df and analysis_df["prod_signed_spoken"].notna().any():
+        print("Excluding produced-only rows: within-understood margins are unavailable.")
 
     frame = pd.DataFrame(rows)
     if frame.empty:
@@ -482,20 +421,20 @@ def _slope(frame, groups):
 
 
 def oracle_slope(tau, s):
-    """The same slope for a model that KNEW tau and the centre.
+    """Recovered-on-true deviation slopes with known scale and centre.
 
-    Two attenuations compose, and only one of them is the hierarchy's. The
-    posterior deviation shrinks the *observed* deviation by tau^2/(tau^2+s^2),
-    and the observed deviation is itself the true one plus noise, which
-    attenuates the regression by the same factor again -- so even a correctly
-    specified, oracle-tau model has a slope of ``(tau^2/(tau^2+s^2))^2``, not 1.
-
-    Reporting the ratio of the realised slope to this is what separates "shrunk
-    because the hierarchy's spread was underestimated", which is #226's proposed
-    mechanism, from "shrunk because the source is noisy", which no prior can fix.
+    Noise is in the response, so there is no second attenuation factor.
+    The zero-sum covariance couples groups, including when their errors differ.
     """
-    factor = tau**2 / (tau**2 + np.asarray(s) ** 2)
-    return factor**2
+    s = np.atleast_1d(np.asarray(s, dtype=float))
+    if tau == 0:
+        return np.full_like(s, np.nan)  # No variation in truth to regress on.
+    if len(s) == 1:
+        return tau**2 / (tau**2 + s**2)
+    basis = zero_sum_basis(len(s))
+    covariance = tau**2 * (basis @ basis.T)
+    gain = np.linalg.solve(covariance + np.diag(s**2), covariance).T
+    return np.diag(gain @ covariance) / np.diag(covariance)
 
 
 def verify_against_pymc(y, s, basis, tau_sigma, log_psi_mu, log_psi_sigma, seed):

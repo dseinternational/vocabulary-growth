@@ -1,5 +1,8 @@
 # The Down syndrome understood-trajectory prior: anchor levels and the logit-linear mean
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Calibration and posterior checks based on overlapping data are not independent validation. The calibration is uncertain and is not a bound on the true concentration. Read current sensitivity and recovery evidence alongside this dated calculation. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

@@ -2041,11 +2041,9 @@ def plot_production_rate_by_understood(
     relationship -- and NOT the conditional quantity ``E[q | understood = U]``
     for a child who happens to understand U words.
 
-    The two differ whenever children vary, and here they differ in a known
-    direction. A child observed above the population comprehension curve carries
-    a positive understood child effect, and under VG20's ``rho_uq`` = +0.368 a
-    positive conversion effect with it, so the genuine conditional expectation
-    rises with U more steeply than this curve does. Nothing here conditions the
+    The two can differ when children vary. A count above the reference curve
+    can reflect child or study effects and observation noise; it does not fix
+    the sign of a child's latent effect. Nothing here conditions the
     child effects on observed comprehension or uses ``rho_uq`` at all. Computing
     the conditional version means integrating the joint child-effect posterior
     through the understood Beta-Binomial likelihood, which is a separate output.

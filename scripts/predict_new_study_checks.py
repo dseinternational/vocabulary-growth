@@ -17,7 +17,7 @@ next to the scores, so the note that reads them is regenerable end to end.
     uv run python scripts/predict_new_study_checks.py collate --reference vg20
 
 ``controls`` predicts the model's own fitted rows as if they were an unseen
-study and unseen children (coverage must then sit at or above nominal), and
+study and unseen children (a descriptive check, with no coverage guarantee), and
 recovers the fitted per-study offsets with the profile estimator.
 
 ``profile`` estimates the study offset on comprehension within age bands, within
@@ -36,7 +36,8 @@ departure grows as a child ages.
 ``null`` simulates studies from the model with the frame's own ages, children
 and visit structure -- one posterior draw as the truth, a study offset drawn at
 the fitted between-study scale, child effects shared across a child's visits,
-counts censored at the form length -- and scores each with the same code. A
+counts drawn on the model reference scale without added form censoring -- and
+scores each with the same code. A
 simulated study has a constant offset by construction, so the spread and
 likelihood-ratio statistics it returns measure estimation noise alone; that is
 the reference distribution for the corresponding statistics on the real study.
@@ -79,6 +80,11 @@ def _parse_bands(spec: str) -> list[tuple[int, int]]:
     for part in spec.split(","):
         lo, hi = part.split("-")
         bands.append((int(lo), int(hi) + 1))
+    bands.sort()
+    if any(lo >= hi for lo, hi in bands) or any(
+        right[0] < left[1] for left, right in zip(bands, bands[1:], strict=False)
+    ):
+        raise ValueError("Age bands must have positive width and must not overlap.")
     return bands
 
 
@@ -119,7 +125,9 @@ def offset_profile(post, x_plot, frame, draws, n_trials, definition, schemes, ma
             out[f"n[{_band_label(b_lo, b_hi)}]"] = int(len(g))
             ests.append(e)
             ll_sum += ll
-        inside = frame["age"].between(bands[0][0], bands[-1][1] - 1)
+        inside = np.logical_or.reduce([
+            (frame["age"] >= lo) & (frame["age"] < hi) for lo, hi in bands
+        ])
         if not inside.all():
             # The whole-frame likelihood is not comparable when rows fall outside
             # every band; profile the banded rows jointly instead.
@@ -375,13 +383,12 @@ def simulate_study(post, x_plot, frame, definition, truth_draw, rng, n_trials):
     q = expit(curve["h"] + offset_q + dq)
     y_u = pns._betabinom_draw(rng, n_trials, p, curve["ku"])
     form = frame["survey_vocab_max"].to_numpy()
-    censored = int((y_u > form).sum())
-    y_u = np.minimum(y_u, form)
+    exceeding_form = int((y_u > form).sum())
     y_s = pns._betabinom_draw(rng, y_u, q, curve["ks"])
     sim = frame.copy()
     sim["understood"] = y_u.astype(np.int64)
     sim["spoken"] = y_s.astype(np.int64)
-    return sim, offset_u, offset_q, censored
+    return sim, offset_u, offset_q, exceeding_form
 
 
 def run_null(args, root):
@@ -396,7 +403,7 @@ def run_null(args, root):
     rows = []
     for rep in range(args.reps):
         truth = int(rng.integers(0, total))
-        sim, off_u, off_q, censored = simulate_study(
+        sim, off_u, off_q, exceeding_form = simulate_study(
             post, x_plot, frame, definition, truth, rng, n_trials
         )
         draws = _draws(rng, total, args.draws)
@@ -411,7 +418,7 @@ def run_null(args, root):
             "truth_draw": truth,
             "true_offset_u": round(off_u, 3),
             "true_offset_q": round(off_q, 3),
-            "rows_censored_at_form": censored,
+            "rows_exceeding_form": exceeding_form,
             "cover50_u": round(float(u["in50"].mean()), 3),
             "cover89_u": round(float(u["in89"].mean()), 3),
             "median_pit_u": round(float(u["pit"].median()), 3),
@@ -470,7 +477,7 @@ def _summarise_null(table, odir, args):
         f"max |error| {err_u.abs().max():.3f}"
     )
     print(
-        f"rows censored at the form, mean {table['rows_censored_at_form'].mean():.1f}"
+        f"rows exceeding the form (retained), mean {table['rows_exceeding_form'].mean():.1f}"
     )
     stats = (
         ["cover89_u", "median_pit_u", "cover89_s"]

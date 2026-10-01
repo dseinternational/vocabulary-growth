@@ -17,7 +17,10 @@ import pytest
 import xarray as xr
 
 from vocab_growth.models import prior_child_checks as pcc
-from vocab_growth.models.definitions import SubjectFactorPriorParams
+from vocab_growth.models.definitions import (
+    AgeVaryingSubjectScale,
+    SubjectFactorPriorParams,
+)
 
 
 def _prior(**arrays):
@@ -35,6 +38,18 @@ def _prior(**arrays):
 class _Definition:
     n_trials = 810
     subject_slope_ref_age_months = 36.0
+
+
+def test_age_varying_scale_reaches_both_declared_anchors():
+    from types import SimpleNamespace
+
+    prior = _prior(f_u_plot=np.zeros(3), tau_subj_u=np.ones(3),
+                   tau_subj_q=np.ones(3), log_tau_subj_u_ratio=np.full(3, np.log(2)))
+    definition = SimpleNamespace(tau_subj_u_sigma=AgeVaryingSubjectScale((12., 60.), 1.5, .5))
+    du, dq = pcc.unseen_child_deltas(prior, definition, [12., 36., 60.], np.random.default_rng(2))
+    np.testing.assert_allclose(du[:, 1], np.sqrt(2) * du[:, 0])
+    np.testing.assert_allclose(du[:, 2], 2 * du[:, 0])
+    np.testing.assert_allclose(dq[:, 2], dq[:, 0])
 
 
 # --------------------------------------------------------------------------

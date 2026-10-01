@@ -1,5 +1,8 @@
 # The typically developing models' low BFMI is the child effect, and the partition is not what causes it
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Energy correlations alone do not establish the cause of low BFMI, and a large energy variance need not mean heavy tails. For independent standard Gaussian position and momentum in d dimensions, their total Hamiltonian variance is d, not d/2. The later thinning note withdraws the earlier VG08 young-age correlation. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

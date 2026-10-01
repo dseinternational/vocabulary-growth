@@ -1,5 +1,8 @@
 # Multivariate t on the child effects: measured, and not adopted
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A zero-sum multivariate t distribution can be built as a Gaussian scale mixture. Effects fitted under a normal prior are not an independent check of that prior's distribution. Trimming their summaries does not establish the effect of deleting those children and refitting. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 

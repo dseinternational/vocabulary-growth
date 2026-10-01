@@ -146,6 +146,8 @@ def ols_cluster(df: pd.DataFrame, y: str, x: str, controls: list[str],
     for c in controls:
         design[c] = z(c)
     design = sm.add_constant(design, has_constant="add")
+    if np.linalg.matrix_rank(design.to_numpy()) < design.shape[1]:
+        raise ValueError(f"Rank-deficient regression for {y} on {x}; remove redundant controls.")
 
     fit = sm.OLS(yv.to_numpy(), design.to_numpy()).fit(
         cov_type="cluster", cov_kwds={"groups": d[cluster].to_numpy()}
@@ -465,7 +467,7 @@ def report_cross_lag(cells: pd.DataFrame, nz: pd.DataFrame) -> None:
     # nz_01: same question, produced-vocabulary denominator. Never pooled above.
     nz_pairs = make_lag_pairs(nz, "produced")
     nz_fwd = ols_cluster(nz_pairs, "d_spoken", "sign_only_t",
-                         ["spoken_t", "denom_t", "age_t", "gap"])
+                         ["denom_t", "age_t", "gap"])
     nz_rev = ols_cluster(nz_pairs, "d_signed", "spoken_t",
                          ["signed_t", "denom_t", "age_t", "gap"])
     dataframe_table(pd.DataFrame([
@@ -480,10 +482,10 @@ def report_cross_lag(cells: pd.DataFrame, nz: pd.DataFrame) -> None:
 
     console.print(
         "[yellow]Rates over produced vocabulary are compositional: spoken and "
-        "sign-only shares sum with 'both' to 1, so a negative forward slope here "
-        "is partly arithmetic. The uk_02/uk_07 panel, whose denominator is "
-        "comprehension rather than production, carries the interpretable "
-        "estimate.[/yellow]"
+        "sign-only shares sum to 1 because spoken already includes 'both'. "
+        "The forward coefficient therefore cannot separate a sign-only share "
+        "from baseline speech. Its control set excludes baseline speech to avoid "
+        "an unidentified coefficient. Neither panel establishes a causal effect.[/yellow]"
     )
 
 

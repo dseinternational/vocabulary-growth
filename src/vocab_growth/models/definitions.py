@@ -331,12 +331,12 @@ class SubjectSlopePriorParams:
 
     Three properties are the point of the design, and none is incidental.
 
-    **The model of record is nested at ``tau1 = 0``**, so the slope has to be
-    evidenced rather than assumed, and Proposal A1 is the *other* special case at
-    ``rho01 = 1`` — one deviate scaled by an age function is a rank-one
-    covariance. Fitting with ``rho01`` free tests both in one model. Freeing it
-    costs 6.28 on 1 df on the repeats-only production fit (p ~ 0.012), which is
-    why it is free here and not pinned.
+    **The constant child-intercept block is nested at ``tau1 = 0``**.
+    Correlation one gives one deviate with a scale linear in age. It does not
+    reproduce Proposal A1's exponential scale, despite both being rank one.
+    Whole-model nesting also requires the same covariates and dispersion form.
+    Boundary comparisons need their own calibration; an ordinary chi-square
+    reference need not apply when testing a variance or perfect correlation.
 
     **``tau1`` is per year.** In logit/month the fitted values are 0.02-ish and a
     prior on that scale is unreadable; per year they are 0.12-0.29.
@@ -549,9 +549,10 @@ class AgeVaryingSubjectScale:
 
     Structural caveat, stated where it cannot be missed: scaling a single
     per-child deviate by ``tau(age)`` imposes **perfect rank correlation of
-    children across age**. Children never cross. That is measured, not assumed
-    — about 0.75-0.83 disattenuated out to two years and 0.28 beyond — so this
-    is registered-sensitivity material and not a candidate model of record. See
+    children across age** for that latent component. This is a structural
+    restriction. The historical tracking analysis does not validate a numerical
+    measurement-error correction or bound; see the September correction notice.
+    This remains registered-sensitivity material rather than a model of record. See
     ``notes/202607261540-item-difficulty-and-the-aggregate-likelihood.md`` §9
     and ``notes/202608141600-rank-stability-tracking.md`` §8.
     """
@@ -1144,11 +1145,11 @@ class BivariateModelDefinition:
     The models score every count against ``n_trials = 810``, so a 416-item Oxford
     CDI count enters on the same denominator as an 810-item DSE Checklists count.
     That harmonisation assumes the shorter form's items are the easier ones, and
-    the sufficiency result in notes/202607261540 is the proof that no aggregate
-    analysis of these data can test it: a statistic sufficient for ability carries
-    no information about item composition. So the assumption is not probed by
-    running the model differently -- it is probed by removing the rows that need
-    it, which is what this flag does (issue #190).
+    aggregate totals can still depend on item difficulties. Sufficiency for
+    ability treats item difficulties as fixed; it does not prove that totals
+    contain no information about them. Without linked items or respondents,
+    form composition and ability distributions are hard to separate. This flag
+    checks sensitivity by retaining only native forms (issue #190).
 
     It is the widest-scoped sensitivity in the registry, and deliberately so: on
     2026-09-15 the loader keeps 166 of 1,799 Down syndrome rows, from 129
@@ -1717,7 +1718,8 @@ class JointModelDefinition:
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
     eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
-    # `ell_unit_sign` is unidentified in VG15 (contraction 0.033) and is
+    # `ell_unit_sign` had little spread reduction in the dated VG15 fit
+    # (contraction 0.033). This alone does not establish non-identification. It is
     # DELIBERATELY left sampled, settled 2026-08-06. Fixing it at its prior median
     # changes nothing measurable -- a maximum median shift of 0.0023 on r(a), +0.1%
     # band width, convergence unchanged -- and removing the signed GP is worse: it
@@ -1893,11 +1895,11 @@ class JointModelDefinition:
     The models score every count against ``n_trials = 810``, so a 416-item Oxford
     CDI count enters on the same denominator as an 810-item DSE Checklists count.
     That harmonisation assumes the shorter form's items are the easier ones, and
-    the sufficiency result in notes/202607261540 is the proof that no aggregate
-    analysis of these data can test it: a statistic sufficient for ability carries
-    no information about item composition. So the assumption is not probed by
-    running the model differently -- it is probed by removing the rows that need
-    it, which is what this flag does (issue #190).
+    aggregate totals can still depend on item difficulties. Sufficiency for
+    ability treats item difficulties as fixed; it does not prove that totals
+    contain no information about them. Without linked items or respondents,
+    form composition and ability distributions are hard to separate. This flag
+    checks sensitivity by retaining only native forms (issue #190).
 
     It is the widest-scoped sensitivity in the registry, and deliberately so: on
     2026-09-15 the prepared joint frame keeps 153 of 1,707 rows, from ie_01 (its
@@ -2092,7 +2094,7 @@ class JointModelDefinition:
 
     The reason was that the sources already informing ``psi`` disagree about it
     substantially, and ``psi`` had nowhere to put that. Mantel-Haenszel odds ratios
-    over the same cells, stratified by child:
+    over the same cells, stratified by administration (a dated descriptive audit):
 
     =======  =====  =========  =================  ==========  ===============
     source   rows   MH OR      reference set      per-child   non-vocal words
@@ -2110,8 +2112,9 @@ class JointModelDefinition:
     "neither" cell spans all unproduced items rather than understood-but-unproduced,
     which inflates its OR — on the same data uk_07 reads 13.90 within understood and
     40.72 over all 674 items. Magnitudes are therefore only comparable within a
-    reference set. The per-child sign and the share-also-spoken column need no
-    "neither" cell and are comparable throughout.
+    reference set. The direction of the odds ratio also needs the "neither"
+    cell and can change with the reference set. Only the share-also-spoken
+    column omits that cell; it describes overlap rather than an odds ratio.
 
     What survives every control is that es_01 sits at independence while the three
     sign sources are positive: by age band it runs 0.30-1.12 against 4.4-41.6 for
@@ -2763,7 +2766,7 @@ _TD_WINDOW22_Q_KAPPA_RE = KappaAnchorPriorParams(
 # Section 19 left these on the legacy form because the frame failed its recovery
 # check. Section 22 re-runs that check properly and reaches a different verdict.
 # The failure was not scatter: the estimator is biased *downward* by a measured,
-# monotone amount, so its estimates are usable as lower bounds. Correcting each
+# mean amount in those simulations. This does not make estimates lower bounds. Correcting each
 # by the bias measured at it -- kappa(24) 81.6 / 0.74 = 110 and kappa(48)
 # 20.3 / 0.62 = 33 for understood, 13.8 / 0.83 = 17 and 7.6 / 0.70 = 11 for the
 # ratio -- gives the medians below.
@@ -2820,7 +2823,7 @@ _DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
     # NOTE: these are the *uncorrected* calibration. The values they replace
     # were each estimate divided by the recovery bias measured at its level
     # (81.6/0.74 = 110 at 24 months, 20.3/0.62 = 33 at 48), because recovered
-    # `kappa` on this frame is one-directionally low -- -2% at a truth of 12
+    # mean recovered `kappa` was low in those simulations -- -2% at a truth of 12
     # rising to -67% at 100. Dropping that a priori correction was noticed only
     # after the promotion. §22 reports it "was not needed" on understood and
     # under-corrected the ratio, and the measured consequence here is under 1%
@@ -3492,14 +3495,15 @@ VG12 = UnivariateREModelDefinition(
     p_slope_hi_beta=1.3,
     # REVERTED to 0.5 on 2026-08-05, having been widened to 1.0 earlier the same
     # day. The widening was a calibration fix: at 0.5 the fitted amplitude sat at
-    # prior CDF 0.913 with contraction 0.106, i.e. the model reporting its prior
-    # back, the same signature that justified the 2026-08-04 DS widening.
+    # prior CDF 0.913 with contraction 0.106. This records location and
+    # spread changes; it does not establish that the posterior restates the prior.
     #
     # It was withdrawn because it cost convergence. Three rep fits isolate it:
     #     original (eta 0.5, no geometry changes)      2 divergences, BFMI 0.202
     #     centring + partition + eta 1.0              29 divergences, BFMI 0.208
     #     centring + partition + eta 0.5               2 divergences, BFMI 0.201
-    # Centring and the partition cost nothing; the widening alone caused all 27.
+    # The wider-prior arm had 27 more divergences in these runs. This is
+    # a sampling comparison, not a proof of a unique geometric cause.
     # It was already the only arm to raise divergences in the test-config trial
     # (76 against 59). Widening a weakly identified parameter gave it room to
     # wander: even at 1.0 it only reached prior CDF 0.810 with contraction 0.166,
@@ -3597,15 +3601,16 @@ VG13 = BivariateModelDefinition(
     p_slope_low_u_beta=15.0,
     p_slope_hi_u_alpha=2.0,
     p_slope_hi_u_beta=6.0,
-    # Production ratio q = P(speak | understood). Independent norm-derived TD q(a)
-    # (ratio of Wordbank median production to median comprehension): ~0.12 at
+    # Production ratio q = P(speak | understood). A calibration proxy uses
+    # the ratio of Wordbank median production to median comprehension: ~0.12 at
     # 10 mo rising to ~0.19 at 16 mo (PRIORS.md, "Production ratio q(a) from
     # norms"). The shared bivariate defaults (lo Beta(1,1.5)~0.4, hi Beta(2,1.2)
     # ~0.62) are tuned for the DS 24/84 mo window and sit ~3x above this young-TD
     # curve, compounding with U to overshoot spoken ~5x. Set window-appropriate
     # anchors at/just below the norm floor: lo Beta(1,10) (median ~0.067), hi
     # Beta(2,7) (median ~0.201). The in-sample q (~0.09 at 10 mo, ~0.23 at 16 mo)
-    # corroborates.
+    # is similar. A ratio of marginal medians is not a median child ratio,
+    # and data overlap means this is not independent validation.
     p_slope_low_q_alpha=1.0,
     p_slope_low_q_beta=10.0,
     p_slope_hi_q_alpha=2.0,
@@ -4177,9 +4182,9 @@ VG25 = _as_definition_subclass(
         " - Down syndrome"
     ),
     use_sign_cross_lag=True,
-    # Within-child, not VG16's population-relative: `rho_sign_q` is in the model,
-    # so the population baseline has the persistent association already accounted
-    # for and nothing left of its own to measure. Registered sensitivity:
+    # The within-child baseline defines the intended conditional association.
+    # `rho_sign_q` models persistent association but does not prove that all
+    # persistent confounding has been removed. Registered sensitivity:
     # `sign-lag-population`.
     sign_lag_baseline="within",
     # The lag enters the spoken marginal only (2026-09-15). In the cross-tab

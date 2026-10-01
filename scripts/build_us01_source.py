@@ -251,8 +251,7 @@ def verify(records: list[dict], export_path: str) -> bool:
     try:
         import duckdb
     except ImportError:
-        print("duckdb unavailable; skipping verification", file=sys.stderr)
-        return True
+        raise RuntimeError("duckdb is required to verify the source reconstruction") from None
 
     ok = True
     for form in ("WG", "WS"):
@@ -279,7 +278,11 @@ def verify(records: list[dict], export_path: str) -> bool:
         # as fabricated zeros, so the derived multiset is the export minus those.
         residual = expected - derived
         surplus = derived - expected
-        empty_zeros = all(count == 0 for _, _, count in residual)
+        # These are the two item-level empty DS forms recorded in the source
+        # manifest. Match comprehension, production and multiplicity, not merely
+        # a zero production count. Other missing administrations are failures.
+        known_empty = collections.Counter([(12, 0, 0), (17, 0, 0)]) if form == "WG" else collections.Counter()
+        empty_zeros = residual == known_empty
         status = "OK" if not surplus and empty_zeros else "MISMATCH"
         if surplus or not empty_zeros:
             ok = False

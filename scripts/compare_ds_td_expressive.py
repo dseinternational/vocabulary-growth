@@ -425,26 +425,33 @@ def run_below_percentile() -> None:
         if n != n_td:
             raise ValueError(f"n_trials mismatch {outcome}: {n} vs {n_td}")
         ia, ib = C.align_draws(p_ds.shape[0], p_td.shape[0], seed=SEED)
+        # A fixed random subset limits the nested simulation cost. Record both
+        # simulation sizes so a precision check can increase them explicitly.
+        ia, ib = ia[:2000], ib[:2000]
         lo, hi = max(a_ds.min(), a_td.min()), min(a_ds.max(), a_td.max())
         grid = np.arange(np.ceil(lo), hi + 1e-9, 1.0)
-        Pds, Kds = C.interp_draws(a_ds, p_ds[ia], grid), C.interp_draws(a_ds, k_ds[ia], grid)
-        Ptd, Ktd = C.interp_draws(a_td, p_td[ib], grid), C.interp_draws(a_td, k_td[ib], grid)
-        frac = C.fraction_below_reference_percentile(Pds, Kds, Ptd, Ktd, n, pct=PCT)
+        frac = C.new_child_percentile_fraction(
+            C.predictive_count_inputs(DS_DISP_KEY, outcome, grid, ia),
+            C.predictive_count_inputs(td_key, outcome, grid, ib),
+            grid, n, pct=PCT, children=4096, seed=SEED,
+        )
         fr = C.summarise_draws(frac, grid)
+        fr["simulation_children_per_draw"] = 4096
+        fr["posterior_draws_used"] = len(ia)
+        fr["prediction_target"] = "new child; reference sex; zero study effect"
         rows[outcome] = fr
 
         def panel(ax, fr=fr, outcome=outcome):
-            _band(ax, fr, "age_months", f"DS below TD p{PCT:.0f}", COL_DS)
+            _band(ax, fr, "age_months", f"DS at or below TD p{PCT:.0f}", COL_DS)
             ax.axhline(PCT / 100.0, color=COL_TD, lw=1.0, ls="--",
-                       label=f"TD baseline ({PCT:.0f}%)")
+                       label=f"Nominal TD percentile ({PCT:.0f}%; discrete ties can exceed it)")
         C.save_panel(OUT_DIR, f"ds_td_below_td_p10_{outcome}",
                      dict(ylim=(0, 1.02), xlabel="Age (months)",
-                          ylabel=f"Fraction of DS children below TD p{PCT:.0f}",
+                          ylabel=f"Fraction of DS children at or below TD p{PCT:.0f}",
                           title=f"Distributional shortfall — words {outcome}"), panel)
 
-    merged = rows["spoken"].add_prefix("spoken_").join(
-        rows["understood"].add_prefix("understood_"))
-    merged.insert(0, "age_months", rows["spoken"]["age_months"].to_numpy())
+    grid = np.union1d(rows["spoken"]["age_months"], rows["understood"]["age_months"])
+    merged = _merge_named(grid, **rows)
     merged.to_csv(os.path.join(OUT_DIR, "ds_td_below_td_p10.csv"), index=False)
 
 
@@ -512,15 +519,23 @@ def _verify() -> None:
     # DS_U=10(a-10); TD_U=20(a-2). Solve 20(t-2)=10(a-10) -> t = a/2 + ... check delay sign
     # Just assert delays are finite & expressive >= receptive monotonicity holds.
     assert np.isfinite(cea["delay_U"]).any()
-    # Below-percentile: DS == TD -> fraction ≈ pct/100.
-    p = np.full((nd, 5), 0.3)
-    k = np.full((nd, 5), 15.0)
-    frac = C.fraction_below_reference_percentile(p, k, p, k, 810, pct=10.0)
-    assert abs(float(np.mean(frac)) - 0.10) < 0.05, float(np.mean(frac))
+    # Exercise the nested-count path used by the report. These diffuse counts
+    # have small discrete jumps near their tenth percentile.
+    plan = C.TotalSpreadPlan("spoken", "plot", True, "p", "ku", None, "q", "ks")
+    values = {name: np.full((nd, 1), value)
+              for name, value in {"p": .3, "ku": 15., "q": .6, "ks": 20.}.items()}
+    frac = C.new_child_percentile_fraction((plan, values), (plan, values), [24.], 810,
+                                          children=32768, seed=47)
+    assert abs(float(np.mean(frac)) - 0.10) < 0.02, float(np.mean(frac))
+    # A floor mass can put nearly everyone at or below that discrete percentile.
+    values["p"][:] = 1e-12
+    tied = C.new_child_percentile_fraction((plan, values), (plan, values), [24.], 810,
+                                          children=4096, seed=47)
+    assert np.min(tied) > .99
     # Peak growth age: logistic inflection at 30.
     W = np.stack([1000 / (1 + np.exp(-(ages - 30) / 5))] * nd)
     assert abs(float(np.median(C.peak_growth_age(ages, W))) - 30) <= 1.0
-    print("self-check OK: Δ_exp recovers a known DiD; below-pct≈10% when DS==TD; "
+    print("self-check OK: Δ_exp recovers a known DiD; nested percentile comparison and discrete ties checked; "
           "peak age recovers a logistic inflection.\n")
 
 
@@ -529,6 +544,8 @@ def main() -> None:
     argv = sys.argv[1:]
     if "--verify" in argv:
         _verify()
+        if argv == ["--verify"]:
+            return
     allow_stale = "--allow-stale-fit" in argv
     os.makedirs(OUT_DIR, exist_ok=True)
     # Every fit this comparison reads is checked against the registered

@@ -31,10 +31,25 @@ format:
     colorlinks: true
     link-citations: true
     fontsize: 11pt
-    mainfont: "Source Sans 3"
-    sansfont: "Source Sans 3"
-    monofont: "Monaspace Neon"
-    monofontoptions: "Scale=0.8125"
+    # The faces are named because, with the whole Noto Sans family installed,
+    # fontspec otherwise takes ExtraBold for bold. Noto Sans Mono has no italic,
+    # so AutoFakeSlant slants the upright; the scale keeps code lines narrow.
+    mainfont: "Noto Sans"
+    mainfontoptions:
+      - BoldFont=Noto Sans Bold
+      - ItalicFont=Noto Sans Italic
+      - BoldItalicFont=Noto Sans Bold Italic
+    sansfont: "Noto Sans"
+    sansfontoptions:
+      - BoldFont=Noto Sans Bold
+      - ItalicFont=Noto Sans Italic
+      - BoldItalicFont=Noto Sans Bold Italic
+    mathfont: "Noto Sans Math"
+    monofont: "Noto Sans Mono"
+    monofontoptions:
+      - Scale=0.8125
+      - BoldFont=Noto Sans Mono Bold
+      - AutoFakeSlant
     linestretch: 1.25
     geometry:
       - top=25mm

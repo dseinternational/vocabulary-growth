@@ -1,5 +1,8 @@
 # VG15's four-group `psi` hierarchy: the prior is not the cause
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. The oracle calculation applied shrinkage twice and the produced-only source supplied the wrong margins for the reduced information calculation. The revised experiment uses the zero-sum covariance once and excludes that source. Its earlier recovery slopes and numerical bias claims are withdrawn pending a rerun. This Gaussian approximation neither reproduces full VG15 nor provides a bound on its bias. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original text below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

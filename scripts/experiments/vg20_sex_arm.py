@@ -518,12 +518,13 @@ def marginal_ppc_by_sex_table(arms: dict[str, Arm], n_draws: int = 400, seed: in
     (interpolated from the stored plot grid), its study's effect, and a **fresh**
     child effect pair drawn from the fitted between-child distribution -- one
     pair per child, so repeated administrations share it -- with the sex shift
-    applied in the sex arm. Spoken counts keep the model's paired structure:
-    conditional on the observed understood count where the likelihood was, on
-    the 810-item inventory with mean ``p_u * q`` otherwise. Because the child
-    effects are not fitted to the rows being predicted, a sex difference the
-    model lacks shows up here as girls above and boys below the predictive,
-    which is the check the note asked for.
+    applied in the sex arm. For paired rows, simulate comprehension first and
+    speech conditional on that simulated count. Missing-comprehension rows keep
+    the model's reference-inventory fallback. This joint replication preserves
+    each draw's population parameters and each child's shared effects when
+    computing group means. It is a descriptive training-data check, not a
+    prediction conditional on the observed comprehension counts or a guarantee
+    of nominal coverage.
     """
     rows = []
     for name in ("control", "sex"):
@@ -574,16 +575,17 @@ def marginal_ppc_by_sex_table(arms: dict[str, Arm], n_draws: int = 400, seed: in
             eta_q = eta_q + take("beta_sex_q")[:, None] * x_sex
         p_u, q = expit(eta_u), expit(eta_q)
 
-        trials_s = np.asarray(cd["s_likelihood_n"].values).astype(int)
         is_cond = np.asarray(cd["s_is_conditional"].values).astype(bool)
+        rep_u = pns._betabinom_draw(rng, N_TRIALS, p_u, kappa_u)
         for outcome, _var, idx, rows_df, y in _outcome_rows(arm):
             if outcome == "understood":
-                rep = pns._betabinom_draw(rng, N_TRIALS, p_u[:, idx], kappa_u[:, idx])
+                rep = rep_u[:, idx]
             else:
                 mean = np.where(is_cond, q[:, idx], (p_u * q)[:, idx])
+                trials_s = np.where(is_cond, rep_u[:, idx], N_TRIALS)
                 rep = pns._betabinom_draw(rng, trials_s, mean, kappa_s[:, idx])
             rows.extend(_cell_rows(name, outcome, rows_df, y, rep.astype(float)))
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows).assign(prediction_target="new-child joint counts; fitted study effects")
 
 
 def loo_table(arms: dict[str, Arm]) -> pd.DataFrame:

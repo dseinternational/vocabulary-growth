@@ -11,23 +11,14 @@ systematically pulling away from, or toward, the population curve as they grow.
 VG19 separates the third by giving each child a rate as well as an offset. The
 model of record is nested exactly at ``tau1 = 0``.
 
-The structure was chosen before any of it was written. Gate 1 fitted three
-candidates to the fitted residuals by maximum likelihood, against a known
-per-observation binomial sampling variance, and a random slope beat a constant
-intercept by ``2 x delta logL = 36.05`` on spoken — surviving restriction to the
-334 children with repeated spoken measures at 20.81, so it is genuine
-within-child drift rather than cross-sectional widening. An AR(1) transient
-collapsed to zero persistence on both outcomes, so the missing structure is drift
-and not an autocorrelated child process. Proposal A1 is the same model with
-``rho01`` pinned to 1 — one deviate scaled by an age function is a rank-one
-covariance — and freeing it costs 6.28 on 1 df on the repeats-only production
-fit, so it is free here.
-
-Comprehension is expected to behave differently from production, and the model
-is built to let it: the slope is worth 27.09 across all 610 children but 0.82
-across the 253 with repeats, so that widening is cross-sectional. ``tau1_u``'s
-posterior interval is the answer to "does comprehension drift within a child?"
-rather than something the specification decides in advance.
+Historical fits to adjusted residuals motivated a child slope. Their numerical
+contrasts depend on the observation-error benchmark and residual adjustment.
+They do not establish a unique mechanism for changing child ranks. Correlation
+one gives an affine scale in age, whereas A1 uses an exponential scale and a
+different dispersion restriction. A1 is therefore not this model's rank-one
+special case. Posterior rate scales, predictive checks and sensitivity are
+needed to assess the registered model; a positive-scale equal-tailed interval
+above zero is not itself evidence against zero variation.
 
 **Gated against VG10, not VG20**, on the study owner's decision of 2026-08-21.
 VG19 and VG20 are parallel refinements of the same parent and are not composable

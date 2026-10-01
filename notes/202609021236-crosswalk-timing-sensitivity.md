@@ -1,5 +1,8 @@
 # The DSE/Oxford crosswalk and the timing of the two forms
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A simulated fraction of 1.00 is not proof of probability one. Timing sensitivity does not verify nested item content across forms and languages. Apparent reversals can reflect content and sample differences as well as administration noise. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 

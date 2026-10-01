@@ -249,11 +249,12 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # n_trials = 810, so counts from the 416-item Oxford CDI, the 396/680-item
     # MB-CDI forms, the 651-item CDI-Down, the 674-item Reading CDI and the
     # 675-item NZCDI all enter on a denominator their form did not use. That is
-    # sound only if the shorter forms hold the easier items, and the sufficiency
-    # result (notes/202607261540) proves no aggregate analysis of these data can
-    # test it — a statistic sufficient for ability carries no information about
-    # item composition. The assumption is therefore probed by deleting the rows
-    # that need it, not by re-running the model differently.
+    # a measurement assumption about how the forms sample vocabulary. Rasch
+    # sufficiency for ability holds conditional on item difficulties; it does
+    # not make total-score distributions independent of those difficulties.
+    # These pooled totals cannot identify individual items or their ordering.
+    # Restricting the fit to the native form probes dependence on the assumption,
+    # but does not validate equivalence of the shorter forms.
     #
     # This is the widest-scoped variant registered. Two figures, at two stages,
     # because they differ and both get quoted: on 2026-09-15 the loader keeps
@@ -293,8 +294,8 @@ VARIANTS: dict[tuple[str, str], dict] = {
     ("vg15", "tau-psi-wide"): {"suffix": "tau-psi-wide", "scalar": {"tau_psi_sigma": 2.0}},
 
     # Source composition of psi. Each flag drops one source's cross-tab while
-    # keeping its marginals, so U, q and r are unchanged and only the association
-    # loses evidence. es_01 is the one that matters most: it is 185 of the 434
+    # keeping its marginal counts. The joint refit can still change U, q and r
+    # through shared parameters. es_01 supplies 185 of the 434 historical
     # psi-informing rows and the only source at independence, so "what is the
     # headline without Spain" is the first question the heterogeneity table
     # invites. uk_07 is registered alongside it because it is an intervention
@@ -351,10 +352,9 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # without asserting it. The young anchor keeps HalfNormal(1.5) exactly, so
     # this is one factor: the constant scale becoming a slope.
     #
-    # NOT a candidate model of record, and the reason is measured rather than
-    # stylistic: scaling one per-child deviate by tau(age) imposes perfect rank
-    # correlation across age, and the observed disattenuated correlation is 0.28
-    # beyond two years. See notes/202607261540 §9 and notes/202608141600 §8.
+    # This is not a candidate model of record. Scaling one child deviate by
+    # tau(age) fixes latent rank across age. The historical tracking analysis
+    # does not establish a corrected correlation; see its September notice.
     ("vg10", "a1-tau-age-varying"): {"suffix": "a1-tau-age-varying", "scalar": {
         "tau_subj_u_sigma": AgeVaryingSubjectScale(
             anchor_ages=_VG10_KAPPA_U_ANCHORS,
@@ -406,8 +406,8 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # excess. This is a graph change, so it needs its own fit; expect the
     # sampling pathology the partition was introduced to fix to come back --
     # 59 divergences against 14, and `corr(tau_subject, kappa_young) = +0.755`.
-    # A variant that samples badly still answers the recovery question, which is
-    # about the estimator rather than about publishable geometry.
+    # A poorly explored posterior cannot distinguish estimator bias from
+    # sampling error. Score recovery only after its convergence requirements pass.
     ("vg12", "free-scales"): {"suffix": "free-scales", "scalar": {
         "subject_variance_partition": None}},
 

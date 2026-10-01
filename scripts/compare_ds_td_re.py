@@ -801,11 +801,13 @@ def _verified_frame_for(key: str):
     return frame, None
 
 
-def _weighted_trajectory(key: str, trace_path: str, n: int):
+def _weighted_trajectory(key: str, trace_path: str, n: int, *, outcome=None):
     """The administration-weighted child for joint model ``key``, or ``None`` with a reason."""
     frame, reason = _verified_frame_for(key)
     if frame is None:
         return None, reason
+    if outcome is not None:
+        return C.load_weighted_outcome_trajectory(trace_path, n, frame, outcome), None
     return C.load_population_trajectory_weighted(trace_path, n, frame), None
 
 
@@ -868,12 +870,11 @@ def _write_weighted_attainment(outcome: str, td_key: str) -> None:
     columns of the book's milestone table therefore compared different models
     as well as different children.
     """
-    ds, why = _weighted_trajectory(DS_KEY, C.trace_path(DS_KEY), C.n_trials(DS_KEY))
+    ds, why = _weighted_trajectory(DS_KEY, C.trace_path(DS_KEY), C.n_trials(DS_KEY), outcome=outcome)
     if ds is None:
         print(f"  weighted attainment ({outcome}) not written: DS {why}", flush=True)
         return
-    a_ds, U_ds, S_ds = ds
-    w_ds = U_ds if outcome == "understood" else S_ds
+    a_ds, w_ds = ds
     td, why = _weighted_univariate_trajectory(td_key, C.trace_path(td_key), C.n_trials(td_key))
     if td is None:
         print(f"  weighted attainment ({outcome}) not written: TD {why}", flush=True)

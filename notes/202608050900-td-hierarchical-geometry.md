@@ -1,5 +1,8 @@
 # What makes the TD hierarchical models sample badly
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Energy correlations suggest features to investigate but do not uniquely identify the cause of poor sampling. Low BFMI can affect estimated locations as well as interval widths. Selected stable summaries do not waive the full convergence checks. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

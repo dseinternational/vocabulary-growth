@@ -17,8 +17,8 @@ the non-signer group is by construction the ``signed == 0`` group whose ``produc
 equals ``spoken``. Part of any positive signer-vs-non-signer estimate here is that
 identity, not an effect of signing. VG18 is DESCRIPTIVE: read it as "how much larger
 is total expressive production in the signing group", never as "how much does signing
-increase vocabulary". For the causally interpretable comparison use VG17, whose
-``spoken`` outcome does not contain ``signed``; for the modelled sign/speech overlap
+increase vocabulary". VG17's spoken outcome does not contain signed words, but
+that observational comparison also does not identify a causal effect. For modelled sign/speech overlap
 use VG15's ``psi``.
 
 Identical structure to VG17 (trend + HSGP + study REs + child REs + a 3-level
@@ -67,7 +67,7 @@ CAUTION = (
     "signer-vs-non-signer estimate below is that identity, not an effect of signing. "
     "VG18 is DESCRIPTIVE - read it as 'how much larger is total expressive production in "
     "the signing group', NEVER as 'how much does signing increase vocabulary'. Use VG17 "
-    "(spoken outcome, does not contain `signed`) for the causally interpretable contrast, "
+    "(spoken outcome, does not contain `signed`) for a separate descriptive contrast, "
     "or VG15's modelled overlap `psi`."
 )
 

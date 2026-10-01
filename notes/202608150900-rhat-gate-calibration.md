@@ -1,5 +1,8 @@
 # Is the R-hat gate too stringent? Calibrating it against the family's own fits
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Selected diagnostic patterns and successful numerical checks do not prove that all sampling problems or basis-approximation errors are absent. Convergence and approximation checks answer separate questions and must support the particular reported quantity. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 

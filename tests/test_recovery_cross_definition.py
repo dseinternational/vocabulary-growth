@@ -164,8 +164,8 @@ def test_the_simulation_guard_still_checks_the_definition_that_made_the_frame(
     (tmp_path / SIMULATION_FILENAME).write_text(
         json.dumps(
             {
+                "model": {"definition": normalise_for_json(record)},
                 "simulation": {
-                    "definition": normalise_for_json(record),
                     "truth_source": "posterior",
                     "frame_file": SYNTHETIC_FRAME_FILENAME,
                 }

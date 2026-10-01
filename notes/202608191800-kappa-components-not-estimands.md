@@ -1,4 +1,7 @@
 > [!NOTE]
+
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Low sensitivity to one prior component does not measure the fraction of information supplied by data. Other prior components can dominate the total. The displayed span 0.014 is about 0.45 of 0.031, not one tenth. Failed convergence further limits interpretation of the comparison. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 # The Beta-Binomial dispersion's components are coordinates, not estimands

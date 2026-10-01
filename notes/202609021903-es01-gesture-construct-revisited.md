@@ -1,5 +1,8 @@
 # es_01 (Galeote): the gesture column revisited — same coding, no established construct difference, and an untested category artefact
 
+> [!IMPORTANT]
+> Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Removing the same categories from both populations can affect their contrast if their item distributions differ. Using the same instrument does not guarantee equal measurement bias. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 
