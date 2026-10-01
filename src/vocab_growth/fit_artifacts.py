@@ -1050,6 +1050,100 @@ def promote_staged_fit(staged_output_dir: str, canonical_output_dir: str) -> Non
             )
 
 
+#: Set to ``1`` to let a fit replace a registered model's fit of record that was
+#: made under another executable-code signature, or at a reporting tier the new
+#: fit does not reach. ``fit_model.py --replace-model-of-record`` and
+#: ``run_replication.ps1 -ReplaceModelOfRecord`` set it for a refit cycle.
+REPLACE_MODEL_OF_RECORD_ENV_VAR = "DSE_VOCAB_GROWTH_REPLACE_MODEL_OF_RECORD"
+
+
+def model_of_record_replacement_allowed() -> bool:
+    """Whether this process may replace a fit of record (issue #362, guard a)."""
+    value = os.environ.get(REPLACE_MODEL_OF_RECORD_ENV_VAR, "")
+    return value.strip().lower() in {"1", "true", "yes"}
+
+
+def model_of_record_replacement_refusal(
+    canonical_output_dir: str,
+    *,
+    sampling_config_name: str,
+    current_implementation: dict,
+) -> str | None:
+    """Why promoting into ``canonical_output_dir`` would replace a fit of record.
+
+    A model's output directory carries no sampling tier and no commit, so a fit
+    of a registered model replaces whatever is there. That was harmless while a
+    refit cycle froze the repository. Once a cycle runs from a pinned worktree
+    and development continues elsewhere (issue #362), a development fit that
+    shares the output root would silently replace the model of record.
+
+    The fit already there counts as a fit of record when it is complete, at a
+    reporting tier, from a clean checkout, and its recorded diagnostics pass the
+    hard tier or carry an accepted exception. Replacing it is refused when the
+    new fit is at a lower tier, or when the recorded executable-code signature
+    differs from ``current_implementation``. A fit under the same signature at a
+    reporting tier may replace it, as an escalation rung within a cycle does.
+
+    Only a registered model's canonical directory is protected. Sensitivity,
+    recovery, fold and experiment directories are each owned by the pipeline
+    that writes them. Returns ``None`` when the promotion may proceed, including
+    when :func:`model_of_record_replacement_allowed` says so.
+    """
+    from vocab_growth.fit_consumers import model_key_for_dir
+    from vocab_growth.models import implementation_identity
+
+    if model_of_record_replacement_allowed():
+        return None
+    if model_key_for_dir(canonical_output_dir) is None:
+        return None
+    try:
+        state = read_json(os.path.join(canonical_output_dir, FIT_STATE_FILENAME))
+        manifest = read_json(os.path.join(canonical_output_dir, FIT_MANIFEST_FILENAME))
+    except FitValidationError:
+        return None
+    if state.get("state") != "complete":
+        return None
+    recorded_tier = (manifest.get("sampling") or {}).get("configuration_name")
+    try:
+        if not isinstance(recorded_tier, str) or not is_reporting_quality_config(recorded_tier):
+            return None
+    except ValueError:
+        return None
+    if (manifest.get("code") or {}).get("dirty") is not False:
+        return None
+    if os.path.isfile(os.path.join(canonical_output_dir, CONVERGENCE_FAILURE_FILENAME)):
+        return None
+    try:
+        diagnostics = read_json(os.path.join(canonical_output_dir, DIAGNOSTICS_SUMMARY_FILENAME))
+    except FitValidationError:
+        return None
+    status = hard_tier_status(diagnostics if isinstance(diagnostics, dict) else None)
+    accepted = isinstance(diagnostics, dict) and bool(diagnostics.get(ACCEPTED_EXCEPTION_KEY))
+    if not (status is HardConvergenceStatus.PASSED or (status is HardConvergenceStatus.FAILED and accepted)):
+        return None
+
+    commit = (manifest.get("code") or {}).get("commit") or "an unrecorded commit"
+    existing = f"a complete {recorded_tier} fit of record from {str(commit)[:12]}"
+    if not is_reporting_quality_config(sampling_config_name):
+        reason = f"a {sampling_config_name} fit would replace {existing}"
+    else:
+        recorded = (manifest.get("model") or {}).get("implementation")
+        if implementation_identity.matches(recorded, current_implementation):
+            return None
+        reason = (
+            f"{existing} was made under a different executable-code signature ("
+            + implementation_identity.describe_difference(recorded, current_implementation)
+            + ")"
+        )
+    return (
+        f"Refusing to replace {canonical_output_dir}: {reason}. Fit into another "
+        "output root (--output-dir or DSE_VOCAB_GROWTH_OUTPUT_DIR), or, for a "
+        "deliberate refit cycle, pass --replace-model-of-record (fit_model.py), "
+        f"-ReplaceModelOfRecord (run_replication.ps1) or set "
+        f"{REPLACE_MODEL_OF_RECORD_ENV_VAR}=1."
+    )
+
+
 def retain_failed_fit(staged_output_dir: str, output_root: str) -> str | None:
     """Move failed staged output aside for diagnosis and return its new path."""
     if not os.path.isdir(staged_output_dir):

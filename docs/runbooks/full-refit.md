@@ -5,6 +5,8 @@
 
 Use `scripts/run_replication.ps1` for a resumable reporting run. Its default scope covers reporting models and unclassified candidates. Use `-Scope all` when the work requires every registered model.
 
+Run each cycle from a worktree pinned at the cycle's tag, so that development can continue in the main checkout while the fits run and for as long as the set may need republishing. See [section 5](#5-running-a-cycle-from-a-pinned-worktree).
+
 The fitting workstation uses native Windows, PowerShell 7, 32 cores and about 137 GB of RAM. Its output root is `D:\output\vocabulary-growth`, set through `DSE_VOCAB_GROWTH_OUTPUT_DIR`. Run archives use `F:\projects\vocabulary-growth\<commit>\output`. The driver also supports Linux and macOS.
 
 ## 0. Prerequisites
@@ -26,10 +28,10 @@ The `rep` configuration uses 6 chains, 6,000 tuning iterations, 6,000 retained d
 Run from the repository root in PowerShell:
 
 ```powershell
-./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -NoUpload
+./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -ReplaceModelOfRecord -NoUpload
 ```
 
-Remove `-NoUpload` only when the run includes publication. The driver prepares outputs, fits or resumes models, validates them, renders model reports, runs comparisons, syncs report figures and renders the books. Check its help for phase-selection flags.
+`-ReplaceModelOfRecord` passes `--replace-model-of-record` to each fit. Without it, a fit refuses at launch to replace a registered model's complete, clean reporting fit that was made under another executable-code signature, or at a reporting tier the new fit does not reach. That refusal keeps a development fit in a shared output root from overwriting the model of record. A refit cycle replaces the previous set deliberately, so it passes the switch. A fit under the same signature at a reporting tier, such as an escalation rung within the cycle, needs no switch. Remove `-NoUpload` only when the run includes publication. The driver prepares outputs, fits or resumes models, validates them, renders model reports, runs comparisons, syncs report figures and renders the books. Check its help for phase-selection flags.
 
 A model is skipped only when its lifecycle is complete and its definition, prepared data, sampling effort, implementation and source revision satisfy resume validation. A trace alone is insufficient. `cores` is ignored when comparing statistical effort; an adequately sampled high-tuning fit can satisfy a `rep` request.
 
@@ -67,13 +69,13 @@ On the workstation, run the smaller DS models in a pool and the TD pass separate
 - **DS models** (`vg01 vg02 vg05 vg07 vg08 vg09 vg10 vg14 vg15 vg16 vg19 vg20 vg22 vg24 vg25`): allow up to five concurrent fits on 32 cores.
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24,vg25
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -ReplaceModelOfRecord -MaxParallel 5 -NoCompare -NoRender -NoUpload -Models vg01,vg02,vg05,vg07,vg08,vg09,vg10,vg14,vg15,vg16,vg19,vg20,vg22,vg24,vg25
   ```
 
 - **TD models** (`vg03 vg04 vg11 vg12 vg13 vg21 vg23 vg26`): run one fit at a time, without another fitting batch on the machine.
 
   ```powershell
-  ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23,vg26
+  ./scripts/run_replication.ps1 -Config rep -OutputDir <output-root> -ReplaceModelOfRecord -MaxParallel 1 -NoCompare -NoRender -NoUpload -Models vg03,vg04,vg11,vg12,vg13,vg21,vg23,vg26
   ```
 
 The two lists must cover the registry without overlap. `tests/test_runbook_model_lists.py` checks them. These are fit-only passes; resume the required downstream phases after both complete.
@@ -232,7 +234,7 @@ Sensitivity, recovery and exploratory subdirectories need their own validation p
 
 **Do not upload traces to the public container.** Leave `--include-traces` off; traces contain observation-level data and identifiers. Use designated internal or local storage for trace archives.
 
-**Do not upload the technical report book.** The study owner's standing decision allows public model reports and the comparison book; the technical report is rendered for local review. A successful render does not prove that all findings are complete. Inspect placeholders and caveats before publication.
+**Do not upload the technical report book.** The study owner's standing decision allows public model reports and the comparison book. The technical report book is a validation step, not a publication: rendering it checks the synced figure cache and lets the report be reviewed locally, and it is not uploaded to any storage (decided 2026-10-01, #289 task 4.11). A successful render does not prove that all findings are complete. Inspect placeholders and caveats before publication.
 
 ### Rendering without an activated environment
 
@@ -264,3 +266,50 @@ The technical report uses `freeze: auto`. A chapter's cache may survive changes 
 - [ ] Model reports, report cache and comparison book are current; chapters, figures and links have been inspected.
 - [ ] Publication includes only authorised outputs and all referenced assets.
 - [ ] The whole output root is archived, and a dated run record gives the commit, configuration, incidents, caveats and archive location.
+
+## 5. Running a cycle from a pinned worktree
+
+Everything that ties a fit to a checkout is per working tree: the executable-code signature (from the tree the package is installed from), the recorded commit and dirty flag, the registered definitions, the raw-data fingerprint, the prepared-frame hash, `data/vocabulary.duckdb` and the report figure cache. Only the output root is shared between checkouts. So the cycle runs from its own worktree, and the main checkout stays free for development, pull requests and CI. This replaces the earlier rule that nothing could be merged from the first fit until the set was published ([#362](https://github.com/dseinternational/vocabulary-growth/issues/362)).
+
+### Tag and create the worktree
+
+Tag the commit the cycle launches from as `fits/YYYY-MM-DD`, using the launch date (study owner, 2026-10-01). The tag marks where the fits came from; it does not move when the worktree is later advanced. Then create a detached worktree at the tag and give it its own environment and data:
+
+```powershell
+git tag fits/2026-10-01 <commit>
+git push origin fits/2026-10-01
+git worktree add ..\vocabulary-growth-fits fits/2026-10-01
+cd ..\vocabulary-growth-fits
+uv sync --locked
+uv run python scripts/prepare_data.py
+npm ci
+```
+
+The worktree's own `.venv` holds an editable install of the pinned tree, so the signature the fits record, and the one later validation compares against, are the pinned tree's.
+
+### Run the whole cycle from the worktree
+
+Run the driver, the comparisons, the sync, the book render and every upload from the worktree, with `-ReplaceModelOfRecord` on the fitting passes. Never sync or publish the cycle's set from the main checkout: its code may have moved, and validation would refuse the fits.
+
+### Keep development fits out of the shared output root
+
+In the main checkout, set a different output root for any fit, for example `$env:DSE_VOCAB_GROWTH_OUTPUT_DIR = 'D:\output\vocabulary-growth-dev'` in that shell, or pass `--output-dir`. A model's output directory carries no tier and no commit, and even an unpromoted provisional fit of a registered model blocks the cycle's sync. Two guards back up the convention:
+
+- `fit_model.py` refuses at launch, and again at promotion, to replace a fit of record made under another signature or at a higher tier, unless `--replace-model-of-record` is given.
+- Each comparison-manifest entry records the generating checkout's commit and dirty flag beside its code signature. A strict sync and `publish_comparison.py` refuse an entry from a dirty checkout or under another signature, so a comparison regenerated from the development checkout cannot pass as part of the pinned set.
+
+### Advancing the worktree
+
+A commit that changes nothing hashed or validated can be brought into the worktree, and the set stays publishable. That covers notes, documentation, report prose and templates (`.qmd`), and tests. Bring it in with `git -C ..\vocabulary-growth-fits checkout <commit>`, then confirm from the worktree:
+
+```powershell
+uv run python scripts/check_fit.py vg11 vg12 vg15 vg20 vg21 vg23 vg24 vg25 vg26 --config rep --purpose publish
+```
+
+The only errors it may report are soft-tier caveats, which the `--allow-caveats` paths disclose. Re-render the affected reports with `--render-only` and republish them. A commit that changes a module under `src/vocab_growth/` (other than comments and docstrings; a string inside `raise` or `print` is hashed), a registered definition, a loader rule, the data or `uv.lock` needs a refit. So does a change to a comparison generator under `scripts/` or its local imports, for the comparisons it generates.
+
+### What the worktree does not separate
+
+The machine is shared. Fits in the worktree, slow tests and any local fits in the main checkout compete for the same cores, and they share the per-user PyTensor compile cache (`%LOCALAPPDATA%\PyTensor`), which has raced after a library upgrade before. The study owner's rule still applies: nothing else runs on the workstation during a refit. The worktree makes editing, review and merging possible during a cycle, not concurrent computation.
+
+When the set has been superseded, remove the worktree with `git worktree remove ..\vocabulary-growth-fits`. Keep the tag.

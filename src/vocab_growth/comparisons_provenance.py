@@ -33,6 +33,16 @@ A script that reads no fitted output -- ``compare_matched_designs.py`` reads
 one source CSV -- records its inputs as ``source_files`` instead (#289 task
 4.9), hashed the same way, so a comparison that outlives a change to its
 source is caught the way one that outlives a refit is.
+
+Each entry also records the checkout that generated it -- the Git commit and
+dirty flag, beside the code signature -- because a refit cycle no longer
+freezes the repository (issue #362). The cycle runs from a worktree pinned at
+its tag while development continues in another checkout, and both write into
+the one shared output root. A comparison regenerated from the development
+checkout, with an edited generator or uncommitted changes, would otherwise pass
+the sync as though it belonged to the pinned fits. Strict sync and publication
+therefore apply the rule the fits follow: a clean entry whose signature matches
+the validating checkout's.
 """
 
 from __future__ import annotations
@@ -47,6 +57,7 @@ from dse_research_utils.metadata.provenance import sha256_file
 
 from vocab_growth.fit_artifacts import (
     FIT_MANIFEST_FILENAME,
+    git_metadata,
     read_json,
     write_json_atomic,
 )
@@ -262,12 +273,15 @@ def write_comparison_manifest(
     if os.path.isfile(manifest_path):
         payload = read_json(manifest_path)
         payload.setdefault("scripts", {})
+    from vocab_growth import environment as env
+
     root = os.getcwd() if source_root is None else source_root
     entry: dict = {
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "outputs": sorted(outputs),
         "output_hashes": {name: _file_sha256(os.path.join(comparisons_dir, name)) for name in sorted(outputs)},
         "implementation": comparison_code_signature(script),
+        "code": git_metadata(env.ROOT_DIR),
         "contributing_fits": {
             label: fit_manifest_fingerprint(model_dir)
             for label, model_dir in sorted(contributing.items())
@@ -296,6 +310,7 @@ def validate_comparison_manifest(
     source_root: str | None = None,
     current_source_data_hash: str | None = None,
     require_publication: bool = False,
+    require_current_code: bool = False,
     publication_config: str = "rep",
     allow_caveats: bool = False,
 ) -> tuple[list[str], list[str]]:
@@ -310,6 +325,11 @@ def validate_comparison_manifest(
     recorded pool-wide ``source_data_hash`` that no longer matches
     ``current_source_data_hash`` (not checked when the caller passes none).
     Warnings: files in the comparisons directory that no manifest entry claims.
+
+    ``require_current_code`` (the strict sync) and ``require_publication`` both
+    require each entry to have been generated from a clean checkout under the
+    validating checkout's code signature. Publication additionally validates
+    every contributing fit and treats unclaimed files as errors.
     """
     errors: list[str] = []
     warnings: list[str] = []
@@ -345,7 +365,7 @@ def validate_comparison_manifest(
             errors.append(f"{script}: malformed input record.")
             continue
         claimed.update(outputs)
-        if require_publication:
+        if require_publication or require_current_code:
             try:
                 current_code = comparison_code_signature(script)
             except (ValueError, OSError, SyntaxError) as exc:
@@ -355,6 +375,13 @@ def validate_comparison_manifest(
                 value is None for value in current_code["script_sources"].values()
             ):
                 errors.append(f"{script}: comparison code is missing or changed; regenerate outputs.")
+            checkout = entry.get("code")
+            if not isinstance(checkout, dict) or checkout.get("dirty") is not False:
+                errors.append(
+                    f"{script}: generated from a checkout with uncommitted changes "
+                    "or unrecorded provenance; regenerate from a clean checkout."
+                )
+        if require_publication:
             if not any(entry.get(key) for key in ("contributing_fits", "source_files", "source_data_hash")):
                 errors.append(f"{script}: no contributing fit or data source is recorded.")
         for name in outputs:

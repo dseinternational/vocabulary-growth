@@ -365,10 +365,15 @@ def main() -> None:
             # rejected, but since 2026-09-07 every comparison writer records an
             # entry, so a warning here names a comparison that has not been
             # regenerated rather than a script that never recorded anything.
+            # A strict sync also requires each comparison to come from a clean
+            # checkout under this checkout's code, so one regenerated from a
+            # development checkout sharing the output root cannot pass as part
+            # of a pinned refit cycle (issue #362).
             comparison_errors, comparison_warnings = validate_comparison_manifest(
                 comparisons_dir,
                 models_dir,
                 current_source_data_hash=current_source_hash,
+                require_current_code=not args.allow_provisional,
             )
             for warning in comparison_warnings:
                 print(f"[warn] {warning}")
