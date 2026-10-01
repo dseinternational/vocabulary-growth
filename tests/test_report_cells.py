@@ -863,9 +863,10 @@ _UNRELIABLE_ROW = {
     ("model_id", "named"),
     [
         # The typically-developing references: PSIS-LOO unusable on 37% to 59%
-        # of rows, and no held-out check accepts them.
-        ("VG11", set()),
-        ("VG21", set()),
+        # of rows. `kfold_loso.py` has scored them since 2026-10-01, by child and
+        # by study (notes/202610011200-td-held-out-validation-harness.md).
+        ("VG11", {"scripts/kfold_loso.py"}),
+        ("VG21", {"scripts/kfold_loso.py"}),
         # A joint model with a per-child sign scale and no cross-lag.
         ("VG24", set()),
         ("VG20", {"scripts/kfold_loso.py"}),

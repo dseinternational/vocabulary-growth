@@ -380,6 +380,24 @@ def build_model_graph(
         partition_subject_rows(subject_codes) if marginalisation is not None else None
     )
 
+    # Held-out rows (K-fold cross-validation, #240): they stay in observation
+    # space, so `f_obs` and `kappa_obs` are still computed at their ages, but leave
+    # the likelihood, so a held-out child's effect is a draw from its prior. The
+    # bivariate engine has done this through `observation_arrays` since the LOSO
+    # script was written; `train_rows` is None on every ordinary fit, which keeps
+    # their graph unchanged.
+    train_rows = None
+    if "holdout" in analysis_df.columns:
+        holdout = analysis_df["holdout"].fillna(False).astype(bool).to_numpy()
+        if holdout.any():
+            if partition is not None:
+                raise ValueError(
+                    "A holdout column cannot be combined with singleton "
+                    "marginalisation: the marginalised rows are partitioned by the "
+                    "full frame's child counts."
+                )
+            train_rows = np.flatnonzero(~holdout)
+
     # Proposal A1 (#240 item 1): the child-effect scale varies log-linearly in age
     # between the dispersion block's anchors, with dispersion held flat in age, so
     # the age variation the constant loading routes into `kappa` is given to the
@@ -529,6 +547,8 @@ def build_model_graph(
             coords["repeat_subject_id"] = partition.repeat_labels
         else:
             coords["subject_id"] = np.arange(n_subjects)
+    if train_rows is not None:
+        coords["obs_train_id"] = train_rows
 
     with pm.Model(coords=coords) as model_pm:
         # ---- Data ----
@@ -746,14 +766,24 @@ def build_model_graph(
             alpha_obs = p_obs_clip * kappa_obs
             beta_obs = (1 - p_obs_clip) * kappa_obs
 
-            _ = pm.BetaBinomial(
-                "y_obs",
-                n=n_trials,
-                alpha=alpha_obs,
-                beta=beta_obs,
-                observed=y_obs,
-                dims=("obs_id",),
-            )
+            if train_rows is None:
+                _ = pm.BetaBinomial(
+                    "y_obs",
+                    n=n_trials,
+                    alpha=alpha_obs,
+                    beta=beta_obs,
+                    observed=y_obs,
+                    dims=("obs_id",),
+                )
+            else:
+                _ = pm.BetaBinomial(
+                    "y_obs",
+                    n=n_trials,
+                    alpha=alpha_obs[train_rows],
+                    beta=beta_obs[train_rows],
+                    observed=y_obs[train_rows],
+                    dims=("obs_train_id",),
+                )
         else:
             # One observed variable over every row either way: a repeat-measured
             # row keeps the identical conditional Beta-Binomial density, and a
