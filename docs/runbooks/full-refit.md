@@ -7,7 +7,7 @@ Use `scripts/run_replication.ps1` for a resumable reporting run. Its default sco
 
 Run each cycle from a worktree pinned at the cycle's tag, so that development can continue in the main checkout while the fits run and for as long as the set may need republishing. See [section 5](#5-running-a-cycle-from-a-pinned-worktree).
 
-The fitting workstation uses native Windows, PowerShell 7, 32 cores and about 137 GB of RAM. Its output root is `D:\output\vocabulary-growth`, set through `DSE_VOCAB_GROWTH_OUTPUT_DIR`. Run archives use `F:\projects\vocabulary-growth\<commit>\output`. The driver also supports Linux and macOS.
+Full refits are scheduled on a dedicated Linux VM (study owner, 2026-10-01): [`vm-refit.md`](vm-refit.md) covers provisioning and `scripts/vm/campaign.sh`, which runs the stages below, resuming after any interruption, from a clone pinned at the cycle's tag. The project workstation (native Windows, PowerShell 7, 32 cores, about 137 GB of RAM) stays free for development. Its working output root is `D:\output\vocabulary-growth`, set through `DSE_VOCAB_GROWTH_OUTPUT_DIR`, and run archives use `F:\projects\vocabulary-growth\<commit>\output`. The driver runs on Linux, macOS and Windows.
 
 ## 0. Prerequisites
 
@@ -310,6 +310,6 @@ The only errors it may report are soft-tier caveats, which the `--allow-caveats`
 
 ### What the worktree does not separate
 
-The machine is shared. Fits in the worktree, slow tests and any local fits in the main checkout compete for the same cores, and they share the per-user PyTensor compile cache (`%LOCALAPPDATA%\PyTensor`), which has raced after a library upgrade before. The study owner's rule still applies: nothing else runs on the workstation during a refit. The worktree makes editing, review and merging possible during a cycle, not concurrent computation.
+On a dedicated VM the clone at the tag is the pinned tree, and nothing below applies. When a cycle does run on the workstation, the machine is shared. Fits in the worktree, slow tests and any local fits in the main checkout compete for the same cores, and they share the per-user PyTensor compile cache (`%LOCALAPPDATA%\PyTensor`), which has raced after a library upgrade before. The study owner's rule still applies: nothing else runs on the workstation during a refit. The worktree makes editing, review and merging possible during a cycle, not concurrent computation.
 
 When the set has been superseded, remove the worktree with `git worktree remove ..\vocabulary-growth-fits`. Keep the tag.
