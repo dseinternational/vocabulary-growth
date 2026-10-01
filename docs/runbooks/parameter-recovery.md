@@ -35,7 +35,14 @@ uv run python scripts/fit_recovery.py headline --config test
 | `--variant NAME`           | Simulate and fit a registered sensitivity variant.                |
 | `--fit-variant NAME`       | Fit a different definition; `record` selects the model of record. |
 | `--set-truth NAME=VALUE`   | Set a free parameter in the truth draw; repeatable.               |
+| `--fresh`                  | Rerun selected simulation and fitting stages.                     |
 | `--output-dir PATH`        | Select the output root.                                           |
+
+By default, the command reuses a simulation only when its definition, prepared design, truth source, truth settings, seed, numerical environment and output hashes match its checkpoint. A posterior-derived truth also records its contributing fit manifest. It reuses a recovery fit only when the simulation, fitted definition, code, sampling effort, complete lifecycle, clean source and convergence evidence pass the existing validation checks. A changed or missing output triggers new work. Outputs made before checkpoints existed are rebuilt once.
+
+Use `--fresh` to rerun the selected stages. `--fresh --fit-only` retains the existing simulated data and reruns its fit. Recovery scoring still runs after reuse and includes only converged replicates in the pooled result. Run one process per simulation directory; these checkpoints do not coordinate concurrent writers.
+
+The free-space check runs before each required fit. Reused fits do not reserve space for another trace. A reporting fit requires at least 20 GiB free; other configurations require 2 GiB.
 
 Separate stages allow inspection and resumption:
 

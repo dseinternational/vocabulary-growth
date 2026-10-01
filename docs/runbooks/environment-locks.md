@@ -48,3 +48,9 @@ Bumping the shared library is a change of the `tag` in `[tool.uv.sources]` follo
 ## Relationship to fit manifests
 
 The lock reconstructs a known software environment prospectively. Every completed model fit also writes the versions it actually used into `fit_manifest.json`. The two records answer different questions: the lock says what a clean environment should contain, while the manifest says what a particular fit did contain. A reporting run should agree with both.
+
+## CI work selection and compilation reuse
+
+CI always runs lint, type and documentation checks. `scripts/ci_changes.py` compares parsed dependency files before skipping model tests and the smoke fit for Ruff, mypy or documentation-tool updates. It retains dependencies shared with the runtime or tests and treats unknown or unreadable changes as requiring the full checks. Changes to agent instructions and model documentation also run the full checks.
+
+The compiled-cache key records the locked environment apart from dependencies used exclusively by Ruff and mypy, the Python interpreter, runner image, compiler and compilation settings. A source digest lets subsequent runs save newly compiled functions. Restore prefixes include the complete environment digest, so a numerical-library change cannot restore an older environment's cache. The first run after changing this cache scheme starts cold.

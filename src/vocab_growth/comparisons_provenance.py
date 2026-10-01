@@ -83,6 +83,11 @@ MANIFEST_EXEMPT_SCRIPTS: dict[str, str] = {
         "is the consumer of this manifest rather than a producer -- it is the "
         "script that validates every entry before copying the outputs."
     ),
+    "resume_comparison.py": (
+        "runs an existing comparison writer and records a reuse checkpoint; "
+        "the child writer still records its contributing fits and outputs in "
+        "the comparison manifest. The wrapper produces no comparison of its own."
+    ),
 }
 
 

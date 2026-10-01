@@ -153,11 +153,12 @@ def test_a_model_of_records_directory_is_checked(tmp_path, monkeypatch):
 # --- The recorded exemptions --------------------------------------------------
 
 
-def test_both_exemptions_carry_a_reason():
+def test_each_recorded_exemption_carries_a_reason():
     """An exemption that is written down can be argued with; an absence cannot."""
     assert set(fit_consumers.EXEMPT_CONSUMERS) == {
         "fit_recovery.py",
         "compact_traces.py",
+        "resume_comparison.py",
     }
     for script, reason in fit_consumers.EXEMPT_CONSUMERS.items():
         assert len(reason) > 80, f"{script}'s exemption is asserted, not argued"

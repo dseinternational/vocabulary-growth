@@ -84,7 +84,7 @@ jobs:
       - name: Type check
         run: uv run --no-sync mypy
 
-  # Classifies the change so the heavy jobs can skip documentation-only work:
+  # Classifies documentation and verified lint/documentation-tool updates:
   # 8 of the 19 main commits before this job existed touched only notes, report
   # chapters or Markdown, and each paid the full test-and-fit pipeline for it
   # (notes/202608281312-ci-critical-path.md). Two carve-outs stay "code"
@@ -119,20 +119,10 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          changed=$(git diff --name-only "$base" HEAD)
-          printf 'Changed files:\n%s\n' "$changed"
-          code=false
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            case "$f" in
-              CLAUDE.md|AGENTS.md|.github/copilot-instructions.md) code=true ;;
-              docs/models/*) code=true ;;
-              notes/*|docs/*) ;;
-              *.md) ;;
-              *) code=true ;;
-            esac
-          done <<< "$changed"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
+          python3 scripts/ci_changes.py classify --base "$base" --github-output "$GITHUB_OUTPUT"
+
+      - name: Check change classification
+        run: python3 tests/test_ci_changes.py
 
   # The suite in two halves whose union is everything `-m "slow or not slow"`
   # selects. The split buys feedback latency: most failures surface from the
@@ -165,28 +155,20 @@ jobs:
       - name: Install the locked environment
         run: uv sync --locked
 
-      # PyTensor compiles the model graphs to C (and numba) on first use and
-      # keys the result by the generated code, so a cold compiledir means every
-      # graph in the job is compiled from scratch -- and compilation, not
-      # sampling, is what these jobs cost. Measured on this runner, same commit,
-      # `tests-slow`'s pytest step: **7 m 25 s on the cold run that populated the
-      # cache against 4 m 16 s on the next one**, restoring 24 MB. Two fifths of
-      # the job was work a previous run had already done.
-      #
-      # The key is deliberately strict and carries **no `restore-keys`**. A
-      # stale numba function cache is not hypothetical here: on 2026-09-10 a
-      # pytensor/numba bump left `CPUDispatcher` entries that produced a typing
-      # error surviving reruns until they were deleted by hand. `uv.lock` pins
-      # every package, so hashing it means any version move gives a new key and
-      # a cold, correct compiledir; a loose prefix key would restore exactly the
-      # cache that failure mode needs. The cost of the strictness is an
-      # occasional cold run after an unrelated dependency bump, which is the
-      # right way round.
+      # Restore only within an identical locked runtime, Python, runner image
+      # and compiler configuration. Lint-only dependencies do not change this
+      # environment. A source suffix lets later runs save newly compiled code;
+      # no restore prefix crosses the environment boundary.
+      - name: Fingerprint the compiled-cache environment
+        id: compiled-cache
+        run: uv run --no-sync python scripts/ci_changes.py cache-key --github-output "$GITHUB_OUTPUT"
+
       - name: Cache the PyTensor compiledir
         uses: actions/cache@v6.1.0
         with:
           path: ~/.pytensor
-          key: pytensor-fast-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.python-version', 'uv.lock') }}
+          key: pytensor-fast-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiled-cache.outputs.environment }}-${{ steps.compiled-cache.outputs.source }}
+          restore-keys: pytensor-fast-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiled-cache.outputs.environment }}-
 
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
@@ -211,13 +193,16 @@ jobs:
       - name: Install the locked environment
         run: uv sync --locked
 
-      # As in `tests-fast` above: a cold compiledir recompiles every graph, and
-      # the key hashes `uv.lock` so a version bump is cold rather than stale.
+      - name: Fingerprint the compiled-cache environment
+        id: compiled-cache
+        run: uv run --no-sync python scripts/ci_changes.py cache-key --github-output "$GITHUB_OUTPUT"
+
       - name: Cache the PyTensor compiledir
         uses: actions/cache@v6.1.0
         with:
           path: ~/.pytensor
-          key: pytensor-slow-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.python-version', 'uv.lock') }}
+          key: pytensor-slow-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiled-cache.outputs.environment }}-${{ steps.compiled-cache.outputs.source }}
+          restore-keys: pytensor-slow-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiled-cache.outputs.environment }}-
 
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py
@@ -255,13 +240,16 @@ jobs:
       - name: Install the locked environment
         run: uv sync --locked
 
-      # As in `tests-fast` above: a cold compiledir recompiles every graph, and
-      # the key hashes `uv.lock` so a version bump is cold rather than stale.
+      - name: Fingerprint the compiled-cache environment
+        id: compiled-cache
+        run: uv run --no-sync python scripts/ci_changes.py cache-key --github-output "$GITHUB_OUTPUT"
+
       - name: Cache the PyTensor compiledir
         uses: actions/cache@v6.1.0
         with:
           path: ~/.pytensor
-          key: pytensor-fit-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.python-version', 'uv.lock') }}
+          key: pytensor-fit-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiled-cache.outputs.environment }}-${{ steps.compiled-cache.outputs.source }}
+          restore-keys: pytensor-fit-${{ runner.os }}-${{ runner.arch }}-${{ steps.compiled-cache.outputs.environment }}-
 
       - name: Prepare data
         run: uv run --no-sync python scripts/prepare_data.py

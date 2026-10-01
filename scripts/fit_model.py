@@ -11,6 +11,7 @@ import sys
 import time
 from dataclasses import asdict
 from multiprocessing import freeze_support
+from pathlib import Path
 from types import SimpleNamespace
 
 import dse_research_utils.environment.setup as setup
@@ -63,7 +64,7 @@ def _fit_selected_models(selected, config: str):
     return contexts, timings, failures
 
 
-def _render_output(output_dir: str, model_id: str | None = None) -> None:
+def _render_output(output_dir: str, model_id: str | None = None, *, force: bool = False) -> None:
     """Render one already-promoted fit without changing its lifecycle state.
 
     The report template is refreshed from ``docs/models/<model>/index.qmd`` first.
@@ -82,6 +83,18 @@ def _render_output(output_dir: str, model_id: str | None = None) -> None:
     registered definition, so the refreshed template is being run against a fit it
     is compatible with.
     """
+    from vocab_growth.render_cache import (
+        RENDER_CHECKPOINT,
+        render_inputs,
+        render_outputs,
+    )
+    from vocab_growth.workflow_cache import checkpoint_matches, record_checkpoint
+
+    checkpoint = os.path.join(output_dir, RENDER_CHECKPOINT)
+    if not force and checkpoint_matches(checkpoint, render_inputs(output_dir, model_id)):
+        console.print(f"[dim]Reusing current rendered report: {output_dir}[/dim]")
+        return
+    Path(checkpoint).unlink(missing_ok=True)
     qmd_path = os.path.join(output_dir, "index.qmd")
     if model_id is not None:
         # The template and the shared includes it may transclude, staged together
@@ -99,9 +112,10 @@ def _render_output(output_dir: str, model_id: str | None = None) -> None:
     subprocess.run(["quarto", "render", qmd_path], check=True, env=render_env)
     if not os.path.isfile(os.path.join(output_dir, "index.html")):
         raise RuntimeError("Quarto render completed without producing index.html.")
+    record_checkpoint(checkpoint, render_inputs(output_dir, model_id), render_outputs(output_dir))
 
 
-def _render_contexts(contexts):
+def _render_contexts(contexts, *, force: bool = False):
     """Render all successful fits, collecting failures without stopping the batch."""
     timings: dict[str, float] = {}
     failures: dict[str, str] = {}
@@ -110,7 +124,8 @@ def _render_contexts(contexts):
         render_started = time.perf_counter()
         try:
             _render_output(
-                context.reporting.output_dir, context.reporting.model_name
+                context.reporting.output_dir, context.reporting.model_name,
+                **({"force": True} if force else {}),
             )
         except Exception as exc:
             failures[name] = f"{type(exc).__name__}: {exc}"
@@ -206,6 +221,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Render an existing compatible fit without sampling again.",
     )
+    parser.add_argument("--force-render", action="store_true", help="Render even when a checked current report exists.")
     parser.add_argument(
         "--upload",
         action="store_true",
@@ -356,7 +372,7 @@ if __name__ == "__main__":
 
     render_timings: dict[str, float] = {}
     if args.render or args.render_only:
-        render_timings, render_failures = _render_contexts(contexts)
+        render_timings, render_failures = _render_contexts(contexts, force=args.force_render)
         failures.update(render_failures)
 
     publication_plan = []

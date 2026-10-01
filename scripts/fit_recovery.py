@@ -32,6 +32,7 @@ and never touch a model of record.
 """
 
 import argparse
+import json
 import os
 import sys
 import time
@@ -41,14 +42,13 @@ import dse_research_utils.environment.setup as setup
 import pandas as pd
 
 from vocab_growth import environment as env
-from vocab_growth.models.common import is_reporting_quality_config
 from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.recovery.compare import compare_replicate, pooled_row, sampling_tier
-from vocab_growth.recovery.refit import fit_recovery_replicate, recovery_fit_dir
+from vocab_growth.recovery.refit import recovery_fit_dir
+from vocab_growth.recovery.resume import run_recovery_stages
 from vocab_growth.recovery.simulate import (
     available_replicates,
     load_simulation,
-    simulate_replicate,
     simulation_dir,
     truth_source_tag,
 )
@@ -172,6 +172,11 @@ def _score(
             )
             continue
         _frame, truth, record = load_simulation(sim_dir, expected_definition=definition)
+        with open(os.path.join(fit_dir, "recovery_source.json"), encoding="utf-8") as handle:
+            fitted_source = json.load(handle)
+        if fitted_source.get("simulation") != record["simulation"] or fitted_source.get("source_model") != record["model"]:
+            truth.close()
+            raise ValueError(f"r{replicate:02d}: the fit does not match the current simulation; rerun its fit before scoring.")
         table, aggregates, summary = compare_replicate(
             truth,
             trace_path,
@@ -312,6 +317,7 @@ if __name__ == "__main__":
     parser.add_argument("--simulate-only", action="store_true", help="Simulate and stop.")
     parser.add_argument("--fit-only", action="store_true", help="Refit existing simulated data.")
     parser.add_argument("--compare-only", action="store_true", help="Score existing recovery fits.")
+    parser.add_argument("--fresh", action="store_true", help="Rerun selected simulation and fit stages instead of reusing checked outputs.")
     parser.add_argument(
         "--output-dir",
         type=str,
@@ -428,14 +434,6 @@ if __name__ == "__main__":
         ],
     )
 
-    if do_fit:
-        heavy = is_reporting_quality_config(args.config)
-        env.preflight_disk(
-            (20.0 if heavy else 2.0) * len(models) * len(replicates),
-            env.output_root(),
-            label=f"{len(models) * len(replicates)} recovery fit(s) [{args.config}]",
-        )
-
     run_started = time.perf_counter()
     timings: dict[str, float] = {}
     failures: dict[str, str] = {}
@@ -446,26 +444,15 @@ if __name__ == "__main__":
             label = f"{model_label} r{replicate:02d}"
             started = time.perf_counter()
             try:
-                if do_simulate:
-                    simulate_replicate(
-                        model_key,
-                        args.config,
-                        replicate=replicate,
-                        truth_source=args.truth,
-                        truth_overrides=truth_overrides,
-                        n_prior_draws=args.n_prior_draws,
-                        random_seed=args.random_seed,
-                        definition=definition,
-                    )
-                if do_fit:
-                    fit_recovery_replicate(
-                        model_key,
-                        args.config,
-                        replicate=replicate,
-                        definition=definition,
-                        fit_definition=fit_definition,
-                        truth_overrides=truth_overrides,
-                    )
+                reused = run_recovery_stages(
+                    model_key, args.config, replicate=replicate,
+                    definition=definition, fit_definition=fit_definition,
+                    truth_source=args.truth, truth_overrides=truth_overrides,
+                    n_prior_draws=args.n_prior_draws, random_seed=args.random_seed,
+                    do_simulate=do_simulate, do_fit=do_fit, fresh=args.fresh,
+                )
+                if reused:
+                    console.print(f"[dim]{label}: reusing {', '.join(reused)}[/dim]")
             except Exception as exc:  # one replicate must not sink the run
                 failures[label] = f"{type(exc).__name__}: {exc}"
                 console.print(f"[bold red]{label} failed:[/bold red] {exc}")
