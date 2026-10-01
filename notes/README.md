@@ -173,4 +173,5 @@ The September documentation review removed the May meeting summary, August proje
 | [202609271730](202609271730-research-utils-016-upgrade.md)                       | Research utils 016 upgrade                                   | Implementation record; see successor notice |
 | [202609281111](202609281111-research-utils-0161-upgrade.md)                      | Research utils 0.16.1 upgrade                                | Implementation record                       |
 | [202610011200](202610011200-gompertz-mean-harness.md)                            | Gompertz mean-function harness (#330)                        | Implementation record; result pending       |
+| [202610011300](202610011300-td-held-out-validation-harness.md)                   | TD held-out validation harness                               | Implementation record                       |
 | [202610011500](202610011500-repeated-child-calibration.md)                       | Repeated-child calibration                                   | Dated analysis                              |

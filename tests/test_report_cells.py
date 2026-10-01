@@ -864,7 +864,7 @@ _UNRELIABLE_ROW = {
     [
         # The typically-developing references: PSIS-LOO unusable on 37% to 59%
         # of rows. `kfold_loso.py` has scored them since 2026-10-01, by child and
-        # by study (notes/202610011200-td-held-out-validation-harness.md).
+        # by study (notes/202610011300-td-held-out-validation-harness.md).
         ("VG11", {"scripts/kfold_loso.py"}),
         ("VG21", {"scripts/kfold_loso.py"}),
         # A joint model with a per-child sign scale and no cross-lag.
