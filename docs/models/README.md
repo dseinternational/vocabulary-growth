@@ -1,7 +1,7 @@
 # Model inventory
 
 > [!NOTE]
-> Drafted with assistance from Claude Code and OpenAI Codex. Revised by OpenAI Codex/GPT-6.
+> Drafted with assistance from Claude Code and OpenAI Codex. Revised by OpenAI Codex/GPT-6 and Claude Code/Opus 5.5.
 
 > [!WARNING]
 > This study is in progress. A model's reporting role does not certify an existing fit. Validate its definition, data, convergence and provenance before using its output.
@@ -69,7 +69,7 @@ Publication validation requires models of record, TD references and unclassified
 
 ### Limits on interpretation
 
-VG16's corrected lag uses complete child-age waves and is independent of row order. Its coefficient still mixes persistent differences between children with change within a child. Parameter recovery is supported, but the [initial recovery check](../../notes/202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md) was insufficient to clear the withdrawal. Sequential validation uses `scripts/wave_forward_score.py`.
+VG16's corrected lag uses complete child-age waves and is independent of row order. Its coefficient still mixes persistent differences between children with change within a child. The registered `corr` sensitivity adds VG20's correlated child block to VG16 and nothing else, so it measures whether the coefficient survives a persistent comprehension-conversion correlation; it has not been fitted. Parameter recovery is supported, but the [initial recovery check](../../notes/202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md) was insufficient to clear the withdrawal. Sequential validation uses `scripts/wave_forward_score.py`.
 
 VG19 and VG22 support further study of differences in growth rates. The existing follow-up did not reliably recover the size of the production-rate variation. The [VG22 assessment](../../notes/202609091400-is-vg22-the-better-description.md) explains why its added structure did not replace VG20.
 
