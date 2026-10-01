@@ -480,3 +480,67 @@ def test_calibration_rejects_a_non_finite_observation(tmp_path):
 
     with pytest.raises(ValueError, match="finite observations; 1 of 3"):
         predictive_calibration_table(observed, predictive, ages)
+
+
+# --------------------------------------------------------------------------
+# Repeated-child stratification (issue #236)
+# --------------------------------------------------------------------------
+
+
+def test_calibration_splits_an_outcome_by_repeated_and_single_visit_children(tmp_path):
+    """A child effect is informed by replication only for a repeated child."""
+    from vocab_growth.models.calibration import write_trace_calibration
+
+    n_rows = 12
+    trace = _stratifiable_trace(n_rows, n_conditional=6)
+    # Children a and b are seen three times each; the other six once.
+    children = ["a", "a", "a", "b", "b", "b", "c", "d", "e", "f", "g", None]
+    analysis_df = pd.DataFrame({"age": np.linspace(10, 60, n_rows), "subject_id": children})
+
+    table = write_trace_calibration(
+        trace, analysis_df, str(tmp_path), (("spoken", "y_s_obs", "obs_s_mask"),),
+    )
+
+    pooled = table[table["age_band_months"] == "all"].groupby("outcome")["n_observations"].first()
+    assert pooled["spoken"] == n_rows
+    assert pooled["spoken (repeated child)"] == 6
+    # The row with no recorded child counts as a single visit.
+    assert pooled["spoken (single-visit child)"] == 6
+
+
+def test_the_child_split_is_counted_within_the_outcome_s_own_rows(tmp_path):
+    """A child seen twice in the frame but once for this outcome is single-visit."""
+    from vocab_growth.models.calibration import write_trace_calibration
+
+    n_rows = 6
+    import xarray as xr
+
+    trace = _stratifiable_trace(n_rows, n_conditional=3)
+    # Seven prepared rows; the seventh, child e's second visit, is not observed.
+    trace["constant_data"] = xr.Dataset({
+        "obs_s_mask": (("obs_id",), np.array([1, 1, 1, 1, 1, 1, 0])),
+        "s_is_conditional": trace.constant_data["s_is_conditional"].to_dataset()["s_is_conditional"],
+    })
+    analysis_df = pd.DataFrame({
+        "age": np.linspace(10, 60, n_rows + 1),
+        "subject_id": ["a", "a", "b", "c", "d", "e", "e"],
+    })
+
+    table = write_trace_calibration(
+        trace, analysis_df, str(tmp_path), (("spoken", "y_s_obs", "obs_s_mask"),),
+    )
+    pooled = table[table["age_band_months"] == "all"].groupby("outcome")["n_observations"].first()
+    assert pooled["spoken (repeated child)"] == 2
+    assert pooled["spoken (single-visit child)"] == 4
+
+
+def test_no_child_split_is_written_when_it_would_repeat_the_pooled_row(tmp_path):
+    from vocab_growth.models.calibration import write_trace_calibration
+
+    n_rows = 6
+    trace = _stratifiable_trace(n_rows, n_conditional=3)
+    analysis_df = pd.DataFrame({"age": np.linspace(10, 60, n_rows), "subject_id": list("abcdef")})
+    table = write_trace_calibration(
+        trace, analysis_df, str(tmp_path), (("spoken", "y_s_obs", "obs_s_mask"),),
+    )
+    assert set(table["outcome"]) == {"spoken"}
