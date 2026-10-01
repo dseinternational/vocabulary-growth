@@ -33,7 +33,9 @@ import math
 from vocab_growth.models.definitions import (
     MODEL_REGISTRY,
     AgeVaryingSubjectScale,
+    BivariateCorrelatedSubjectREModelDefinition,
     SubjectFactorPriorParams,
+    _as_definition_subclass,
 )
 from vocab_growth.models.likelihood_utils import (
     LAG_ZERO_CLIP,
@@ -829,6 +831,21 @@ VARIANTS: dict[tuple[str, str], dict] = {
         "beta_lag_sigma": 0.25}},
     ("vg16", "beta-wide"): {"suffix": "beta-wide", "scalar": {
         "beta_lag_sigma": 1.0}},
+    #
+    # `corr` is #289 task 3.9's comparator: VG16 with VG20's correlated child
+    # block (LKJ eta = 2) and nothing else, so VG16 is nested at rho_uq = 0. A
+    # persistent correlation between a child's comprehension and conversion
+    # standings is the rival explanation for a positive lag coefficient under
+    # the population baseline VG16 registers (notes/202608151140 section 3, #297),
+    # and only a model carrying both terms can say whether `beta_lag` survives
+    # it. VG16 carries no sex covariate, so neither does this arm. It needs a
+    # class promotion rather than a scalar override, because the correlation
+    # field lives on the correlated subclass. Recovery at the designed
+    # (beta, rho) cells cannot target a sensitivity variant; VG25 carries both
+    # terms on the joint engine for that check (#297 check 4).
+    ("vg16", "corr"): {"suffix": "corr", "promote": (
+        BivariateCorrelatedSubjectREModelDefinition,
+        {"subject_re_correlation_eta": 2.0})},
 
     # -- VG21: the anchors it was promoted with (#228, #240) --
     #
@@ -1158,9 +1175,16 @@ def build_variant(model_key: str, variant_name: str) -> list:
         spec = VARIANTS.get((model_key, name))
         if spec is None:
             raise KeyError(f"Unknown variant {name!r} for {model_key!r}.")
+        # A variant adding a field its base's class lacks is rebuilt as the
+        # subclass that carries it, the way the registry derives VG20 from VG10.
+        variant_base = base
+        promote = spec.get("promote")
+        if promote is not None:
+            cls, fields = promote
+            variant_base = _as_definition_subclass(base, cls, **fields)
         out.append(
             make_variant(
-                base,
+                variant_base,
                 config_suffix=spec["suffix"],
                 scalar_over=spec.get("scalar"),
                 kappa_over=spec.get("kappa"),

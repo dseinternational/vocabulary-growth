@@ -281,10 +281,14 @@ def test_registry_counts_and_models():
     # as a short form rather than masking them as partial, as ie_01's baseline
     # is; this arm masks their comprehension counts, where the omitted
     # checklist's harder words matter, to show what that judgement carries.
-    assert len(VARIANTS) == 117
+    #
+    # +1 on 2026-10-01 (#289 task 3.9): VG16's `corr`, the correlated child
+    # block added to the lag model, so `beta_lag` is estimated with the rival
+    # explanation for it in the graph.
+    assert len(VARIANTS) == 118
     assert len(variants_for("vg25")) == 10
     assert len(variants_for("vg14")) == 3
-    assert len(variants_for("vg16")) == 8
+    assert len(variants_for("vg16")) == 9
     assert len(variants_for("vg21")) == 6
     assert len(variants_for("vg23")) == 4
     assert len(variants_for("vg26")) == 5
@@ -931,3 +935,64 @@ def test_excluding_a_study_that_matches_nothing_is_an_error():
     with tempfile.TemporaryDirectory() as root:
         with pytest.raises(ValueError, match="matched no rows"):
             _prepared_bivariate(bogus, root)
+
+
+def test_vg16_corr_adds_exactly_the_correlation_and_keeps_the_lag():
+    """#289 task 3.9's comparator: VG16 nested at rho_uq = 0, nothing else moved.
+
+    Builds both real graphs (no sampling), so it needs the prepared DuckDB.
+    """
+    import os
+    import tempfile
+
+    import dse_research_utils.statistics.models.reporting as reporting
+    import dse_research_utils.statistics.models.sampling as sampling
+    import numpy as np
+
+    import vocab_growth.data_utils as vocab_data_utils
+    from vocab_growth.models import common_bivariate as cb
+    from vocab_growth.models import common_bivariate_re as cbr
+    from vocab_growth.models.common import ModelFitContext
+    from vocab_growth.models.definitions import (
+        VG16,
+        BivariateCorrelatedSubjectREModelDefinition,
+    )
+
+    (variant,) = build_variant("vg16", "corr")
+    assert isinstance(variant, BivariateCorrelatedSubjectREModelDefinition)
+    assert variant.subject_re_correlation_eta == 2.0
+    assert variant.use_cross_lag and variant.lag_baseline == VG16.lag_baseline
+    assert variant.config_name == f"{VG16.config_name}-corr"
+
+    if not os.path.exists(vocab_data_utils.VOCABULARY_DATA_PATH):
+        pytest.skip("prepared vocabulary DuckDB not available")
+
+    def build(definition, root):
+        ctx = ModelFitContext(
+            reporting=reporting.ReportingConfiguration(
+                model_name=definition.model_id,
+                config_name=definition.config_name,
+                output_root_dir=root,
+                ci_prob=0.90,
+                interval_kind="hdi",
+            ),
+            sampling=sampling.get_sampling_configuration("dev"),
+        )
+        os.makedirs(ctx.reporting.output_dir, exist_ok=True)
+        cbr.prepare_bivariate_re_data(ctx, definition)
+        cb.configure_bivariate_priors(ctx, definition)
+        cbr.build_model_re(ctx, definition)
+        return ctx.model
+
+    with tempfile.TemporaryDirectory() as root:
+        base = build(VG16, root)
+        corr = build(variant, root)
+
+    def names(model):
+        return {v.name for v in model.free_RVs} | {v.name for v in model.deterministics}
+
+    assert names(corr) - names(base) == {"rho_uq", "rho_uq_raw"}
+    assert names(base) - names(corr) == set()
+    assert "beta_lag" in names(corr)
+    assert len(corr.free_RVs) == len(base.free_RVs) + 1
+    assert np.isfinite(corr.point_logps()["y_s_obs"])
