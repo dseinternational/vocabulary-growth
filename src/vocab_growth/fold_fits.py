@@ -44,6 +44,7 @@ import pandas as pd
 from vocab_growth.models.build_utils import require_valid_counts
 from vocab_growth.models.catalogue import engine_for_definition
 from vocab_growth.models.common import ModelFitContext, diagnostics_var_names, sample
+from vocab_growth.models.definitions import UnivariateModelDefinition
 
 
 def fold_gate_fields(gate: dict) -> dict:
@@ -96,20 +97,72 @@ def fit_holdout_fold(
     stage, ``sample`` is one shared function, and the diagnostics scan reads the
     model it is given.
     """
+    context = build_holdout_fold_context(
+        definition,
+        analysis_df_with_holdout,
+        sampling_cfg,
+        label=label,
+        tmp_root=tmp_root,
+        name_prefix=name_prefix,
+    )
+    reporting_cfg = context.reporting
+    # Both callers read the per-row probabilities and dispersions at every draw
+    # to score held-out rows, and the sampler otherwise no longer stores them
+    # (`fit_artifacts.sampled_variable_names`). Storing them costs the same
+    # memory as recomputing them afterwards and saves the second pass. Which
+    # names those are is the engine's business: the bivariate random-effect
+    # engine exposes `p_u_obs` / `p_s_obs` / `q_obs` / `kappa_*_obs`, and the
+    # joint engine adds `r_obs`, its third kappa and `pi_cells_obs` for the cell
+    # compositions.
+    sample(context, store_observation_deterministics=True)
+
+    # The scan's var_names are built exactly as the fit pipeline's diagnostics
+    # stage builds them: the scalar summary set plus every free RV element-wise,
+    # so the study and subject intercepts and the HSGP coefficients are screened
+    # too rather than only the scalars.
+    _summary_names, gate_var_names = diagnostics_var_names(context.model)
+    gate = shared_diagnostics.write_diagnostics_summary(
+        context.trace, reporting_cfg.output_dir, var_names=gate_var_names
+    )
+    return context.trace, gate
+
+
+def build_holdout_fold_context(
+    definition,
+    analysis_df_with_holdout: pd.DataFrame,
+    sampling_cfg: sampling.SamplingConfiguration,
+    *,
+    label: str,
+    tmp_root: str,
+    name_prefix: str,
+) -> ModelFitContext:
+    """The prior and build stages of :func:`fit_holdout_fold`, without sampling.
+
+    Separate so that a test can inspect exactly the graph a fold samples -- which
+    rows its likelihood carries, and what its deterministics evaluate to at a
+    fixed point -- without paying for the sampler.
+    """
     engine = engine_for_definition(definition)
-    has_u = analysis_df_with_holdout["understood"].notna().to_numpy()
+    # A univariate definition names its single outcome; every other engine's
+    # `BinomialModelData` carries comprehension, as their prepare stages build it.
+    count_col = (
+        definition.outcome.value
+        if isinstance(definition, UnivariateModelDefinition)
+        else "understood"
+    )
+    has_u = analysis_df_with_holdout[count_col].notna().to_numpy()
     # The engines' own prepare stage validates before the cast, because NumPy
     # truncates toward zero silently and a fold path builds its
     # `BinomialModelData` here rather than going through the engine (#233).
     require_valid_counts(
-        np.asarray(analysis_df_with_holdout.loc[has_u, "understood"], dtype=float),
-        "understood",
+        np.asarray(analysis_df_with_holdout.loc[has_u, count_col], dtype=float),
+        count_col,
         definition.n_trials,
     )
     bmd = model_data.BinomialModelData(
         X_obs=np.asarray(analysis_df_with_holdout["age"], dtype=float).reshape(-1, 1),
         y_obs=np.where(
-            has_u, analysis_df_with_holdout["understood"].fillna(0).astype(int), 0
+            has_u, analysis_df_with_holdout[count_col].fillna(0).astype(int), 0
         ).astype(int),
         n_trials=definition.n_trials,
     )
@@ -131,22 +184,4 @@ def fit_holdout_fold(
     context.set_model_data(bmd, analysis_df_with_holdout)
     engine.resolve("priors")(context, definition)
     engine.resolve("build")(context, definition)
-    # Both callers read the per-row probabilities and dispersions at every draw
-    # to score held-out rows, and the sampler otherwise no longer stores them
-    # (`fit_artifacts.sampled_variable_names`). Storing them costs the same
-    # memory as recomputing them afterwards and saves the second pass. Which
-    # names those are is the engine's business: the bivariate random-effect
-    # engine exposes `p_u_obs` / `p_s_obs` / `q_obs` / `kappa_*_obs`, and the
-    # joint engine adds `r_obs`, its third kappa and `pi_cells_obs` for the cell
-    # compositions.
-    sample(context, store_observation_deterministics=True)
-
-    # The scan's var_names are built exactly as the fit pipeline's diagnostics
-    # stage builds them: the scalar summary set plus every free RV element-wise,
-    # so the study and subject intercepts and the HSGP coefficients are screened
-    # too rather than only the scalars.
-    _summary_names, gate_var_names = diagnostics_var_names(context.model)
-    gate = shared_diagnostics.write_diagnostics_summary(
-        context.trace, reporting_cfg.output_dir, var_names=gate_var_names
-    )
-    return context.trace, gate
+    return context

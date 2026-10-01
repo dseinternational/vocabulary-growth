@@ -1641,9 +1641,17 @@ class HeldOutCheck(NamedTuple):
 HELD_OUT_CHECKS: tuple[HeldOutCheck, ...] = (
     HeldOutCheck(
         "scripts/kfold_loso.py",
-        frozenset({"vg07", "vg08", "vg09", "vg10", "vg19", "vg20", "vg22"}),
-        "refits the model with each fold's children removed from the likelihood, "
-        "so that their effects are drawn from the prior, and scores their counts",
+        frozenset(
+            {
+                "vg07", "vg08", "vg09", "vg10", "vg19", "vg20", "vg22",
+                "vg11", "vg12", "vg21", "vg23", "vg26",
+            }
+        ),
+        "refits the model with each fold's children removed from the likelihood "
+        "and scores their counts with the unseen children's effects integrated "
+        "over their fitted distribution (for the typically developing reference "
+        "models, `--holdout-unit study` holds out a whole study instead and "
+        "integrates its offset the same way)",
     ),
     HeldOutCheck(
         "scripts/loso_compare.py",

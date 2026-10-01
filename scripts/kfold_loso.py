@@ -75,6 +75,61 @@ Outputs:
 - `output/comparisons/kfold_loso_summary.csv`
 - `output/comparisons/kfold_loso_compare.csv`
 - `output/comparisons/kfold_loso_fits.csv`
+
+Typically developing reference models (#240)
+--------------------------------------------
+
+``--models`` also accepts the five typically developing reference models: VG11
+and VG12 (univariate) and VG21, VG23 and VG26 (bivariate). Their PSIS-LOO is
+unusable -- 37% to 59% of rows at Pareto k >= 0.7, because most of their
+children are seen once (``notes/202609131214-held-out-validation-for-the-td-
+models.md``) -- and this is the replacement. A run takes either population, never
+both, and every model in one run must share one prepared frame, so a pairwise
+difference is always on identical children.
+
+Their frame comes from the definition (``analysis_frames.build_analysis_frame``),
+not from the Down syndrome pool. Two holdout units are offered:
+
+- ``--holdout-unit subject``: grouped K-fold by child, stratified as above.
+- ``--holdout-unit study``: leave one study out, one fold per retained study. The
+  held-out study is removed from the zero-sum study block, which is refitted on
+  the remaining studies; its rows stay in observation space so that the
+  population curve and dispersion are evaluated at their ages, and its effect is
+  *integrated* over ``Normal(0, tau)`` -- the fitted between-study scale, as
+  ``predict_new_study.py`` uses -- rather than read off a fitted value. Leaving
+  the study in the zero-sum block would have fixed its offset at minus the sum
+  of the others.
+
+Scoring does not use the one child-effect draw per posterior draw that MCMC
+leaves at a held-out row, which the Down syndrome path relies on. Each held-out
+child's effects -- and, under ``study``, the study offset, which is Gaussian and
+independent of them, so the two add into one Gaussian -- are integrated out per
+posterior draw by adaptive Gauss-Hermite quadrature (nodes placed at the mode
+and curvature of the child's own likelihood, as the engine's singleton
+marginalisation does), and the posterior draws are then averaged on the
+probability scale (log-mean-exp). The likelihood is the model's own:
+Beta-Binomial with the age-varying ``kappa`` at the row, the sex contrast, and
+for the bivariate models comprehension on the 810-item scale with speech
+nested in it on the engine's paired-count rule. The fixed part of each row's
+logit is read from the fold trace and checked against the trace's own
+probabilities, so a graph term the scorer does not model fails loudly.
+
+The study unit scores each child of the held-out study as a new child in a new
+study. Children of one study share its offset, so their scores are dependent:
+the standard error is computed over study totals, and with six to ten studies
+it is itself rough. It is the per-child predictive, not the joint density of the
+whole study.
+
+Bivariate models write three quantities per child: the joint density of all
+their counts, comprehension alone, and speech **conditional on the child's
+observed comprehension** (the difference of the first two, which is the
+conditional predictive with the mixture reweighted by comprehension, #39).
+
+Definitions or fields the scorer does not implement are refused before any fit:
+see :func:`td_scoring_refusal`.
+
+TD outputs are written as ``kfold_loso_td_<unit>_*{suffix}.csv`` and recorded
+under their own manifest label, so they never overwrite the Down syndrome tables.
 """
 
 from __future__ import annotations
@@ -88,32 +143,47 @@ import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pandas as pd
 import xarray as xr
-from scipy.special import logsumexp
+from dse_research_utils.math.constants import EPSILON
+from scipy.special import expit, gammaln, logsumexp
 from scipy.stats import betabinom
 
 import vocab_growth.data_utils as data_utils
 from vocab_growth import environment as env
+from vocab_growth.analysis_frames import analysis_frame_hash, build_analysis_frame
 from vocab_growth.comparisons_provenance import (
     ComparisonOutputs,
     write_comparison_manifest,
 )
 from vocab_growth.fit_artifacts import source_data_hash
 from vocab_growth.fold_fits import fit_holdout_fold, fold_gate_fields
+from vocab_growth.models import subject_effects
+from vocab_growth.models.catalogue import engine_for_definition
 from vocab_growth.models.cross_lag import wave_index as subject_wave_index
 from vocab_growth.models.definitions import (
     VG07,
     VG08,
     VG09,
     VG10,
+    VG11,
+    VG12,
     VG19,
     VG20,
+    VG21,
     VG22,
+    VG23,
+    VG26,
     BivariateModelDefinition,
+    Population,
 )
 from vocab_growth.models.likelihood_utils import (
     SPOKEN_FALLBACK_PRODUCT,
     nested_outcome_spec,
+    resolve_fallback_treatment,
 )
+from vocab_growth.models.observation_arrays import sex_contrast_codes
+from vocab_growth.models.sex_covariate import sex_effect_sigma
+from vocab_growth.models.subject_effects import UNIVARIATE_OUTCOME, SubjectEffectKind
+from vocab_growth.models.subject_marginal import standard_normal_quadrature
 
 # Every model this script can compare. `build_model_re` dispatches on the
 # definition's own fields — through `subject_effects.resolve` — so the
@@ -133,10 +203,17 @@ from vocab_growth.models.likelihood_utils import (
 # prior during MCMC exactly as the other structures' subject REs do, because
 # `subject_factor_z` is indexed by `subject_id` and only the likelihood drops
 # the fold's rows.
-AVAILABLE = {
+DS_AVAILABLE = {
     "VG07": VG07, "VG08": VG08, "VG09": VG09,
     "VG10": VG10, "VG19": VG19, "VG20": VG20, "VG22": VG22,
 }
+# The typically developing reference models (#240), scored by the integrated
+# scorer below rather than by `holdout_subject_elpds`. VG13 is not here: it was
+# superseded as the comparator by VG21 and remains only as VG23's nested null.
+TD_AVAILABLE = {
+    "VG11": VG11, "VG12": VG12, "VG21": VG21, "VG23": VG23, "VG26": VG26,
+}
+AVAILABLE = {**DS_AVAILABLE, **TD_AVAILABLE}
 DEFAULT_MODELS = ("VG07", "VG08", "VG09")
 
 # Derive the Beta-Binomial trial count from the model definitions rather than a
@@ -155,9 +232,9 @@ N_TRIALS = _n_trials_set.pop()
 # silently compare a held-out density the model never fitted, so refuse it here
 # rather than in a code comment (#233, #236).
 _unsupported_fallback = {
-    name: definition.spoken_fallback
+    name: resolve_fallback_treatment(definition)
     for name, definition in AVAILABLE.items()
-    if definition.spoken_fallback != SPOKEN_FALLBACK_PRODUCT
+    if resolve_fallback_treatment(definition) != SPOKEN_FALLBACK_PRODUCT
 }
 if _unsupported_fallback:
     raise NotImplementedError(
@@ -168,8 +245,20 @@ if _unsupported_fallback:
 OUT_DIR = env.comparisons_output_dir()
 KFOLD_TMP_DIR = os.path.join(env.output_root(), "kfold_tmp")
 
-HOLDOUT_UNITS = ("subject", "later-waves")
+HOLDOUT_UNITS = ("subject", "later-waves", "study")
+#: The units the typically developing path implements; `later-waves` is the Down
+#: syndrome criterion-4 unit and `study` is typically developing only.
+TD_HOLDOUT_UNITS = ("subject", "study")
 VISIT1_CONDITIONINGS = ("all-outcomes", "understood-only")
+
+#: Posterior draws the integrated scorer averages over, evenly thinned from the
+#: fold's chains. The held-out density is a mean over draws, so thinning a long
+#: chain costs Monte Carlo precision, not bias; 2,000 is the cap the 2026-09-23
+#: corrections use for their new-child predictives.
+DEFAULT_SCORE_DRAWS = 2000
+#: Adaptive Gauss-Hermite nodes per effect dimension (11, or 11 x 11 = 121 for the
+#: bivariate models' two child effects).
+DEFAULT_QUADRATURE_NODES = 11
 
 
 def wave_index(analysis_df: pd.DataFrame) -> np.ndarray:
@@ -452,6 +541,717 @@ def holdout_subject_elpds(
 
 
 # ============================================================
+# Typically developing models: frames, folds and refusals (#240)
+# ============================================================
+
+
+def is_td_model(definition) -> bool:
+    return definition.population is Population.TYPICALLY_DEVELOPING
+
+
+def td_engine(definition) -> str:
+    """``"univariate_re"`` or ``"bivariate_re"``: the engines the scorer implements."""
+    return engine_for_definition(definition).name
+
+
+def td_scoring_refusal(definition, holdout_unit: str) -> str | None:
+    """Why the integrated scorer cannot score ``definition``, or ``None``.
+
+    The scorer evaluates the model's likelihood in NumPy, so every graph feature
+    it does not reproduce has to be refused here rather than scored under a
+    density the model never fitted -- the same rule this script already applies
+    to the spoken fallback. What it implements: the univariate and bivariate
+    random-effect engines; one time-constant child effect per outcome (the
+    variance-partition scale included), optionally correlated through
+    ``rho_uq``; zero-sum study intercepts; the sex contrast; and the
+    ``product_marginal`` spoken fallback.
+    """
+    name = definition.model_id
+    if holdout_unit not in TD_HOLDOUT_UNITS:
+        return (
+            f"{name}: the typically developing scorer implements the holdout units "
+            f"{TD_HOLDOUT_UNITS}, not {holdout_unit!r}."
+        )
+    engine = td_engine(definition)
+    if engine not in ("univariate_re", "bivariate_re"):
+        return f"{name}: no integrated scorer for the {engine!r} engine."
+    plan = subject_effects.resolve(definition)
+    allowed = {SubjectEffectKind.CONSTANT, SubjectEffectKind.VARIANCE_PARTITION}
+    outcomes = (UNIVARIATE_OUTCOME,) if engine == "univariate_re" else ("u", "q")
+    for outcome in outcomes:
+        kind = plan[outcome].kind
+        if kind not in allowed:
+            return (
+                f"{name}: the {plan[outcome].scale_name} child effect is "
+                f"{kind.value!r}; the scorer integrates a time-constant child effect "
+                "per outcome only (no age-varying scale, child slope or factor)."
+            )
+    if plan.factor is not None:
+        return f"{name}: the low-rank child factor is not implemented by the scorer."
+    if getattr(definition, "singleton_marginalisation", None) is not None:
+        return (
+            f"{name}: singleton marginalisation leaves no explicit child effect to "
+            "remove from the held-out rows' logits."
+        )
+    if getattr(definition, "one_observation_per_subject", False):
+        return f"{name}: the single-administration frame has no child effects to integrate."
+    if any(
+        getattr(definition, field, False)
+        for field in ("use_cross_lag", "use_sign_cross_lag")
+    ):
+        return f"{name}: a cross-lag reads earlier counts; use wave_forward_score.py."
+    if engine == "bivariate_re":
+        treatment = resolve_fallback_treatment(definition)
+        if treatment != SPOKEN_FALLBACK_PRODUCT:
+            return (
+                f"{name}: spoken_fallback {treatment!r}; the scorer implements only "
+                f"{SPOKEN_FALLBACK_PRODUCT!r}."
+            )
+    if (
+        holdout_unit == "study"
+        and getattr(definition, "study_age_slope_sigma", None) is not None
+    ):
+        return (
+            f"{name}: per-study age slopes would need a held-out study's slope "
+            "integrated too, which the study unit does not implement."
+        )
+    return None
+
+
+def load_td_frame(model_key: str) -> pd.DataFrame:
+    """The prepared frame ``model_key``'s engine fits, rebuilt from its definition."""
+    frame, _ = build_analysis_frame(model_key.lower(), AVAILABLE[model_key.upper()])
+    required = {"age", "study", "study_code", "subject_code", "subject_key"}
+    missing = required.difference(frame.columns)
+    if missing:
+        raise ValueError(f"{model_key}'s frame lacks {sorted(missing)}.")
+    return frame
+
+
+def study_folds(frame: pd.DataFrame) -> list[str]:
+    """One fold per retained study, in the frame's own (sorted) study order."""
+    return sorted(frame["study"].unique())
+
+
+def build_td_fold_frame(
+    frame: pd.DataFrame, holdout_unit: str, held: np.ndarray | str
+) -> pd.DataFrame:
+    """The fold's frame: ``holdout`` marks the rows that leave the likelihood.
+
+    ``subject``: every row of the fold's children (``held`` is their codes).
+
+    ``study``: every row of study ``held``. The remaining studies are recoded
+    ``0 .. K-2`` in their original order, so the refitted zero-sum block is over
+    the training studies only; the held-out rows carry the placeholder code 0,
+    which the scorer removes from their logits before integrating a fresh study
+    offset. ``study_code_full`` keeps the frame's original code either way, and
+    the ``study`` name column is left untouched because the sex contrast is
+    resolved per (study, child).
+    """
+    fold = frame.copy()
+    fold["study_code_full"] = fold["study_code"]
+    if holdout_unit == "subject":
+        fold["holdout"] = fold["subject_code"].isin(np.asarray(held)).to_numpy()
+        return fold
+    if holdout_unit != "study":
+        raise ValueError(f"unknown typically developing holdout unit {holdout_unit!r}")
+    in_study = (fold["study"] == held).to_numpy()
+    if not in_study.any():
+        raise ValueError(f"study {held!r} has no rows in the frame")
+    training = sorted(fold.loc[~in_study, "study"].unique())
+    if len(training) < 2:
+        raise ValueError("a study fold needs at least two training studies")
+    recode = {study: code for code, study in enumerate(training)}
+    fold["holdout"] = in_study
+    fold["study_code"] = fold["study"].map(recode).fillna(0).astype(int)
+    return fold
+
+
+# ============================================================
+# Typically developing models: the integrated scorer
+# ============================================================
+
+#: Finite-difference step, Newton iterations and clamps for placing the
+#: quadrature nodes, in standard-normal units of the effect. They mirror the
+#: engine's own adaptive rule (`subject_marginal`).
+_FD_STEP = 1e-3
+_NEWTON_STEPS = 20
+_BACKTRACK_HALVINGS = 12
+_NEWTON_MAX_STEP = 2.0
+_MODE_CLAMP = 8.0
+#: Elements per working array: (draws x rows x nodes) in one batch.
+_BATCH_ELEMENTS = 6_000_000
+
+
+def betabinomial_logpmf(y, n, p, kappa):
+    """Beta-Binomial log pmf with mean ``p`` and concentration ``kappa``.
+
+    ``alpha = p kappa`` and ``beta = (1 - p) kappa``, as every engine builds them.
+    """
+    a = p * kappa
+    b = (1.0 - p) * kappa
+    return (
+        gammaln(n + 1.0) - gammaln(y + 1.0) - gammaln(n - y + 1.0)
+        + gammaln(y + a) + gammaln(n - y + b) - gammaln(n + a + b)
+        - gammaln(a) - gammaln(b) + gammaln(a + b)
+    )
+
+
+def _clip(p):
+    return np.clip(p, EPSILON, 1.0 - EPSILON)
+
+
+def _hermite_rule(n_nodes: int, dim: int) -> tuple[np.ndarray, np.ndarray]:
+    """Product Gauss-Hermite rule for ``N(0, I_dim)``: nodes ``(M, dim)``, log weights."""
+    x, log_w = standard_normal_quadrature(n_nodes)
+    if dim == 1:
+        return x[:, None], log_w
+    grid = np.stack(np.meshgrid(x, x, indexing="ij"), axis=-1).reshape(-1, 2)
+    return grid, (log_w[:, None] + log_w[None, :]).reshape(-1)
+
+
+def _stencil(dim: int) -> np.ndarray:
+    h = _FD_STEP
+    if dim == 1:
+        return np.array([[0.0], [h], [-h]])
+    return np.array(
+        [[0, 0], [h, 0], [-h, 0], [0, h], [0, -h], [h, h], [h, -h], [-h, h], [-h, -h]],
+        dtype=float,
+    )
+
+
+def _gradient_precision(values: np.ndarray, dim: int):
+    """Gradient and negative Hessian of a log-integrand from its stencil values."""
+    h = _FD_STEP
+    if dim == 1:
+        f0, fp, fm = values[..., 0], values[..., 1], values[..., 2]
+        grad = ((fp - fm) / (2 * h))[..., None]
+        prec = (-(fp - 2 * f0 + fm) / h**2)[..., None, None]
+        return grad, prec
+    f0 = values[..., 0]
+    g1 = (values[..., 1] - values[..., 2]) / (2 * h)
+    g2 = (values[..., 3] - values[..., 4]) / (2 * h)
+    h11 = (values[..., 1] - 2 * f0 + values[..., 2]) / h**2
+    h22 = (values[..., 3] - 2 * f0 + values[..., 4]) / h**2
+    h12 = (values[..., 5] - values[..., 6] - values[..., 7] + values[..., 8]) / (4 * h**2)
+    grad = np.stack([g1, g2], axis=-1)
+    prec = -np.stack([np.stack([h11, h12], -1), np.stack([h12, h22], -1)], axis=-2)
+    return grad, prec
+
+
+def _safe_precision(prec: np.ndarray) -> np.ndarray:
+    """Replace a non-positive-definite (or non-finite) precision by the prior's, I.
+
+    The log-integrand is the log-likelihood plus the standard-normal log prior, so
+    its curvature is at least the prior's wherever the likelihood is log-concave;
+    a failed finite difference only moves where the nodes sit, never the value
+    the rule converges to.
+    """
+    dim = prec.shape[-1]
+    if dim == 1:
+        ok = np.isfinite(prec[..., 0, 0]) & (prec[..., 0, 0] > 1e-8)
+    else:
+        a, b, c = prec[..., 0, 0], prec[..., 0, 1], prec[..., 1, 1]
+        ok = np.isfinite(a) & np.isfinite(b) & np.isfinite(c) & (a > 1e-8) & (a * c - b * b > 1e-12)
+    return np.where(ok[..., None, None], prec, np.eye(dim))
+
+
+def _covariance_cholesky(prec: np.ndarray) -> np.ndarray:
+    """Lower Cholesky factor of ``prec^-1`` for ``dim`` 1 or 2, batched."""
+    dim = prec.shape[-1]
+    if dim == 1:
+        return 1.0 / np.sqrt(prec)
+    a, b, c = prec[..., 0, 0], prec[..., 0, 1], prec[..., 1, 1]
+    det = a * c - b * b
+    s11, s12, s22 = c / det, -b / det, a / det
+    l11 = np.sqrt(s11)
+    l21 = s12 / l11
+    l22 = np.sqrt(np.maximum(s22 - l21**2, 1e-300))
+    out = np.zeros(prec.shape)
+    out[..., 0, 0] = l11
+    out[..., 1, 0] = l21
+    out[..., 1, 1] = l22
+    return out
+
+
+def log_normal_expectation(loglik, batch_shape: tuple[int, ...], dim: int, n_nodes: int):
+    """``log E[exp(loglik(z))]`` for ``z ~ N(0, I_dim)``, by adaptive Gauss-Hermite.
+
+    ``loglik`` maps ``z`` of shape ``(*batch_shape, P, dim)`` to log-likelihoods
+    of shape ``(*batch_shape, P)``. The nodes are placed at the mode of
+    ``loglik(z) - |z|^2 / 2`` and scaled by its curvature, found by a few Newton
+    steps on finite differences; with nodes ``z = c + A x`` the change of
+    variables contributes ``log|A| + |x|^2 / 2 - |z|^2 / 2``, the rule
+    :mod:`vocab_growth.models.subject_marginal` uses for the engine's own
+    marginalised children. Placing the nodes changes only the rule's accuracy,
+    never the quantity it estimates.
+    """
+    stencil = _stencil(dim)
+
+    def log_integrand(z):
+        return loglik(z) - 0.5 * np.sum(z * z, axis=-1)
+
+    mode = np.zeros((*batch_shape, dim))
+    for _ in range(_NEWTON_STEPS):
+        values = log_integrand(mode[..., None, :] + stencil)
+        grad, prec = _gradient_precision(values, dim)
+        prec = _safe_precision(prec)
+        step = np.linalg.solve(prec, grad[..., None])[..., 0]
+        step = np.where(np.isfinite(step), step, 0.0)
+        norm = np.linalg.norm(step, axis=-1, keepdims=True)
+        step = step * np.minimum(1.0, _NEWTON_MAX_STEP / np.maximum(norm, 1e-300))
+        # Backtracking: a step is taken only where it raises the log-integrand,
+        # halving it otherwise. Where the curvature at the start is not negative
+        # -- far from the mode of a skewed Beta-Binomial -- a full Newton step
+        # can overshoot and cycle between two points indefinitely.
+        current = values[..., 0]
+        for _halving in range(_BACKTRACK_HALVINGS):
+            candidate = np.clip(mode + step, -_MODE_CLAMP, _MODE_CLAMP)
+            better = log_integrand(candidate[..., None, :])[..., 0] >= current
+            if better.all():
+                break
+            step = np.where(better[..., None], step, 0.5 * step)
+        else:
+            candidate = np.clip(mode + step, -_MODE_CLAMP, _MODE_CLAMP)
+            better = log_integrand(candidate[..., None, :])[..., 0] >= current
+            step = np.where(better[..., None], step, 0.0)
+        mode = np.clip(mode + step, -_MODE_CLAMP, _MODE_CLAMP)
+        if np.max(np.abs(step)) < 1e-7:
+            break
+    _, prec = _gradient_precision(log_integrand(mode[..., None, :] + stencil), dim)
+    chol = _covariance_cholesky(_safe_precision(prec))
+    x, log_w = _hermite_rule(n_nodes, dim)
+    z = mode[..., None, :] + np.einsum("...ij,mj->...mi", chol, x)
+    log_det = np.sum(np.log(np.diagonal(chol, axis1=-2, axis2=-1)), axis=-1)
+    log_terms = (
+        log_w + 0.5 * np.sum(x * x, axis=-1) + log_det[..., None] + log_integrand(z)
+    )
+    return logsumexp(log_terms, axis=-1)
+
+
+def _flat_draws(posterior, name: str, draws: np.ndarray, **isel) -> np.ndarray:
+    """``(n_draws, ...)`` values of ``name`` at the selected flattened draws."""
+    da = posterior[name]
+    if isel:
+        da = da.isel(**isel)
+    values = np.asarray(da.values, dtype=float)
+    return values.reshape(-1, *values.shape[2:])[draws]
+
+
+def thinned_draws(n_total: int, max_draws: int) -> np.ndarray:
+    """Evenly spaced indices into the flattened (chain, draw) axis."""
+    if max_draws <= 0 or max_draws >= n_total:
+        return np.arange(n_total)
+    return np.unique(np.linspace(0, n_total - 1, max_draws).round().astype(int))
+
+
+@dataclass(frozen=True)
+class TDScoreInputs:
+    """Everything the integrated scorer reads, for the scored rows only.
+
+    Rows are ordered so each child's rows are contiguous; ``starts`` indexes the
+    first row of each child and ``child_codes`` names them. Draw-indexed arrays
+    are ``(S, R)``; ``chol`` maps a standard-normal vector to the integrated
+    effects, ``(S, dim, dim)``, and ``chol_u`` does so for comprehension alone in
+    a bivariate model.
+    """
+
+    engine: str
+    rows: np.ndarray
+    starts: np.ndarray
+    child_codes: np.ndarray
+    child_of_row: np.ndarray
+    chol: np.ndarray
+    arrays: dict
+    chol_u: np.ndarray | None = None
+
+
+def _sex_shift(frame: pd.DataFrame, definition) -> np.ndarray:
+    if sex_effect_sigma(definition) is None:
+        return np.zeros(len(frame))
+    return sex_contrast_codes(frame, allow_unknown=True)
+
+
+def td_score_inputs(
+    frame: pd.DataFrame,
+    trace,
+    definition,
+    holdout_unit: str,
+    *,
+    max_draws: int = DEFAULT_SCORE_DRAWS,
+    check_tolerance: float = 1e-8,
+) -> TDScoreInputs:
+    """Read the held-out rows' fixed logits, dispersions and effect scales.
+
+    ``frame`` is the fold frame (with ``holdout``). The logit of each held-out
+    row is decomposed as the trace computed it -- population curve, study offset,
+    sex contrast, child effect -- and the child effect (plus, under ``study``,
+    the placeholder study offset) is removed, leaving the part the integration
+    adds a fresh draw to. That decomposition is then checked against the trace's
+    own per-row probabilities: a graph term the scorer does not know about makes
+    the check fail rather than silently changing the density being scored.
+    """
+    engine = td_engine(definition)
+    post = trace.posterior
+    holdout = frame["holdout"].to_numpy(dtype=bool)
+    subject_codes = frame["subject_code"].to_numpy(dtype=int)
+    order = np.lexsort((np.arange(len(frame)), subject_codes))
+    rows = order[holdout[order]]
+    if rows.size == 0:
+        raise ValueError("the fold holds out no rows")
+    row_children = subject_codes[rows]
+    starts = np.flatnonzero(np.r_[True, row_children[1:] != row_children[:-1]])
+    child_codes = row_children[starts]
+    child_of_row = np.repeat(np.arange(len(starts)), np.diff(np.r_[starts, rows.size]))
+
+    n_total = int(post.sizes["chain"] * post.sizes["draw"])
+    draws = thinned_draws(n_total, max_draws)
+    study_codes = frame["study_code"].to_numpy(dtype=int)[rows]
+    x_sex = _sex_shift(frame, definition)[rows]
+    study_unit = holdout_unit == "study"
+
+    def scalar(name):
+        return _flat_draws(post, name, draws)
+
+    def at_rows(name):
+        return _flat_draws(post, name, draws, obs_id=rows)
+
+    def at_children(name):
+        return _flat_draws(post, name, draws, subject_id=row_children)
+
+    def at_studies(name):
+        return _flat_draws(post, name, draws, study_id=study_codes)
+
+    if engine == "univariate_re":
+        y_col = definition.outcome.value
+        f_obs = at_rows("f_obs")
+        m = f_obs - at_children("delta_subject")
+        if study_unit:
+            m = m - at_studies("delta")
+        tau_child = scalar("tau_subject")
+        variance = tau_child**2 + (scalar("tau") ** 2 if study_unit else 0.0)
+        chol = np.sqrt(variance)[:, None, None]
+        arrays = {
+            "m": m,
+            "kappa": at_rows("kappa_obs"),
+            "y": frame[y_col].to_numpy(dtype=float)[rows],
+            "n": float(definition.n_trials),
+        }
+        # Nothing to check against beyond `f_obs` itself, which the fixed part
+        # was taken from; the study unit's population part is checked below.
+        population = m - (
+            scalar("beta_sex")[:, None] * x_sex if "beta_sex" in post.data_vars else 0.0
+        )
+        if not study_unit:
+            population = population - at_studies("delta")
+        _assert_function_of_age(population, frame["age"].to_numpy()[rows], check_tolerance)
+        return TDScoreInputs(
+            engine, rows, starts, child_codes, child_of_row, chol, arrays
+        )
+
+    # Bivariate: comprehension logit and the production-ratio logit.
+    has_sex = "beta_sex_u" in post.data_vars
+    shift_u = scalar("beta_sex_u")[:, None] * x_sex if has_sex else 0.0
+    shift_q = scalar("beta_sex_q")[:, None] * x_sex if has_sex else 0.0
+    pop_u = at_rows("f_u_obs")
+    pop_q = at_rows("h_obs")
+    delta_u = at_studies("delta_u")
+    delta_q = at_studies("delta_q")
+    child_u = at_children("delta_subj_u")
+    child_q = at_children("delta_subj_q")
+    # The decomposition, checked against the trace's own probabilities at
+    # these rows and draws.
+    for name, total in (
+        ("p_u_obs", pop_u + delta_u + shift_u + child_u),
+        ("q_obs", pop_q + delta_q + shift_q + child_q),
+    ):
+        gap = float(np.max(np.abs(expit(total) - at_rows(name))))
+        if not gap <= check_tolerance:
+            raise RuntimeError(
+                f"{definition.model_id}: the scorer's decomposition of {name} is off by "
+                f"{gap:.3g} at the held-out rows; the fold graph carries a term the "
+                "integrated scorer does not model."
+            )
+    m_u = pop_u + shift_u + (0.0 if study_unit else delta_u)
+    m_q = pop_q + shift_q + (0.0 if study_unit else delta_q)
+    _assert_function_of_age(pop_u, frame["age"].to_numpy()[rows], check_tolerance)
+
+    tau_u = scalar("tau_subj_u")
+    tau_q = scalar("tau_subj_q")
+    rho = (
+        np.clip(scalar("rho_uq"), -0.999999, 0.999999)
+        if "rho_uq" in post.data_vars
+        else np.zeros_like(tau_u)
+    )
+    s11 = tau_u**2
+    s22 = tau_q**2
+    s12 = rho * tau_u * tau_q
+    if study_unit:
+        s11 = s11 + scalar("tau_u") ** 2
+        s22 = s22 + scalar("tau_q") ** 2
+    l11 = np.sqrt(s11)
+    l21 = s12 / l11
+    l22 = np.sqrt(np.maximum(s22 - l21**2, 1e-300))
+    chol = np.zeros((len(draws), 2, 2))
+    chol[:, 0, 0] = l11
+    chol[:, 1, 0] = l21
+    chol[:, 1, 1] = l22
+
+    n_trials = definition.n_trials
+    understood = frame["understood"].to_numpy(dtype=float)
+    spoken_observed = np.full(len(frame), -1, dtype=int)
+    spoken_trials = np.full(len(frame), n_trials, dtype=int)
+    spoken_conditional = np.zeros(len(frame), dtype=bool)
+    # The engine's paired-count rule, applied to the whole fold frame without
+    # the holdout mask, so a held-out row is classified exactly as the model
+    # classifies the same row when it trains on it (the 2026-09-23 correction).
+    spec = nested_outcome_spec(
+        frame, parent_col="understood", outcome_col="spoken", n_trials=n_trials
+    )
+    spoken_observed[spec.indices] = spec.observed
+    spoken_trials[spec.indices] = spec.trials
+    spoken_conditional[spec.indices] = spec.is_conditional
+    has_u = np.isfinite(understood[rows])
+    has_s = spoken_observed[rows] >= 0
+    arrays = {
+        "m_u": m_u,
+        "m_q": m_q,
+        "kappa_u": at_rows("kappa_u_obs"),
+        "kappa_s": at_rows("kappa_s_obs"),
+        "y_u": np.where(has_u, understood[rows], 0.0),
+        "has_u": has_u,
+        "y_s": np.where(has_s, spoken_observed[rows], 0).astype(float),
+        "s_trials": spoken_trials[rows].astype(float),
+        "s_conditional": spoken_conditional[rows],
+        "has_s": has_s,
+        "n": float(n_trials),
+    }
+    return TDScoreInputs(
+        engine,
+        rows,
+        starts,
+        child_codes,
+        child_of_row,
+        chol,
+        arrays,
+        chol_u=l11[:, None, None],
+    )
+
+
+def _assert_function_of_age(population: np.ndarray, ages: np.ndarray, tolerance: float):
+    """The population part of a logit must depend on age alone.
+
+    A cheap invariant that catches an unmodelled study- or child-level term left
+    in the fixed part: rows of equal age must agree draw by draw.
+    """
+    population = np.broadcast_to(population, (population.shape[0], ages.size))
+    for age in np.unique(ages):
+        block = population[:, ages == age]
+        spread = float(np.max(block.max(axis=1) - block.min(axis=1)))
+        if not spread <= tolerance * max(1.0, float(np.max(np.abs(block)))):
+            raise RuntimeError(
+                f"the fixed part of the held-out logits varies by {spread:.3g} at age "
+                f"{age:g} after removing every term the scorer models; the fold graph "
+                "carries a term the integrated scorer does not implement."
+            )
+
+
+def _row_logliks(inputs: TDScoreInputs, effects: np.ndarray, sl: slice, *, understood_only=False):
+    """Per-row log-likelihood at the given row effects ``(S, R, P, dim)``."""
+    a = inputs.arrays
+    n = a["n"]
+    if inputs.engine == "univariate_re":
+        p = _clip(expit(a["m"][:, sl, None] + effects[..., 0]))
+        return betabinomial_logpmf(a["y"][None, sl, None], n, p, a["kappa"][:, sl, None])
+    p_u = expit(a["m_u"][:, sl, None] + effects[..., 0])
+    ll_u = betabinomial_logpmf(
+        a["y_u"][None, sl, None], n, _clip(p_u), a["kappa_u"][:, sl, None]
+    )
+    ll = np.where(a["has_u"][None, sl, None], ll_u, 0.0)
+    if understood_only:
+        return ll
+    q = expit(a["m_q"][:, sl, None] + effects[..., 1])
+    p_s = np.where(a["s_conditional"][None, sl, None], q, p_u * q)
+    ll_s = betabinomial_logpmf(
+        a["y_s"][None, sl, None],
+        a["s_trials"][None, sl, None],
+        _clip(p_s),
+        a["kappa_s"][:, sl, None],
+    )
+    return ll + np.where(a["has_s"][None, sl, None], ll_s, 0.0)
+
+
+def _child_batches(inputs: TDScoreInputs, n_draws: int, n_points: int):
+    """Contiguous child ranges whose rows fit the working-array budget."""
+    row_starts = np.r_[inputs.starts, inputs.rows.size]
+    budget = max(1, _BATCH_ELEMENTS // max(1, n_draws * n_points))
+    first = 0
+    n_children = inputs.starts.size
+    while first < n_children:
+        last = first + 1
+        while (
+            last < n_children
+            and row_starts[last + 1] - row_starts[first] <= budget
+        ):
+            last += 1
+        yield first, last
+        first = last
+
+
+def integrated_log_densities(
+    inputs: TDScoreInputs, *, n_nodes: int = DEFAULT_QUADRATURE_NODES, understood_only=False
+) -> np.ndarray:
+    """``(S, n_children)`` log densities of each held-out child's counts per draw.
+
+    Each child's effects are integrated out per posterior draw; the caller then
+    averages over draws.
+    """
+    chol = inputs.chol_u if understood_only else inputs.chol
+    dim = chol.shape[-1]
+    n_draws = chol.shape[0]
+    n_points = max(_stencil(dim).shape[0], n_nodes**dim)
+    out = np.empty((n_draws, inputs.starts.size))
+    row_starts = np.r_[inputs.starts, inputs.rows.size]
+    for first, last in _child_batches(inputs, n_draws, n_points):
+        sl = slice(row_starts[first], row_starts[last])
+        local_child = inputs.child_of_row[sl] - first
+        local_starts = inputs.starts[first:last] - row_starts[first]
+
+        def loglik(z, sl=sl, local_child=local_child, local_starts=local_starts):
+            effects = np.einsum("sij,scpj->scpi", chol, z)[:, local_child]
+            ll = _row_logliks(inputs, effects, sl, understood_only=understood_only)
+            return np.add.reduceat(ll, local_starts, axis=1)
+
+        out[:, first:last] = log_normal_expectation(
+            loglik, (n_draws, last - first), dim, n_nodes
+        )
+    return out
+
+
+def td_child_elpds(
+    inputs: TDScoreInputs, *, n_nodes: int = DEFAULT_QUADRATURE_NODES
+) -> pd.DataFrame:
+    """Per held-out child: elpd of all their counts, and by outcome where bivariate.
+
+    ``elpd`` is ``log mean_s p(y_child | draw s)`` with the child's effects
+    integrated out inside each draw. A bivariate model also gets
+    ``elpd_understood`` (comprehension alone, integrated over the comprehension
+    effect's marginal) and ``elpd_spoken_given_understood``, their difference,
+    which is the speech density conditional on the child's observed
+    comprehension: the mixture over draws and effects is reweighted by the
+    comprehension counts, not merely given them as a denominator.
+    """
+    log_s = math.log(inputs.chol.shape[0])
+    joint = integrated_log_densities(inputs, n_nodes=n_nodes)
+    row_counts = np.diff(np.r_[inputs.starts, inputs.rows.size])
+    out = pd.DataFrame(
+        {
+            "subject_code": inputs.child_codes,
+            "n_rows": row_counts,
+            "elpd": logsumexp(joint, axis=0) - log_s,
+        }
+    )
+    if inputs.engine == "bivariate_re":
+        a = inputs.arrays
+        n_u = np.add.reduceat(a["has_u"].astype(int), inputs.starts)
+        n_s = np.add.reduceat(a["has_s"].astype(int), inputs.starts)
+        marginal_u = integrated_log_densities(inputs, n_nodes=n_nodes, understood_only=True)
+        elpd_u = logsumexp(marginal_u, axis=0) - log_s
+        # A child with no count of an outcome contributes no score for it, and
+        # must not enter the table as 0.0, which would read as a perfect one.
+        out["n_understood"] = n_u
+        out["n_spoken"] = n_s
+        out["elpd_understood"] = np.where(n_u > 0, elpd_u, np.nan)
+        out["elpd_spoken_given_understood"] = np.where(
+            n_s > 0, out["elpd"].to_numpy() - np.where(n_u > 0, elpd_u, 0.0), np.nan
+        )
+    return out
+
+
+#: The quantities each engine reports, headline first.
+TD_QUANTITIES = {
+    "univariate_re": ("elpd",),
+    "bivariate_re": ("elpd", "elpd_understood", "elpd_spoken_given_understood"),
+}
+
+
+def summarise_td(
+    child_df: pd.DataFrame, cluster: str, flags: dict[str, bool]
+) -> pd.DataFrame:
+    """Per model and quantity: total, clustered SE, counts, convergence flag.
+
+    The standard error is computed over cluster totals -- children for the child
+    unit, studies for the study unit -- because the scores inside a cluster share
+    a child's or a study's effect (the 2026-09-23 correction for paired
+    forward scores, applied to the totals too).
+    """
+    records = []
+    for (model, quantity), group in _long_scores(child_df).groupby(["model", "quantity"], sort=False):
+        totals = group.groupby(cluster)["value"].sum()
+        n_clusters = len(totals)
+        records.append(
+            {
+                "model": model,
+                "quantity": quantity,
+                "elpd": float(totals.sum()),
+                "se": float(np.sqrt(n_clusters) * np.std(totals, ddof=1)) if n_clusters > 1 else float("nan"),
+                "cluster": cluster,
+                "n_clusters": n_clusters,
+                "n_children": int(group["subject_code"].nunique()),
+                "n_rows": int(group["n_rows"].sum()),
+                "mean_elpd_per_child": float(group["value"].mean()),
+                "all_folds_converged": bool(flags.get(model, False)),
+            }
+        )
+    return pd.DataFrame(records)
+
+
+def pairwise_td(child_df: pd.DataFrame, cluster: str, flags: dict[str, bool]) -> pd.DataFrame:
+    """Paired differences between models on the same children, SE over clusters."""
+    long = _long_scores(child_df)
+    models = list(dict.fromkeys(long["model"]))
+    records = []
+    for quantity, group in long.groupby("quantity", sort=False):
+        index = ["subject_code"] if cluster == "subject_code" else ["subject_code", cluster]
+        wide = group.pivot_table(index=index, columns="model", values="value")
+        for i, a in enumerate(models):
+            for b in models[i + 1:]:
+                if a not in wide or b not in wide:
+                    continue
+                common = wide[[a, b]].dropna()
+                diff = (common[b] - common[a]).groupby(level=cluster).sum()
+                n = len(diff)
+                se = float(np.sqrt(n) * np.std(diff, ddof=1)) if n > 1 else float("nan")
+                total = float(diff.sum())
+                records.append(
+                    {
+                        "quantity": quantity,
+                        "model_a": a,
+                        "model_b": b,
+                        "elpd_diff_b_minus_a": total,
+                        "se_paired": se,
+                        "diff_over_se": total / se if se > 0 else float("nan"),
+                        "cluster": cluster,
+                        "n_clusters": n,
+                        "n_children": len(common),
+                        "all_folds_converged": bool(flags.get(a, False) and flags.get(b, False)),
+                    }
+                )
+    return pd.DataFrame(records)
+
+
+def _long_scores(child_df: pd.DataFrame) -> pd.DataFrame:
+    quantities = [q for q in ("elpd", "elpd_understood", "elpd_spoken_given_understood") if q in child_df]
+    long = child_df.melt(
+        id_vars=[c for c in child_df.columns if c not in quantities],
+        value_vars=quantities,
+        var_name="quantity",
+        value_name="value",
+    )
+    return long.dropna(subset=["value"])
+
+
+# ============================================================
 # Driver
 # ============================================================
 
@@ -514,6 +1314,178 @@ def pairwise_compare(
     return pd.DataFrame(pair_rows)
 
 
+def check_td_run(models: tuple[str, ...], holdout_unit: str) -> None:
+    """Refuse, before any fit, a typically developing run the scorer cannot score.
+
+    Every model must pass :func:`td_scoring_refusal`, and all of them must share
+    one prepared frame: the folds are built on it and a paired difference is
+    only a difference between models when both scored the same children.
+    """
+    reasons = [
+        reason
+        for m in models
+        if (reason := td_scoring_refusal(AVAILABLE[m], holdout_unit)) is not None
+    ]
+    if reasons:
+        raise SystemExit("Cannot score:\n  " + "\n  ".join(reasons))
+    hashes = {m: analysis_frame_hash(load_td_frame(m)) for m in models}
+    if len(set(hashes.values())) > 1:
+        raise SystemExit(
+            "These models fit different prepared frames, so their folds and scores "
+            f"cannot be paired: {hashes}. Run them separately, each with its own "
+            "--suffix."
+        )
+
+
+def main_td(
+    K: int,
+    sampling_config_name: str,
+    models: tuple[str, ...],
+    suffix: str,
+    holdout_unit: str,
+    *,
+    max_folds: int | None = None,
+    score_draws: int = DEFAULT_SCORE_DRAWS,
+    quadrature_nodes: int = DEFAULT_QUADRATURE_NODES,
+) -> None:
+    """Grouped K-fold by child, or leave-one-study-out, for the TD reference models."""
+    check_td_run(models, holdout_unit)
+    specs = [(m, AVAILABLE[m]) for m in models]
+    frame = load_td_frame(models[0])
+    frame_hash = analysis_frame_hash(frame)
+    os.makedirs(OUT_DIR, exist_ok=True)
+    written = ComparisonOutputs(OUT_DIR)
+    stem = f"kfold_loso_td_{holdout_unit}"
+    print(f"models: {', '.join(models)}   unit={holdout_unit}   config={sampling_config_name}")
+    print(
+        f"  frame {frame_hash[:19]}: {len(frame)} rows / "
+        f"{frame['subject_code'].nunique()} children / {frame['study'].nunique()} studies"
+    )
+    print(
+        f"  scoring: up to {score_draws} posterior draws, adaptive Gauss-Hermite with "
+        f"{quadrature_nodes} nodes per effect dimension"
+    )
+
+    if holdout_unit == "subject":
+        folds, _ = stratified_subject_folds(frame, K=K)
+        fold_items: list = list(folds)
+        labels = [f"fold{k}" for k in range(len(folds))]
+    else:
+        fold_items = study_folds(frame)
+        labels = [f"study-{s}" for s in fold_items]
+    if max_folds is not None:
+        fold_items = fold_items[:max_folds]
+        labels = labels[:max_folds]
+        print(f"  --max-folds {max_folds}: running {len(fold_items)} fold(s) only")
+
+    sampling_cfg = sampling.get_sampling_configuration(sampling_config_name)
+    scores: list[pd.DataFrame] = []
+    fit_records: list[FoldFitRecord] = []
+    for k, (held, label) in enumerate(zip(fold_items, labels, strict=True)):
+        fold_frame = build_td_fold_frame(frame, holdout_unit, held)
+        holdout = fold_frame["holdout"].to_numpy(dtype=bool)
+        n_children = int(fold_frame.loc[holdout, "subject_code"].nunique())
+        print(f"\n=== {label}: {int(holdout.sum())} held-out rows, {n_children} children ===")
+        for short, definition in specs:
+            started = time.perf_counter()
+            print(f"  fitting {short} …", flush=True)
+            trace, _, gate = fit_fold(definition, fold_frame, sampling_cfg, f"{short}_{label}")
+            scoring_started = time.perf_counter()
+            inputs = td_score_inputs(
+                fold_frame, trace, definition, holdout_unit, max_draws=score_draws
+            )
+            child_df = td_child_elpds(inputs, n_nodes=quadrature_nodes)
+            print(
+                f"    scored {len(child_df)} children over {inputs.chol.shape[0]} draws "
+                f"in {time.perf_counter() - scoring_started:.1f}s"
+            )
+            child_frame = fold_frame.drop_duplicates("subject_code").set_index("subject_code")
+            child_df.insert(0, "model", short)
+            child_df.insert(1, "fold", k)
+            child_df.insert(2, "study", child_frame.loc[child_df["subject_code"], "study"].to_numpy())
+            child_df.insert(3, "subject_key", child_frame.loc[child_df["subject_code"], "subject_key"].to_numpy())
+            scores.append(child_df)
+            n_u = int(holdout.sum()) if td_engine(definition) == "univariate_re" else int(
+                (fold_frame["understood"].notna().to_numpy() & holdout).sum()
+            )
+            n_s = 0 if td_engine(definition) == "univariate_re" else int(
+                (fold_frame["spoken"].notna().to_numpy() & holdout).sum()
+            )
+            elapsed = time.perf_counter() - started
+            record = FoldFitRecord(
+                model_short=short,
+                fold=k,
+                n_holdout_subjects=n_children,
+                n_holdout_obs_u=n_u,
+                n_holdout_obs_s=n_s,
+                wall_seconds=elapsed,
+                **fold_gate_fields(gate),
+            )
+            fit_records.append(record)
+            del trace
+            print(
+                f"    {short} {label} done in {elapsed:.1f}s; {len(child_df)} children "
+                f"scored, elpd {child_df['elpd'].sum():.1f}; convergence gate "
+                f"{'PASS' if record.passed else 'FAIL'}"
+            )
+
+    child_scores = pd.concat(scores, ignore_index=True)
+    child_scores.to_csv(os.path.join(OUT_DIR, f"{stem}_child_elpds{suffix}.csv"), index=False)
+    quantities = [q for q in TD_QUANTITIES[td_engine(specs[0][1])] if q in child_scores]
+    by_study = (
+        child_scores.groupby(["model", "study"], sort=False)
+        .agg(n_children=("subject_code", "nunique"), n_rows=("n_rows", "sum"),
+             **{q: (q, "sum") for q in quantities})
+        .reset_index()
+    )
+    by_study.to_csv(os.path.join(OUT_DIR, f"{stem}_by_study{suffix}.csv"), index=False)
+
+    flags = model_convergence_flags(fit_records)
+    unconverged = sorted(m for m, ok in flags.items() if not ok)
+    if unconverged:
+        print("\n" + "!" * 74)
+        print("!!! CONVERGENCE WARNING: at least one fold fit failed the diagnostics gate")
+        print(f"!!! for: {', '.join(unconverged)}. Their scores must not be interpreted")
+        print("!!! (all_folds_converged=False in the CSVs).")
+        print("!" * 74)
+
+    cluster = "subject_code" if holdout_unit == "subject" else "study"
+    summary = summarise_td(child_scores, cluster, flags)
+    summary.to_csv(os.path.join(OUT_DIR, f"{stem}_summary{suffix}.csv"), index=False)
+    print("\n=== Summary (SE over " + ("children" if cluster == "subject_code" else "studies") + ") ===")
+    print(summary.to_string(index=False))
+    if len(models) > 1:
+        pairs = pairwise_td(child_scores, cluster, flags)
+        pairs.to_csv(os.path.join(OUT_DIR, f"{stem}_compare{suffix}.csv"), index=False)
+        print("\n=== Pairwise (paired over the same children) ===")
+        print(pairs.to_string(index=False))
+
+    fit_df = pd.DataFrame([r.__dict__ for r in fit_records])
+    fit_df.to_csv(os.path.join(OUT_DIR, f"{stem}_fits{suffix}.csv"), index=False)
+    print("\n=== Fit timings and convergence ===")
+    print(fit_df.to_string(index=False))
+
+    write_comparison_manifest(
+        OUT_DIR,
+        script=f"kfold_loso.py (td {holdout_unit}: {'+'.join(models)}{suffix})",
+        contributing={},
+        outputs=written.written(),
+        source_data_hash=source_data_hash(env.DATA_DIR),
+        arguments=[
+            *models,
+            f"holdout-unit={holdout_unit}",
+            f"K={K}" if holdout_unit == "subject" else "K=studies",
+            f"max-folds={max_folds}",
+            f"config={sampling_config_name}",
+            f"score-draws={score_draws}",
+            f"quadrature-nodes={quadrature_nodes}",
+            f"analysis-frame={frame_hash}",
+        ],
+    )
+    total_wall = fit_df["wall_seconds"].sum()
+    print(f"\nTotal fit + scoring wall time: {total_wall:.1f}s ({total_wall/60:.1f} min)")
+
+
 def main(
     K: int = 5,
     sampling_config_name: str = "test",
@@ -521,7 +1493,34 @@ def main(
     suffix: str = "",
     holdout_unit: str = "subject",
     visit1_conditioning: str = "all-outcomes",
+    *,
+    max_folds: int | None = None,
+    score_draws: int = DEFAULT_SCORE_DRAWS,
+    quadrature_nodes: int = DEFAULT_QUADRATURE_NODES,
 ) -> None:
+    td = [m for m in models if m in TD_AVAILABLE]
+    if td:
+        if len(td) != len(models):
+            raise SystemExit(
+                "A run scores one population: the Down syndrome models are scored on "
+                "the pooled Down syndrome frame and the typically developing ones on "
+                f"their own. Got {', '.join(models)}."
+            )
+        if visit1_conditioning != "all-outcomes":
+            raise SystemExit("--visit1-conditioning applies to the Down syndrome later-waves unit only.")
+        main_td(
+            K, sampling_config_name, models, suffix, holdout_unit,
+            max_folds=max_folds, score_draws=score_draws,
+            quadrature_nodes=quadrature_nodes,
+        )
+        return
+    if holdout_unit == "study":
+        raise SystemExit(
+            "--holdout-unit study is implemented for the typically developing models "
+            f"{sorted(TD_AVAILABLE)} only."
+        )
+    if max_folds is not None:
+        raise SystemExit("--max-folds applies to the typically developing path only.")
     if holdout_unit not in HOLDOUT_UNITS:
         raise SystemExit(f"--holdout-unit must be one of {HOLDOUT_UNITS}")
     if visit1_conditioning not in VISIT1_CONDITIONINGS:
@@ -757,8 +1756,9 @@ if __name__ == "__main__":
         choices=HOLDOUT_UNITS,
         help=(
             "what a fold removes from the likelihood: every row of its children "
-            "(subject, the default), or only their rows after the first "
-            "administration wave (later-waves)"
+            "(subject, the default), only their rows after the first "
+            "administration wave (later-waves, Down syndrome only), or one whole "
+            "study per fold (study, typically developing only)"
         ),
     )
     ap.add_argument(
@@ -782,6 +1782,27 @@ if __name__ == "__main__":
         help="appended to the output filenames so a non-default model set "
         "does not overwrite the VG07/VG08/VG09 results",
     )
+    ap.add_argument(
+        "--max-folds",
+        type=int,
+        default=None,
+        help="typically developing path only: run the first N folds and stop "
+        "(a smoke run; the totals then cover only those folds' children)",
+    )
+    ap.add_argument(
+        "--score-draws",
+        type=int,
+        default=DEFAULT_SCORE_DRAWS,
+        help="typically developing path: posterior draws the integrated scorer "
+        "averages over, evenly thinned (0 = all)",
+    )
+    ap.add_argument(
+        "--quadrature-nodes",
+        type=int,
+        default=DEFAULT_QUADRATURE_NODES,
+        help="typically developing path: adaptive Gauss-Hermite nodes per effect "
+        "dimension",
+    )
     a = ap.parse_args()
     chosen = tuple(m.strip().upper() for m in a.models.split(",") if m.strip())
     unknown = [m for m in chosen if m not in AVAILABLE]
@@ -794,4 +1815,7 @@ if __name__ == "__main__":
         suffix=a.suffix,
         holdout_unit=a.holdout_unit,
         visit1_conditioning=a.visit1_conditioning,
+        max_folds=a.max_folds,
+        score_draws=a.score_draws,
+        quadrature_nodes=a.quadrature_nodes,
     )
