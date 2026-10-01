@@ -840,9 +840,10 @@ VARIANTS: dict[tuple[str, str], dict] = {
     # and only a model carrying both terms can say whether `beta_lag` survives
     # it. VG16 carries no sex covariate, so neither does this arm. It needs a
     # class promotion rather than a scalar override, because the correlation
-    # field lives on the correlated subclass. Recovery at the designed
-    # (beta, rho) cells cannot target a sensitivity variant; VG25 carries both
-    # terms on the joint engine for that check (#297 check 4).
+    # field lives on the correlated subclass. Once it is fitted, the designed
+    # (beta, rho) cells run on it through `fit_recovery.py vg16 --variant corr`
+    # with `--set-truth beta_lag=0` or `--set-truth rho_uq_raw=0.5`
+    # (rho_uq = 2 * rho_uq_raw - 1); scripts/vm/campaign.sh schedules all three.
     ("vg16", "corr"): {"suffix": "corr", "promote": (
         BivariateCorrelatedSubjectREModelDefinition,
         {"subject_re_correlation_eta": 2.0})},
