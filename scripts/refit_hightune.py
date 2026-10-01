@@ -35,6 +35,7 @@ alone. Record the mismatch wherever the comparison is reported.
 """
 import argparse
 import importlib
+import os
 from multiprocessing import freeze_support
 
 import dse_research_utils.environment.setup as setup
@@ -42,6 +43,7 @@ import dse_research_utils.statistics.models.sampling as S
 from dse_research_utils.statistics.models.sampling import SamplingConfiguration
 
 from vocab_growth import environment as env
+from vocab_growth.fit_artifacts import REPLACE_MODEL_OF_RECORD_ENV_VAR
 
 
 # Which models have sensitivity variants, and the engine each is fitted through.
@@ -73,6 +75,11 @@ if __name__ == "__main__":
     p.add_argument("--target-accept", type=float, required=True)
     p.add_argument("--chains", type=int, default=6)
     p.add_argument("--output-dir", default=None)
+    p.add_argument(
+        "--replace-model-of-record",
+        action="store_true",
+        help="As fit_model.py: allow replacing a fit of record made under other code (issue #362).",
+    )
     freeze_support()
     a = p.parse_args()
 
@@ -99,6 +106,8 @@ if __name__ == "__main__":
     S.get_sampling_configuration = _patched
 
     env.set_output_root(a.output_dir)
+    if a.replace_model_of_record:
+        os.environ[REPLACE_MODEL_OF_RECORD_ENV_VAR] = "1"
     setup.init_script()
     target = f"{a.model} [variant: {a.variant}]" if a.variant else a.model
     print(

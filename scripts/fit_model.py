@@ -21,6 +21,7 @@ from vocab_growth import environment as env
 from vocab_growth.analysis_frames import expected_analysis_frame_hash
 from vocab_growth.fit_artifacts import (
     NUTPIE_BACKENDS,
+    REPLACE_MODEL_OF_RECORD_ENV_VAR,
     FitValidationError,
     TracePersistence,
     configured_nutpie_backend,
@@ -257,6 +258,18 @@ if __name__ == "__main__":
         ),
     )
 
+    parser.add_argument(
+        "--replace-model-of-record",
+        action="store_true",
+        help=(
+            "Allow this fit to replace a registered model's complete, clean "
+            "reporting fit made under another executable-code signature or at a "
+            "higher tier. Without it such a promotion is refused at launch, so "
+            "a development fit cannot overwrite the model of record in a shared "
+            "output root (issue #362). Pass it for a deliberate refit cycle."
+        ),
+    )
+
     freeze_support()
 
     args = parser.parse_args()
@@ -273,6 +286,8 @@ if __name__ == "__main__":
     # --output-dir wins over $DSE_VOCAB_GROWTH_OUTPUT_DIR, which wins over the
     # repo-local output/ default.
     env.set_output_root(args.output_dir)
+    if args.replace_model_of_record:
+        os.environ[REPLACE_MODEL_OF_RECORD_ENV_VAR] = "1"
     # Same precedence for how much of each trace is kept. Setting the override
     # is not enough to validate it: with the flag omitted this only clears the
     # override, and the environment variable would not be parsed until the first

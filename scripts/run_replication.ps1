@@ -95,6 +95,11 @@ param(
     # and are refused by check_fit.py --purpose publish, so this is for local
     # development runs only.
     [switch]   $AllowDirty,
+    # Let fits replace a registered model's fit of record made under another
+    # executable-code signature (fit_model.py --replace-model-of-record). A
+    # refit cycle passes it deliberately; without it such a fit is refused at
+    # launch, so a stray run cannot overwrite the published set (issue #362).
+    [switch]   $ReplaceModelOfRecord,
     # Re-launch disowned and return immediately.
     [switch]   $Detach
 )
@@ -211,7 +216,7 @@ if ($Detach -and -not $env:_REPL_DETACHED) {
     if ($OutputDir)        { $childArgs += @('-OutputDir', $OutputDir) }
     if ($TracePersistence) { $childArgs += @('-TracePersistence', $TracePersistence) }
     foreach ($s in 'RenderOnFit', 'NoSync', 'Fresh', 'IncludeKfold', 'NoDescriptives',
-                   'NoFit', 'NoCompare', 'NoRender', 'NoUpload', 'AllowDirty') {
+                   'NoFit', 'NoCompare', 'NoRender', 'NoUpload', 'AllowDirty', 'ReplaceModelOfRecord') {
         if ((Get-Variable $s -ValueOnly)) { $childArgs += "-$s" }
     }
     $env:_REPL_DETACHED = '1'
@@ -415,6 +420,7 @@ if (-not $NoFit) {
 
             $fitArgs = @('run', 'python', 'scripts/fit_model.py', $model, '--config', $Config, '--output-dir', $OutRoot)
             if ($RenderOnFit)      { $fitArgs += '--render' }
+            if ($ReplaceModelOfRecord) { $fitArgs += '--replace-model-of-record' }
             if ($TracePersistence) { $fitArgs += @('--trace-persistence', $TracePersistence) }
 
             $outFile = Join-Path $RunDir "fit_$model.out"

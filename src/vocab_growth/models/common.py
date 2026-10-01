@@ -79,6 +79,7 @@ from vocab_growth.fit_artifacts import (
     diagnostics_scan_completed,
     git_metadata,
     is_reporting_quality_config,
+    model_of_record_replacement_refusal,
     normalise_for_json,
     promote_staged_fit,
     require_classified_sampling_config,
@@ -2409,6 +2410,17 @@ def run_fit_pipeline(
         ci_prob=0.89,
         interval_kind="eti",
     )
+    # Refuse before sampling, not after hours of it, to replace a fit of record
+    # made under other code (issue #362, guard a). Checked again at promotion,
+    # because the directory can change while this fit samples.
+    current_implementation = implementation_signature()
+    refusal = model_of_record_replacement_refusal(
+        canonical_reporting.output_dir,
+        sampling_config_name=config,
+        current_implementation=current_implementation,
+    )
+    if refusal is not None:
+        raise RuntimeError(refusal)
     # The model *id*, not the label: the label already names the directory
     # inside this root, and repeating it can push a long variant's paths past
     # Windows' MAX_PATH. See create_staging_root.
@@ -2494,6 +2506,15 @@ def run_fit_pipeline(
             config_name=definition.config_name,
             sampling_config_name=config,
         )
+        refusal = model_of_record_replacement_refusal(
+            canonical_reporting.output_dir,
+            sampling_config_name=config,
+            current_implementation=current_implementation,
+        )
+        if refusal is not None:
+            # Raised inside the try, so the completed fit is retained under
+            # failed/ rather than discarded with the staging root.
+            raise RuntimeError(refusal)
         promote_staged_fit(
             context.reporting.output_dir,
             canonical_reporting.output_dir,

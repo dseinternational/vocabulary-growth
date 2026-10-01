@@ -87,6 +87,8 @@ Use `--help` for the full interface and the [runbook](https://github.com/dseinte
 
 Output goes to `<output-root>/models/<model-name>/`. The root is chosen from `--output-dir`, then `DSE_VOCAB_GROWTH_OUTPUT_DIR`, then the checkout's `output/`. Fit, sensitivity, sync and upload commands use this same rule. The report cache always stays at `docs/report/figures/`.
 
+A fit refuses, at launch and again at promotion, to replace a registered model's complete, clean reporting fit made under another executable-code signature or at a higher tier. A refit cycle passes `--replace-model-of-record` (`-ReplaceModelOfRecord` on `run_replication.ps1`). Run each cycle from a worktree pinned at its `fits/YYYY-MM-DD` tag, and give development fits in the main checkout their own output root; see the runbook's pinned-worktree section.
+
 `--trace-persistence` accepts `full` (default), `compact` or `minimal`, overriding `DSE_VOCAB_GROWTH_TRACE_PERSISTENCE`. Observation-sized deterministic arrays are omitted at every tier and can be rebuilt with `posterior_recompute`. `compact` also omits scaled random effects; `minimal` additionally omits log likelihood and posterior predictive draws. These choices do not change the posterior, but recovery scoring, `loso_compare.py` and `regenerate_plots.py` require `full`. Check downstream needs before reducing storage. The manifest records omissions under `artefacts.trace`.
 
 `--nutpie-backend` selects `numba` (default) or `jax`, overriding `DSE_VOCAB_GROWTH_NUTPIE_BACKEND`. JAX is the fallback for the documented VG15 `fallback-dispersion` compilation failure on Linux aarch64. The backend is recorded as runtime information.

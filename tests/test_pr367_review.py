@@ -208,7 +208,10 @@ def test_expressive_self_check_exercises_the_nested_helper(monkeypatch):
     expressive._verify()
 
 
-def test_nested_experiment_outputs_do_not_poison_publication(tmp_path):
+def test_nested_experiment_outputs_do_not_poison_publication(tmp_path, monkeypatch):
+    # Publication requires a clean generating checkout (#362); pin it so the
+    # test does not depend on the state of the checkout running it.
+    monkeypatch.setattr(provenance, "git_metadata", lambda root: {"commit": "abc", "dirty": False})
     comparisons = tmp_path / "comparisons"
     experiment = comparisons / "experiments" / "age_at_word_count"
     experiment.mkdir(parents=True)
