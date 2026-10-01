@@ -172,3 +172,4 @@ The September documentation review removed the May meeting summary, August proje
 | [202609231200](202609231200-statistical-review-corrections.md)                   | Statistical review and corrections                           | Methodological correction record            |
 | [202609271730](202609271730-research-utils-016-upgrade.md)                       | Research utils 016 upgrade                                   | Implementation record; see successor notice |
 | [202609281111](202609281111-research-utils-0161-upgrade.md)                      | Research utils 0.16.1 upgrade                                | Implementation record                       |
+| [202610011200](202610011200-gompertz-mean-harness.md)                            | Gompertz mean-function harness (#330)                        | Implementation record; result pending       |
