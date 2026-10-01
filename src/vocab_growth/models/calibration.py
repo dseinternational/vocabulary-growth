@@ -204,6 +204,7 @@ def write_trace_calibration(
     output_dir: str,
     outcomes: tuple[tuple[str, str, str | None], ...],
     strata: dict[str, tuple[str, str, str]] | None = None,
+    child_column: str | None = "subject_id",
 ) -> pd.DataFrame:
     """Write calibration rows for posterior-predictive variables in a trace.
 
@@ -220,6 +221,17 @@ def write_trace_calibration(
     applies to fits made before it existed. A stratum with no rows is skipped
     rather than written empty -- which is what the ``paired_only`` treatment
     leaves behind.
+
+    Every outcome is also split by whether its child is seen more than once
+    among that outcome's own observed rows, when the prepared frame carries
+    ``child_column`` (issue #236's repeated-child check). A child effect is
+    informed by replication for a repeated child and by shrinkage alone for a
+    single-visit one, and most children in the typically developing pool are
+    seen once, so a pooled row can hide a group the child block fits poorly. A
+    row with no recorded child counts as a single visit. The split is written
+    only when both groups are present, since otherwise it repeats the pooled
+    row, and like the branch split it is read from the prepared frame, so it
+    needs no refit.
     """
     strata = strata or {}
     tables: list[pd.DataFrame] = []
@@ -265,6 +277,28 @@ def write_trace_calibration(
         table = predictive_calibration_table(observed, predictive, ages)
         table.insert(0, "outcome", label)
         tables.append(table)
+
+        if child_column is not None and child_column in analysis_df.columns:
+            children = pd.Series(analysis_df.loc[mask, child_column].to_numpy())
+            if len(children) != observed.size:
+                raise ValueError(
+                    f"{child_column} has {len(children)} rows for {variable} but "
+                    f"{observed.size} observations; the child split must be "
+                    "defined over the outcome's own observed rows."
+                )
+            repeated = (
+                children.map(children.value_counts()).fillna(1).to_numpy() >= 2
+            ) & children.notna().to_numpy()
+            if repeated.any() and not repeated.all():
+                for rows, sub_label in (
+                    (repeated, f"{label} (repeated child)"),
+                    (~repeated, f"{label} (single-visit child)"),
+                ):
+                    sub = predictive_calibration_table(
+                        observed[rows], predictive[rows], ages[rows]
+                    )
+                    sub.insert(0, "outcome", sub_label)
+                    tables.append(sub)
 
         stratum = strata.get(label)
         if stratum is None:
