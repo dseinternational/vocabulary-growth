@@ -35,6 +35,7 @@ definition and invalidate every VG24 fit on disk.
 import os
 import types
 from dataclasses import fields, replace
+from functools import lru_cache
 
 import dse_research_utils.statistics.models.data as model_data
 import dse_research_utils.statistics.models.pymc_utils as pymc_utils
@@ -731,6 +732,7 @@ def graphs(tmp_path_factory):
             for name, definition in variants.items()
         }
     finally:
+        _factor_logp.cache_clear()
         patcher.undo()
 
 
@@ -743,6 +745,12 @@ def _perturbed(model, *, delta=1.0):
     return point, moved
 
 
+@lru_cache(maxsize=32)
+def _factor_logp(model, factor):
+    """Compile each unchanged model/factor once; never cache evaluated values."""
+    return model.compile_logp(vars=[model.named_vars[factor]])
+
+
 def _moved_by_beta(model, factor, *, delta=1.0):
     """|change in this factor's log density| when ``beta_sign_lag`` moves.
 
@@ -751,9 +759,8 @@ def _moved_by_beta(model, factor, *, delta=1.0):
     every_branch` is what rules that out, and this raises rather than returning
     a comfortable zero if a node ever goes missing.
     """
-    rv = model.named_vars[factor]
     point, moved = _perturbed(model, delta=delta)
-    logp = model.compile_logp(vars=[rv])
+    logp = _factor_logp(model, factor)
     return abs(float(logp(moved)) - float(logp(point)))
 
 

@@ -84,6 +84,7 @@ def test_render_pins_quarto_python_to_the_fitting_interpreter(monkeypatch, tmp_p
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(_MODULE.subprocess, "run", fake_run)
+    monkeypatch.setattr("vocab_growth.render_cache.render_inputs", lambda *args: {"test": "inputs"})
     monkeypatch.setenv("QUARTO_PYTHON", "/usr/bin/python3")
     monkeypatch.setenv("DSE_RENDER_ENV_SENTINEL", "inherited")
 

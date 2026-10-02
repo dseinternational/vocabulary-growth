@@ -51,7 +51,7 @@ python3 tests/test_notes_index.py
 
 A bare `pytest` runs only tests marked `not slow`. Run the full set before pushing engine changes. For parallel runs, use `-n auto --dist loadfile -m "not slow"` for fast tests and `-n auto --dist loadgroup -m slow` for slow tests. Slow tests sharing an expensive fit or compiled fixture need an `xdist_group` mark so they stay on one worker.
 
-`mypy` checks the four declaration modules listed in `pyproject.toml`, not the PyTensor graph code. CI splits fast and slow tests into separate jobs. Changes to agent instructions or `docs/models/` run the full CI checks even if they only edit prose.
+`mypy` checks the four declaration modules listed in `pyproject.toml`, not the PyTensor graph code. CI splits fast and slow tests into separate jobs. Verified Ruff, mypy and documentation-tool dependency updates skip model tests and the smoke fit; shared dependencies and unknown changes run the full checks. Changes to agent instructions or `docs/models/` run the full CI checks even if they only edit prose.
 
 The test fixtures use Matplotlib's Agg backend and suppress routine reporting figures. Mark a test `emits_reporting_artefacts` when it needs to check those outputs. Prepare the data before tests in a fresh checkout; the database and merged CSV are generated files.
 
@@ -83,7 +83,7 @@ uv run python scripts/fit_model.py vg20 --config rep --render
 uv run python scripts/fit_model.py vg20 --config rep --render-only
 ```
 
-Use `--help` for the full interface and the [runbook](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/runbooks/full-refit.md) for a reporting run. `all` takes its model set from the registry. `dev` is the default; `test` and `rep` provide longer sampling runs. A render failure leaves a completed fit available for `--render-only`.
+Use `--help` for the full interface and the [runbook](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/runbooks/full-refit.md) for a reporting run. `all` takes its model set from the registry. `dev` is the default; `test` and `rep` provide longer sampling runs. A render failure leaves a completed fit available for `--render-only`. Rendering reuses a checked report when its inputs and outputs match; `--force-render` rebuilds it. The replication driver also reuses checked comparisons and books. Use `-FreshReports` to rebuild those outputs without forcing new samples.
 
 Output goes to `<output-root>/models/<model-name>/`. The root is chosen from `--output-dir`, then `DSE_VOCAB_GROWTH_OUTPUT_DIR`, then the checkout's `output/`. Fit, sensitivity, sync and upload commands use this same rule. The report cache always stays at `docs/report/figures/`.
 
@@ -99,7 +99,7 @@ For parameter recovery, see the [recovery runbook](https://github.com/dseinterna
 uv run python scripts/fit_recovery.py headline --config test --replicates 3
 ```
 
-`headline` selects VG20, VG12 and VG15. `all` uses `recovery.spec.supported_models()`; excluded models have reasons in `UNSUPPORTED_REASONS`. Posterior truth requires an existing fit; `--truth prior` does not. `--set-truth NAME=VALUE` sets a free variable before derived quantities are recomputed. VG16 is supported. VG25 requires simulation in wave order because its lag reads a same-stage outcome. Score only converged replicates, and do not treat a few replicates as a coverage guarantee.
+`headline` selects VG20, VG12 and VG15. `all` uses `recovery.spec.supported_models()`; excluded models have reasons in `UNSUPPORTED_REASONS`. Posterior truth requires an existing fit; `--truth prior` does not. Recovery commands resume simulations and complete, compatible, converged fits with recorded checkpoints. `--fresh` reruns the selected stages. Old outputs without checkpoints are rebuilt once. `--set-truth NAME=VALUE` sets a free variable before derived quantities are recomputed. VG16 is supported. VG25 requires simulation in wave order because its lag reads a same-stage outcome. Score only converged replicates, and do not treat a few replicates as a coverage guarantee.
 
 Prepare report assets in this order:
 

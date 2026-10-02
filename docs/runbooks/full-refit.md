@@ -43,6 +43,14 @@ uv run python scripts/resume_from_trace.py vg11 /path/to/retained-fit --config r
 
 This explicit override applies only to code changes with recorded source hashes and unchanged numerical library versions. Matching definitions and frames alone cannot rule out a changed likelihood. The command still rejects a changed definition or frame, missing provenance, and changed numerical libraries. It records the reason and both signatures. The new manifest describes the current reporting code and runtime, preserves the original sampling settings, and archives the retained manifest under `artefacts.retained_sampling_manifest`. Publication requires clean recorded checkouts for both the sampling and the regenerated reports.
 
+### Reuse comparison and report outputs
+
+The driver also records checkpoints for comparisons, model reports and books. A checkpoint is reusable only when its recorded inputs and every recorded output still match. Comparison inputs include the invocation, generating code, source files, data fingerprint and every fit in the output root, not only the recorded contributors. A comparison that skipped a missing or unusable fit therefore reruns when that fit appears or changes. Model-report inputs include templates, shared includes, summary tables, figures, the fit manifest and trace file metadata. Report-book inputs include its included files, cached figures and tables, numerical environment and Quarto version. Fit validation still runs before downstream steps.
+
+`-RenderOnFit` writes a render checkpoint, so the later render phase can reuse the same report. `-FreshReports` rebuilds comparisons, report figures and reports; `-Fresh` continues to control sampling separately. A report rendered successfully during fitting is reused in the later phase even with `-FreshReports`. For one model, use `fit_model.py --render-only --force-render`. Use `prepare_report_figures.py --fresh` to regenerate descriptive, illustration and prior figures. Force figure preparation and rendering after changing installed fonts, because font files are not part of the checkpoints.
+
+The book wrapper clears generated Quarto execution caches when included code, fitted inputs or the numerical environment change. Plain chapter edits retain Quarto's `freeze: auto` behaviour. Direct `quarto render` commands do not use these checkpoints.
+
 ### Batch failure semantics
 
 A required-step failure stops downstream comparison and publication phases. Read the run log, `status.tsv` and the final `SUCCESS` or `FAILED` marker together. A launcher can return successfully while a detached child is still running, and a terminated driver may leave only `START` entries. Confirm process state before resuming.

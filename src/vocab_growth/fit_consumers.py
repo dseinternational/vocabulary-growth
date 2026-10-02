@@ -82,6 +82,14 @@ EXEMPT_CONSUMERS: dict[str, str] = {
         "mid-promotion liveness guard instead, which is the risk actually present "
         "when rewriting a fit in place."
     ),
+    "resume_comparison.py": (
+        "checks trace file metadata without opening posterior values. Its child "
+        "comparison script validates fits before generating any result. Reuse "
+        "requires the same recorded comparison entry, code, data and hashed "
+        "outputs, and the same manifests, lifecycle files, summary tables and "
+        "trace metadata for every fit in the output root. "
+        "The replication driver and report sync retain their validation gates."
+    ),
 }
 
 _frame_hashes: dict[str, str] = {}

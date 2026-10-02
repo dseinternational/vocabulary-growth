@@ -80,12 +80,14 @@ def test_the_exemptions_name_scripts_that_exist_and_read_a_trace():
         )
 
 
-def test_the_sixteen_are_still_sixteen():
+def test_the_trace_reader_count_is_reviewed():
     """A count, so a new consumer is noticed even if it happens to validate.
 
     Sixteen top-level scripts opened a trace when finding 1's coverage was
     enumerated on 2026-09-06. The number is not sacred -- but it moving is worth
     a moment's thought about whether the new script belongs on this list, so
-    changing it here should be deliberate.
+    changing it here should be deliberate. The seventeenth script is the
+    comparison-resume wrapper: it inspects trace metadata, and its exemption
+    explains why that does not introduce another posterior reader.
     """
-    assert len(_trace_reading_scripts()) == 16
+    assert len(_trace_reading_scripts()) == 17

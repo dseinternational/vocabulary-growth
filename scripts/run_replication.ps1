@@ -84,6 +84,8 @@ param(
     [switch]   $NoSync,
     # Refit even where compatible complete output exists.
     [switch]   $Fresh,
+    # Rebuild comparisons and rendered reports even when checked outputs exist.
+    [switch]   $FreshReports,
     # Also run kfold_loso.py (expensive; refits per fold).
     [switch]   $IncludeKfold,
     [switch]   $NoDescriptives,
@@ -215,7 +217,7 @@ if ($Detach -and -not $env:_REPL_DETACHED) {
     if ($Scope)            { $childArgs += @('-Scope', $Scope) }
     if ($OutputDir)        { $childArgs += @('-OutputDir', $OutputDir) }
     if ($TracePersistence) { $childArgs += @('-TracePersistence', $TracePersistence) }
-    foreach ($s in 'RenderOnFit', 'NoSync', 'Fresh', 'IncludeKfold', 'NoDescriptives',
+    foreach ($s in 'RenderOnFit', 'NoSync', 'Fresh', 'FreshReports', 'IncludeKfold', 'NoDescriptives',
                    'NoFit', 'NoCompare', 'NoRender', 'NoUpload', 'AllowDirty', 'ReplaceModelOfRecord') {
         if ((Get-Variable $s -ValueOnly)) { $childArgs += "-$s" }
     }
@@ -374,12 +376,15 @@ Write-Log ("phases: descriptives={0} fit={1} compare={2} render={3} upload={4} k
 # 1. Data prep + descriptives
 if (-not $NoDescriptives) {
     Invoke-Step 'prepare_data'       'uv' @('run', 'python', 'scripts/prepare_data.py')                | Out-Null
-    Invoke-Step 'descriptive_report' 'uv' @('run', 'python', 'scripts/prepare_report_figures.py', 'descriptives') | Out-Null
+    $descriptiveArgs = @('run', 'python', 'scripts/prepare_report_figures.py', 'descriptives')
+    if ($FreshReports) { $descriptiveArgs += '--fresh' }
+    Invoke-Step 'descriptive_report' 'uv' $descriptiveArgs | Out-Null
     Stop-IfFailed
 }
 
 # 2. Fit each model in its own process, up to -MaxParallel at once. Rendering is
 #    a separate retryable phase unless -RenderOnFit folds it into the fit.
+$renderedOnFit = [System.Collections.Generic.HashSet[string]]::new()
 if (-not $NoFit) {
     $queue = [System.Collections.Generic.Queue[string]]::new()
     foreach ($m in $Models) { $queue.Enqueue($m) }
@@ -392,6 +397,7 @@ if (-not $NoFit) {
             $rc   = $job.Process.ExitCode
             $secs = [int]((Get-Date) - $job.Started).TotalSeconds
             if ($rc -eq 0) {
+                if ($RenderOnFit) { [void]$renderedOnFit.Add($job.Model) }
                 Write-Log "<<< OK    fit_$($job.Model) (${secs}s)"
                 Add-Mark "fit_$($job.Model)" 'OK' "${secs}s"
             }
@@ -421,6 +427,7 @@ if (-not $NoFit) {
             $fitArgs = @('run', 'python', 'scripts/fit_model.py', $model, '--config', $Config, '--output-dir', $OutRoot)
             if ($RenderOnFit)      { $fitArgs += '--render' }
             if ($ReplaceModelOfRecord) { $fitArgs += '--replace-model-of-record' }
+            if ($FreshReports)     { $fitArgs += '--force-render' }
             if ($TracePersistence) { $fitArgs += @('--trace-persistence', $TracePersistence) }
 
             $outFile = Join-Path $RunDir "fit_$model.out"
@@ -454,7 +461,9 @@ if (-not $NoCompare) {
              'compare_ds_td_latency', 'compare_ds_td_q_overlap', 'compare_ds_td_re')
     if ($IncludeKfold) { $cmp += 'kfold_loso' }
     foreach ($c in $cmp) {
-        Invoke-Step "cmp_$c" 'uv' @('run', 'python', "scripts/$c.py") | Out-Null
+        $cmpArgs = @('run', '--no-sync', 'python', 'scripts/resume_comparison.py', "$c.py", '--output-dir', $OutRoot)
+        if ($FreshReports) { $cmpArgs += '--fresh' }
+        Invoke-Step "cmp_$c" 'uv' $cmpArgs | Out-Null
     }
     Stop-IfFailed
 }
@@ -462,7 +471,9 @@ if (-not $NoCompare) {
 # 4. Retry model-output rendering, sync figures, then render the combined reports.
 if (-not $NoRender) {
     foreach ($m in $Models) {
-        Invoke-Step "render_model_$m" 'uv' @('run', 'python', 'scripts/fit_model.py', $m, '--config', $Config, '--render-only', '--output-dir', $OutRoot) | Out-Null
+        $renderArgs = @('run', 'python', 'scripts/fit_model.py', $m, '--config', $Config, '--render-only', '--output-dir', $OutRoot)
+        if ($FreshReports -and -not $renderedOnFit.Contains($m)) { $renderArgs += '--force-render' }
+        Invoke-Step "render_model_$m" 'uv' $renderArgs | Out-Null
     }
     Stop-IfFailed
     $syncArgs = @('run', 'python', 'scripts/sync_report_figures.py', '--config', $Config, '--output-dir', $OutRoot)
@@ -471,9 +482,15 @@ if (-not $NoRender) {
     # Everything the report needs that is not model output (introduction
     # illustrations, the methods chapter's prior figures, placeholders for any
     # figure still absent): the sync neither validates nor regenerates these.
-    Invoke-Step 'prepare_figures'   'uv'     @('run', 'python', 'scripts/prepare_report_figures.py', 'illustrations', 'priors', 'pending') | Out-Null
-    Invoke-Step 'render_report'     'quarto' @('render', 'docs/report')               | Out-Null
-    Invoke-Step 'render_comparison' 'quarto' @('render', 'docs/comparison/index.qmd') | Out-Null
+    $figureArgs = @('run', 'python', 'scripts/prepare_report_figures.py', 'illustrations', 'priors', 'pending')
+    if ($FreshReports) { $figureArgs += '--fresh' }
+    Invoke-Step 'prepare_figures' 'uv' $figureArgs | Out-Null
+    foreach ($target in 'docs/report', 'docs/comparison/index.qmd') {
+        $bookArgs = @('run', '--no-sync', 'python', 'scripts/render_reports.py', $target, '--output-dir', $OutRoot)
+        if ($FreshReports) { $bookArgs += '--force' }
+        $name = if ($target -eq 'docs/report') { 'render_report' } else { 'render_comparison' }
+        Invoke-Step $name 'uv' $bookArgs | Out-Null
+    }
     Stop-IfFailed
 }
 

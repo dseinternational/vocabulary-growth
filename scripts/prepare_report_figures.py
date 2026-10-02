@@ -47,16 +47,23 @@ import matplotlib.pyplot as plt
 
 import vocab_growth.environment as local_env
 from vocab_growth.descriptive import write_descriptive_artefacts
+from vocab_growth.fit_artifacts import source_data_hash
 from vocab_growth.report_illustrations import (
     RANDOM_SEED,
     write_intro_illustrations,
     write_prior_illustrations,
 )
+from vocab_growth.workflow_cache import (
+    checkpoint_matches,
+    file_hashes,
+    record_checkpoint,
+    runtime_identity,
+)
 
 FIGURE_REF_RE = re.compile(r"!\[[^\n]*?\]\((figures/[^)\s]+)\)")
 
 
-def run_descriptives() -> None:
+def run_descriptives() -> list[Path]:
     # Primary home: the standalone descriptive report (docs/descriptive/).
     out_dir = os.path.join(local_env.DOCS_DIR, "descriptive", "figures")
     # Mirror: the main report's figure cache, so methods-data.qmd keeps rendering.
@@ -67,16 +74,20 @@ def run_descriptives() -> None:
     for name in artefacts:
         shutil.copy2(os.path.join(out_dir, name), os.path.join(mirror, name))
     print(f"Mirrored {len(artefacts)} artefacts into {mirror}")
+    return [Path(directory) / name for directory in (out_dir, mirror) for name in artefacts]
 
 
-def run_illustrations(seed: int) -> None:
-    write_intro_illustrations(local_env.REPORT_FIGS_DIR, seed=seed)
+def run_illustrations(seed: int) -> list[Path]:
+    stems = write_intro_illustrations(local_env.REPORT_FIGS_DIR, seed=seed)
+    return [Path(local_env.REPORT_FIGS_DIR) / f"{stem}.{ext}" for stem in stems for ext in ("png", "svg")]
 
 
-def run_priors(n_draws: int, seed: int) -> None:
-    write_prior_illustrations(
-        os.path.join(local_env.REPORT_FIGS_DIR, "methods"), n_draws=n_draws, seed=seed
+def run_priors(n_draws: int, seed: int) -> list[Path]:
+    directory = Path(local_env.REPORT_FIGS_DIR) / "methods"
+    stems = write_prior_illustrations(
+        str(directory), n_draws=n_draws, seed=seed
     )
+    return [directory / f"{stem}.{ext}" for stem in stems for ext in ("png", "svg")]
 
 
 def _figure_path_for_ref(ref: str) -> Path:
@@ -157,6 +168,28 @@ def run_pending() -> None:
 STAGES = ("descriptives", "illustrations", "priors", "pending")
 
 
+def run_stage(stage: str, *, draws: int, seed: int, fresh: bool = False) -> bool:
+    if stage == "pending":
+        run_pending()
+        return True
+    files = [Path(__file__), Path(local_env.ROOT_DIR) / "scripts/prepare_data.py"]
+    merged = Path(local_env.DATA_DIR) / "vocab_data_merged.csv"
+    if stage != "illustrations" and merged.exists():
+        files.append(merged)
+    inputs = {"stage": stage, "draws": draws, "seed": seed,
+              "files": file_hashes(files), "runtime": runtime_identity(),
+              "data": source_data_hash(local_env.DATA_DIR) if stage != "illustrations" else None}
+    checkpoint = Path(local_env.output_root()) / "workflow-checkpoints" / f"figures-{stage}.json"
+    if not fresh and checkpoint_matches(checkpoint, inputs):
+        print(f"Reusing current report figures: {stage}")
+        return False
+    checkpoint.unlink(missing_ok=True)
+    outputs = (run_descriptives() if stage == "descriptives" else
+               run_illustrations(seed) if stage == "illustrations" else run_priors(draws, seed))
+    record_checkpoint(checkpoint, inputs, outputs)
+    return True
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -167,6 +200,7 @@ def main() -> None:
                     help="Prior draws per model-structure figure.")
     ap.add_argument("--seed", type=int, default=RANDOM_SEED,
                     help="Seed for every simulated figure.")
+    ap.add_argument("--fresh", action="store_true", help="Regenerate figures instead of reusing checked outputs.")
     args = ap.parse_args()
     selected = [s for s in STAGES if not args.stages or s in args.stages]
 
@@ -180,14 +214,7 @@ def main() -> None:
 
     for stage in selected:
         print(f"\n== {stage} ==")
-        if stage == "descriptives":
-            run_descriptives()
-        elif stage == "illustrations":
-            run_illustrations(args.seed)
-        elif stage == "priors":
-            run_priors(args.draws, args.seed)
-        elif stage == "pending":
-            run_pending()
+        run_stage(stage, draws=args.draws, seed=args.seed, fresh=args.fresh)
 
 
 if __name__ == "__main__":
