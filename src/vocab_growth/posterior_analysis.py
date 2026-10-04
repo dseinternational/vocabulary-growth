@@ -13,52 +13,39 @@ kind through so the tables stay consistent with the plots and diagnostics.
 
 import numpy as np
 import pandas as pd
+from dse_research_utils.statistics.samples import sample_matrix
 
 from vocab_growth import intervals
 
 
-def extract_posterior(trace, name, dim):
-    """Extract posterior samples for ``name``, stacking chains and draws.
+def _extract_samples(array, dim, *, dtype=None):
+    """Copy labelled samples, retaining positional extraction for old traces.
 
-    Returns an array shaped ``(len(dim), n_chain * n_draw)``. Shared by the
-    multivariate engines, which previously each defined an identical private copy.
+    Unlabelled archived arrays retain their prior behaviour. This fallback
+    does not establish observation identity and does not invent coordinates.
     """
-    return np.array(
-        trace.posterior[name]
-        .stack(sample=("chain", "draw"))
-        .transpose(dim, "sample")
-        .values
-    )
+    if any(name not in array.indexes for name in ("chain", "draw", dim)):
+        return np.array(
+            array.stack(sample=("chain", "draw")).transpose(dim, "sample").values,
+            dtype=dtype,
+        )
+    matrix = sample_matrix(array, sample_dims=("chain", "draw"), observation_dims=(dim,))
+    return np.array(matrix.values, dtype=dtype, copy=True)
+
+
+def extract_posterior(trace, name, dim):
+    """Copy posterior samples into observation-by-sample order."""
+    return _extract_samples(trace.posterior[name], dim)
 
 
 def extract_posterior_predictive(trace, name, dim):
-    """Extract posterior-predictive samples for ``name`` as integer counts.
-
-    As :func:`extract_posterior`, but reads from ``posterior_predictive`` and
-    casts to ``int`` (the predictive draws are word counts).
-    """
-    return np.array(
-        trace.posterior_predictive[name]
-        .stack(sample=("chain", "draw"))
-        .transpose(dim, "sample")
-        .values,
-        dtype=int,
-    )
+    """Copy posterior-predictive word counts with the existing integer cast."""
+    return _extract_samples(trace.posterior_predictive[name], dim, dtype=int)
 
 
 def extract_posterior_predictive_float(trace, name, dim):
-    """Extract posterior-predictive samples for non-count deterministic values.
-
-    This mirrors :func:`extract_posterior_predictive`, but preserves floating
-    point values. It is used for predictive probabilities saved alongside
-    posterior-predictive count draws.
-    """
-    return np.array(
-        trace.posterior_predictive[name]
-        .stack(sample=("chain", "draw"))
-        .transpose(dim, "sample")
-        .values
-    )
+    """Copy posterior-predictive non-count values without an integer cast."""
+    return _extract_samples(trace.posterior_predictive[name], dim)
 
 
 def expand_observed_to_obs_id(trace, observed_name: str, mask_name: str):

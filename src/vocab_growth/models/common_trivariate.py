@@ -47,6 +47,7 @@ import pandas as pd
 import preliz as pz
 import pymc as pm
 import xarray as xr
+from dse_research_utils.statistics.models.likelihood import beta_binomial_from_p
 from preliz.distributions.distributions import Continuous
 
 import vocab_growth.data_utils as vocab_data_utils
@@ -936,15 +937,12 @@ def build_model_graph(
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]
-        p_u_obs_clip = pm.math.clip(p_u_obs_sel, EPSILON, 1 - EPSILON)
-        alpha_u = p_u_obs_clip * kappa_u_obs[idx_u]
-        beta_u = (1 - p_u_obs_clip) * kappa_u_obs[idx_u]
 
-        _ = pm.BetaBinomial(
+        _ = beta_binomial_from_p(
             "y_u_obs",
-            n=n_trials,
-            alpha=alpha_u,
-            beta=beta_u,
+            p=p_u_obs_sel,
+            n_trials=n_trials,
+            kappa=kappa_u_obs[idx_u],
             observed=y_u_observed,
             dims=("obs_u_id",),
         )
@@ -1311,54 +1309,48 @@ def sample_posterior_predictive(
 
     with context.model:
         # Understood — plot / query
-        p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
-        y_u_plot = pm.BetaBinomial(
+        y_u_plot = beta_binomial_from_p(
             "y_u_plot",
-            n=n_trials,
-            alpha=p_u_plot_clip * kappa_u_plot,
-            beta=(1 - p_u_plot_clip) * kappa_u_plot,
+            p=p_u_plot,
+            n_trials=n_trials,
+            kappa=kappa_u_plot,
             dims=("plot_id",),
         )
-        p_u_query_clip = pm.math.clip(p_u_query, EPSILON, 1 - EPSILON)
-        y_u_query = pm.BetaBinomial(
+        y_u_query = beta_binomial_from_p(
             "y_u_query",
-            n=n_trials,
-            alpha=p_u_query_clip * kappa_u_query,
-            beta=(1 - p_u_query_clip) * kappa_u_query,
+            p=p_u_query,
+            n_trials=n_trials,
+            kappa=kappa_u_query,
             dims=("query_id",),
         )
         # Spoken — plot / query
-        q_plot_clip = pm.math.clip(q_plot, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_s_plot",
-            n=y_u_plot,
-            alpha=q_plot_clip * kappa_s_plot,
-            beta=(1 - q_plot_clip) * kappa_s_plot,
+            p=q_plot,
+            n_trials=y_u_plot,
+            kappa=kappa_s_plot,
             dims=("plot_id",),
         )
-        q_query_clip = pm.math.clip(q_query, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_s_query",
-            n=y_u_query,
-            alpha=q_query_clip * kappa_s_query,
-            beta=(1 - q_query_clip) * kappa_s_query,
+            p=q_query,
+            n_trials=y_u_query,
+            kappa=kappa_s_query,
             dims=("query_id",),
         )
         # Signed — plot / query
-        r_plot_clip = pm.math.clip(r_plot, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_sign_plot",
-            n=y_u_plot,
-            alpha=r_plot_clip * kappa_sign_plot,
-            beta=(1 - r_plot_clip) * kappa_sign_plot,
+            p=r_plot,
+            n_trials=y_u_plot,
+            kappa=kappa_sign_plot,
             dims=("plot_id",),
         )
-        r_query_clip = pm.math.clip(r_query, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_sign_query",
-            n=y_u_query,
-            alpha=r_query_clip * kappa_sign_query,
-            beta=(1 - r_query_clip) * kappa_sign_query,
+            p=r_query,
+            n_trials=y_u_query,
+            kappa=kappa_sign_query,
             dims=("query_id",),
         )
 

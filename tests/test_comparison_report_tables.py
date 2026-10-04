@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from vocab_growth.comparison import summarise_draws
+from vocab_growth.comparison import nearest_supported_row, summarise_draws
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -126,9 +126,21 @@ def test_paper_does_not_quote_an_endpoint_for_an_unsupported_age(age):
     source = "\n".join(_cells("docs/paper/_paper_data.qmd"))
     function = next(node for node in ast.parse(source).body
                     if isinstance(node, ast.FunctionDef) and node.name == "comp_row")
-    namespace = {"pd": pd, "comp_load": lambda name: pd.DataFrame(
+    namespace = {"pd": pd, "nearest_supported_row": nearest_supported_row,
+                 "comp_load": lambda name: pd.DataFrame(
         {"age": [8, 18, 25], "d_median": [1, 100, 200]}
     )}
     exec(compile(ast.Module(body=[function], type_ignores=[]), "paper-comp-row", "exec"), namespace)
     assert namespace["comp_row"]("fixture", "age", age) is None
     assert namespace["comp_row"]("fixture", "age", 25)["d_median"] == 200
+
+
+def test_shared_lookup_retains_support_guard_and_first_row_ties(comparison):
+    _, namespace = comparison
+    frame = pd.DataFrame(
+        {"age": [np.inf, np.nan, 10, 20], "median": [999, 999, 1, 2]},
+        index=[5, 5, 7, 7],
+    )
+    assert namespace["_nearest"](frame, "age", 25).isna().all()
+    assert namespace["_nearest"](frame, "age", 15)["median"] == 1
+    assert namespace["_nearest"](frame, "age", 20)["median"] == 2

@@ -39,6 +39,8 @@ format:
 ---
 
 ::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-10-04.
+
 Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
 :::
 
@@ -54,13 +56,12 @@ This report compares the fitted Down syndrome (DS) and typically developing (TD)
 ```{python}
 import numpy as np
 import pandas as pd
+from vocab_growth.comparison import nearest_supported_row
 
 
 def _nearest(df, col, val):
-    df = df.dropna(subset=[col])
-    if df.empty or pd.isna(val) or val < df[col].min() or val > df[col].max():
-        return pd.Series(float("nan"), index=df.columns)
-    return df.iloc[(df[col] - val).abs().argmin()]
+    row = nearest_supported_row(df, col, val)
+    return pd.Series(float("nan"), index=df.columns) if row is None else row
 
 
 def _number(value, spec=".0f"):

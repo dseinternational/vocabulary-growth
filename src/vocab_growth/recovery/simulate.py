@@ -61,6 +61,7 @@ import numpy as np
 import pandas as pd
 import pymc as pm
 import xarray as xr
+from dse_research_utils.statistics.loo import as_dataset
 
 from vocab_growth import environment as env
 from vocab_growth.analysis_frames import expected_analysis_frame_hash
@@ -218,7 +219,7 @@ class TruthDraw:
 
 def _as_dataset(node) -> xr.Dataset:
     """Return an xarray Dataset for a DataTree node or Dataset."""
-    return node.to_dataset() if isinstance(node, xr.DataTree) else node
+    return as_dataset(node)
 
 
 def _single_draw_tree(posterior: xr.Dataset) -> xr.DataTree:

@@ -41,6 +41,7 @@ import pandas as pd
 import preliz as pz
 import pymc as pm
 import xarray as xr
+from dse_research_utils.statistics.models.likelihood import beta_binomial_from_p
 from preliz.distributions.distributions import Continuous
 from pytensor.tensor.variable import TensorVariable
 
@@ -815,15 +816,12 @@ def build_model_graph(
 
         # Understood likelihood (only where observed)
         p_u_obs_sel = p_u_obs[idx_u]
-        p_u_obs_clip = pm.math.clip(p_u_obs_sel, EPSILON, 1 - EPSILON)
-        alpha_u = p_u_obs_clip * kappa_u_obs[idx_u]
-        beta_u = (1 - p_u_obs_clip) * kappa_u_obs[idx_u]
 
-        _ = pm.BetaBinomial(
+        _ = beta_binomial_from_p(
             "y_u_obs",
-            n=n_trials,
-            alpha=alpha_u,
-            beta=beta_u,
+            p=p_u_obs_sel,
+            n_trials=n_trials,
+            kappa=kappa_u_obs[idx_u],
             observed=y_u_observed,
             dims=("obs_u_id",),
         )
@@ -1416,39 +1414,35 @@ def sample_posterior_predictive(
         pm.Deterministic("q_plot_subject_marginal", q_plot, dims=("plot_id",))
 
         # Understood — plot
-        p_u_plot_clip = pm.math.clip(p_u_plot, EPSILON, 1 - EPSILON)
-        y_u_plot = pm.BetaBinomial(
+        y_u_plot = beta_binomial_from_p(
             "y_u_plot",
-            n=n_trials,
-            alpha=p_u_plot_clip * kappa_u_plot,
-            beta=(1 - p_u_plot_clip) * kappa_u_plot,
+            p=p_u_plot,
+            n_trials=n_trials,
+            kappa=kappa_u_plot,
             dims=("plot_id",),
         )
         # Understood — query
-        p_u_query_clip = pm.math.clip(p_u_query, EPSILON, 1 - EPSILON)
-        y_u_query = pm.BetaBinomial(
+        y_u_query = beta_binomial_from_p(
             "y_u_query",
-            n=n_trials,
-            alpha=p_u_query_clip * kappa_u_query,
-            beta=(1 - p_u_query_clip) * kappa_u_query,
+            p=p_u_query,
+            n_trials=n_trials,
+            kappa=kappa_u_query,
             dims=("query_id",),
         )
         # Spoken — plot
-        q_plot_clip = pm.math.clip(q_plot, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_s_plot",
-            n=y_u_plot,
-            alpha=q_plot_clip * kappa_s_plot,
-            beta=(1 - q_plot_clip) * kappa_s_plot,
+            p=q_plot,
+            n_trials=y_u_plot,
+            kappa=kappa_s_plot,
             dims=("plot_id",),
         )
         # Spoken — query
-        q_query_clip = pm.math.clip(q_query, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_s_query",
-            n=y_u_query,
-            alpha=q_query_clip * kappa_s_query,
-            beta=(1 - q_query_clip) * kappa_s_query,
+            p=q_query,
+            n_trials=y_u_query,
+            kappa=kappa_s_query,
             dims=("query_id",),
         )
 
@@ -1485,20 +1479,18 @@ def sample_posterior_predictive(
                     p_u_level * q_level,
                     dims=("query_id",),
                 )
-                p_u_level_clip = pm.math.clip(p_u_level, EPSILON, 1 - EPSILON)
-                y_u_level = pm.BetaBinomial(
+                y_u_level = beta_binomial_from_p(
                     f"y_u_query_{level}",
-                    n=n_trials,
-                    alpha=p_u_level_clip * kappa_u_query,
-                    beta=(1 - p_u_level_clip) * kappa_u_query,
+                    p=p_u_level,
+                    n_trials=n_trials,
+                    kappa=kappa_u_query,
                     dims=("query_id",),
                 )
-                q_level_clip = pm.math.clip(q_level, EPSILON, 1 - EPSILON)
-                pm.BetaBinomial(
+                beta_binomial_from_p(
                     f"y_s_query_{level}",
-                    n=y_u_level,
-                    alpha=q_level_clip * kappa_s_query,
-                    beta=(1 - q_level_clip) * kappa_s_query,
+                    p=q_level,
+                    n_trials=y_u_level,
+                    kappa=kappa_s_query,
                     dims=("query_id",),
                 )
                 by_sex_names += [

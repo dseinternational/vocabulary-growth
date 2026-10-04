@@ -41,6 +41,8 @@ import dse_research_utils.plot.io as plot_io
 import dse_research_utils.statistics.intervals as shared_intervals
 import numpy as np
 import pandas as pd
+from dse_research_utils.report.readers import nearest_row
+from dse_research_utils.statistics.loo import as_dataset
 
 from vocab_growth import environment as env
 from vocab_growth import intervals, reporting_ages
@@ -88,9 +90,8 @@ def model_label(key: str) -> str:
 # Trace loading
 # ----------------------------------------------------------------------------
 def _dataset(idata: az.InferenceData, group: str):
-    """Return a group as an xarray Dataset, robust to ArviZ DataTree backing."""
-    node = getattr(idata, group)
-    return node if hasattr(node, "data_vars") else node.to_dataset()
+    """Return the requested group as an xarray Dataset."""
+    return as_dataset(getattr(idata, group))
 
 
 def _load_reshaped_draws(
@@ -2154,3 +2155,14 @@ def shade_unsupported(
         ax.axvspan(support_hi, x_hi, color=colour, alpha=0.5, lw=0,
                    label=label if first else None, zorder=0)
     ax.set_xlim(x_lo, x_hi)
+
+
+def nearest_supported_row(frame: pd.DataFrame | None, key: str, at: float) -> pd.Series | None:
+    """Use shared row selection only within the finite grid's observed range."""
+    if frame is None or key not in frame.columns or not np.isfinite(at):
+        return None
+    keys = pd.to_numeric(frame[key], errors="coerce")
+    finite = np.isfinite(keys).fillna(False)
+    if not finite.any() or at < keys[finite].min() or at > keys[finite].max():
+        return None
+    return nearest_row(frame.loc[finite], key=key, at=at)
