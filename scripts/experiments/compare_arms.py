@@ -1,19 +1,29 @@
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Compare the VG12 geometry arms on the diagnostics that motivated the changes."""
 import json
 import os
+from typing import Any
 
 import arviz as az
 import numpy as np
+from dse_research_utils.statistics.diagnostics import (
+    bfmi_per_chain as _shared_bfmi_per_chain,
+)
 
 ROOT = "/scratch/vg-geom-output/models"
 ARMS = ["baseline", "eta", "centred", "partition"]
 
 
-def bfmi_per_chain(idata):
-    e = idata.sample_stats["energy"].values
-    return np.array(
-        [np.sum(np.diff(r) ** 2) / np.sum((r - r.mean()) ** 2) for r in e]
-    )
+def bfmi_per_chain(idata: Any) -> np.ndarray:
+    """Return per-chain values; stop if energy diagnostics are unavailable."""
+    if "energy" not in idata.sample_stats:
+        raise KeyError("energy")
+    values = _shared_bfmi_per_chain(idata)
+    if values is None:
+        raise ValueError("Energy diagnostics cannot be read in chain and draw order")
+    return np.asarray(values, dtype=float)
 
 
 def energy_corr(idata, name):
