@@ -9,4 +9,6 @@ The library's Python requirement, dependency minimums and extras are unchanged f
 
 Install the updated environment with `uv sync --locked`. Both the installed distribution and `dse_research_utils.__version__` must report `0.17.0`. Apply the project's executable-code signature and fit-compatibility checks before resuming or publishing stored results. A dependency upgrade does not itself approve an older fit. Keep historical manifests and recorded sampling environments intact.
 
-The atomic-file adapter now requests ordinary new-file permissions through `mode="default"`, after the writer returns. The legacy sensitivity CSV reader uses the shared diagnostic reductions and retains its inclusive cutoffs and fallback caveat. The marginal-arm experiment uses the shared energy diagnostic in named chain and draw order and still stops when energy is unavailable. These source changes alter the executable-code signature; the existing saved-fit checks still apply.
+The atomic-file adapter now requests ordinary new-file permissions through `mode="default"`, after the writer returns. The marginal-arm experiment uses the shared energy diagnostic in named chain and draw order and still stops when energy is unavailable. These source changes alter the executable-code signature; the existing saved-fit checks still apply.
+
+The legacy sensitivity reader consumes a rounded CSV. Its reduction remains local because the shared table reducer requires unrounded input.

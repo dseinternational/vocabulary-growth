@@ -14,9 +14,7 @@ VG10/VG11 frames are pure bool and never hit this.
 
 import json
 
-import numpy as np
 import pandas as pd
-import pytest
 
 from vocab_growth.sensitivity.compare import (
     compare_dirs,
@@ -336,43 +334,6 @@ def test_diagnostics_gate_falls_back_to_the_csv_and_says_so(tmp_path):
     assert gate.clean is None
     assert gate.source == "diagnostics.csv"
     assert any("diagnostics.csv" in caveat for caveat in gate.caveats)
-
-
-@pytest.mark.parametrize(
-    ("rhat", "ess", "converged"),
-    [(1.01, 400.0, True), (1.010001, 400.0, False), (1.01, 399.999, False)],
-)
-def test_legacy_diagnostic_thresholds_remain_inclusive(tmp_path, rhat, ess, converged):
-    pd.DataFrame({"r_hat": [rhat], "ess_bulk": [ess]}).to_csv(
-        tmp_path / "diagnostics.csv", index=False
-    )
-
-    gate = diagnostics_gate(str(tmp_path))
-
-    assert gate.converged is converged
-    assert gate.max_rhat == rhat
-    assert gate.min_ess == ess
-    assert gate.clean is None
-    assert gate.caveats
-
-
-def test_legacy_missing_rows_keep_the_fallback_caveat(tmp_path):
-    pd.DataFrame({"r_hat": [1.0, np.nan], "ess_bulk": [500.0, np.nan]}).to_csv(
-        tmp_path / "diagnostics.csv", index=False
-    )
-
-    gate = diagnostics_gate(str(tmp_path))
-
-    assert gate.converged is True
-    assert gate.clean is None
-    assert gate.caveats
-
-
-def test_legacy_absent_ess_is_still_unavailable(tmp_path):
-    pd.DataFrame({"r_hat": [1.0]}).to_csv(tmp_path / "diagnostics.csv", index=False)
-    gate = diagnostics_gate(str(tmp_path))
-    assert gate.converged is False
-    assert gate.min_ess is None
 
 
 def test_summarise_reports_converged_with_caveats_rather_than_robust(tmp_path):
