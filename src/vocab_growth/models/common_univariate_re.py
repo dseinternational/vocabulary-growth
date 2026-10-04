@@ -39,6 +39,7 @@ import dse_research_utils.statistics.models.pymc_utils as pymc_utils
 import numpy as np
 import pandas as pd
 import pymc as pm
+from dse_research_utils.statistics.models.likelihood import beta_binomial_from_p
 
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.reporting_ages as reporting_ages
@@ -762,25 +763,21 @@ def build_model_graph(
         # ============================================================
 
         if partition is None:
-            p_obs_clip = pm.math.clip(p_obs, EPSILON, 1 - EPSILON)
-            alpha_obs = p_obs_clip * kappa_obs
-            beta_obs = (1 - p_obs_clip) * kappa_obs
-
             if train_rows is None:
-                _ = pm.BetaBinomial(
+                _ = beta_binomial_from_p(
                     "y_obs",
-                    n=n_trials,
-                    alpha=alpha_obs,
-                    beta=beta_obs,
+                    p=p_obs,
+                    n_trials=n_trials,
+                    kappa=kappa_obs,
                     observed=y_obs,
                     dims=("obs_id",),
                 )
             else:
-                _ = pm.BetaBinomial(
+                _ = beta_binomial_from_p(
                     "y_obs",
-                    n=n_trials,
-                    alpha=alpha_obs[train_rows],
-                    beta=beta_obs[train_rows],
+                    p=p_obs[train_rows],
+                    n_trials=n_trials,
+                    kappa=kappa_obs[train_rows],
                     observed=y_obs[train_rows],
                     dims=("obs_train_id",),
                 )
@@ -851,20 +848,18 @@ def sample_posterior_predictive_re(
         p_plot = pm.math.sigmoid(f_plot + plot_shift)
         p_query = pm.math.sigmoid(f_query + new_subject_shift)
 
-        p_plot = pm.math.clip(p_plot, EPSILON, 1 - EPSILON)
-        p_query = pm.math.clip(p_query, EPSILON, 1 - EPSILON)
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_plot",
-            n=context.model_data.n_trials,
-            alpha=p_plot * kappa_plot,
-            beta=(1 - p_plot) * kappa_plot,
+            p=p_plot,
+            n_trials=context.model_data.n_trials,
+            kappa=kappa_plot,
             dims=("plot_id",),
         )
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_query",
-            n=context.model_data.n_trials,
-            alpha=p_query * kappa_query,
-            beta=(1 - p_query) * kappa_query,
+            p=p_query,
+            n_trials=context.model_data.n_trials,
+            kappa=kappa_query,
             dims=("query_id",),
         )
         # By sex (#324): the same new child, drawn once above, as a girl and as a
@@ -880,12 +875,11 @@ def sample_posterior_predictive_re(
                     pm.math.sigmoid(f_query + new_subject_shift + contrast * beta_sex),
                     dims=("query_id",),
                 )
-                p_level = pm.math.clip(p_level, EPSILON, 1 - EPSILON)
-                pm.BetaBinomial(
+                beta_binomial_from_p(
                     f"y_query_{level}",
-                    n=context.model_data.n_trials,
-                    alpha=p_level * kappa_query,
-                    beta=(1 - p_level) * kappa_query,
+                    p=p_level,
+                    n_trials=context.model_data.n_trials,
+                    kappa=kappa_query,
                     dims=("query_id",),
                 )
                 by_sex_names += [f"p_query_subject_marginal_{level}", f"y_query_{level}"]

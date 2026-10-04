@@ -36,6 +36,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import xarray as xr
+from dse_research_utils.statistics.loo import as_dataset
 
 from vocab_growth import intervals
 from vocab_growth.comparison import total_spread_from_values, total_spread_plan
@@ -85,7 +86,7 @@ _GRID_SUFFIXES: tuple[str, ...] = ("_query", "_plot")
 
 
 def _as_dataset(node) -> xr.Dataset:
-    return node.to_dataset() if isinstance(node, xr.DataTree) else node
+    return as_dataset(node)
 
 
 def _dims_of(dataset: xr.Dataset, name: str) -> tuple[str, ...]:

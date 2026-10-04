@@ -413,3 +413,28 @@ def test_the_historical_rate_columns_and_the_population_block_are_the_same_numbe
         np.testing.assert_array_equal(
             out[historical].to_numpy(), out[block].to_numpy(), err_msg=historical
         )
+
+
+@pytest.mark.parametrize("stored_order", [("chain", "draw", "plot_id"), ("plot_id", "draw", "chain")])
+def test_extraction_preserves_copy_and_legacy_unlabelled_arrays(stored_order):
+    values = np.arange(24, dtype=float).reshape(2, 3, 4)
+    for labelled in (False, True):
+        array = xr.DataArray(
+            values.copy(), dims=("chain", "draw", "plot_id"),
+            coords={"chain": [5, 8], "draw": [7, 9, 11], "plot_id": [4, 2, 9, 1]} if labelled else None,
+        ).transpose(*stored_order)
+        trace = types.SimpleNamespace(posterior=xr.Dataset({"f": array}))
+        result = extract_posterior(trace, "f", "plot_id")
+        np.testing.assert_array_equal(result, values.transpose(2, 0, 1).reshape(4, 6))
+        result[0, 0] = -100
+        assert trace.posterior.f.values.min() == 0
+
+
+def test_labelled_extraction_rejects_duplicate_observation_coordinates():
+    array = xr.DataArray(
+        np.zeros((2, 3, 2)), dims=("chain", "draw", "plot_id"),
+        coords={"chain": [0, 1], "draw": [0, 1, 2], "plot_id": [5, 5]},
+    )
+    trace = types.SimpleNamespace(posterior=xr.Dataset({"f": array}))
+    with pytest.raises(ValueError, match="unique coordinate labels"):
+        extract_posterior(trace, "f", "plot_id")

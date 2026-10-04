@@ -19,7 +19,6 @@ from typing import Any, Generic, TypeVar
 
 import arviz as az
 import dse_research_utils.environment.info as env_info
-import dse_research_utils.math.constants as math_constants
 import dse_research_utils.metadata.packages as package_metadata
 import dse_research_utils.plot.diagnostics_mcmc as plot_diagnostics_mcmc
 import dse_research_utils.plot.distributions as plot_dist
@@ -44,6 +43,7 @@ from dse_research_utils.statistics.models.hsgp_design import (
     HSGPDesign,
     calibrate_hsgp_1d,
 )
+from dse_research_utils.statistics.models.likelihood import beta_binomial_from_p
 from matplotlib.figure import Figure
 from preliz.distributions.distributions import Continuous
 
@@ -961,21 +961,12 @@ def build_model_graph(
         _ = pm.Deterministic("kappa_plot", kappa_of_z(z_plot), dims="plot_id")
         _ = pm.Deterministic("kappa_query", kappa_of_z(z_query), dims="query_id")
 
-        # clip p_obs numerical issues when alpha or beta become extremely close to 0
-        p_obs_clip = pm.math.clip(
-            p_obs, math_constants.EPSILON, 1 - math_constants.EPSILON
-        )
-
-        # Mean proportion p and concentration kappa give alpha=p*kappa, beta=(1-p)*kappa.
-        alpha_obs = p_obs_clip * kappa_obs
-        beta_obs = (1 - p_obs_clip) * kappa_obs
-
-        # Beta-binomial likelihood
-        _ = pm.BetaBinomial(
+        # The shared builder clips p before forming alpha and beta from kappa.
+        _ = beta_binomial_from_p(
             "y_obs",
-            n=context.model_data.n_trials,
-            alpha=alpha_obs,
-            beta=beta_obs,
+            p=p_obs,
+            n_trials=context.model_data.n_trials,
+            kappa=kappa_obs,
             observed=context.model_data.y_obs,
             dims=("obs_id",),
         )
@@ -1546,28 +1537,18 @@ def sample_posterior_predictive(
     kappa_query = context.model_variables["kappa_query"]
 
     with context.model:
-        p_plot_clip = pm.math.clip(
-            p_plot, math_constants.EPSILON, 1 - math_constants.EPSILON
-        )
-        alpha_plot = p_plot_clip * kappa_plot
-        beta_plot = (1 - p_plot_clip) * kappa_plot
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_plot",
-            n=context.model_data.n_trials,
-            alpha=alpha_plot,
-            beta=beta_plot,
+            p=p_plot,
+            n_trials=context.model_data.n_trials,
+            kappa=kappa_plot,
             dims=("plot_id",),
         )
-        p_query_clip = pm.math.clip(
-            p_query, math_constants.EPSILON, 1 - math_constants.EPSILON
-        )
-        alpha_query = p_query_clip * kappa_query
-        beta_query = (1 - p_query_clip) * kappa_query
-        pm.BetaBinomial(
+        beta_binomial_from_p(
             "y_query",
-            n=context.model_data.n_trials,
-            alpha=alpha_query,
-            beta=beta_query,
+            p=p_query,
+            n_trials=context.model_data.n_trials,
+            kappa=kappa_query,
             dims=("query_id",),
         )
         trace = pm.sample_posterior_predictive(

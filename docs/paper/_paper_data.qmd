@@ -1,3 +1,7 @@
+::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-10-04.
+:::
+
 <!--
 Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
 Data-access helpers for the paper, mirroring the report's `_report_data.qmd`
@@ -19,6 +23,7 @@ copying it a second time.
 from pathlib import Path
 
 import pandas as pd
+from vocab_growth.comparison import nearest_supported_row
 from dse_research_utils.report.data import ReportData
 from dse_research_utils.report.data import num as _num
 from dse_research_utils.report.data import show_or_pending as _show_or_pending
@@ -82,14 +87,7 @@ def comp_load(name):
 
 def comp_row(name, grid_col, grid_val, *, prefix="d"):
     """Row of a comparison table nearest a grid value, or None."""
-    df = comp_load(name)
-    if df is None or grid_col not in df.columns:
-        return None
-    df = df.dropna(subset=[grid_col])
-    if (df.empty or pd.isna(grid_val)
-            or grid_val < df[grid_col].min() or grid_val > df[grid_col].max()):
-        return None
-    return df.iloc[int((df[grid_col] - grid_val).abs().argmin())]
+    return nearest_supported_row(comp_load(name), grid_col, grid_val)
 
 
 def band(row, prefix="d", fmt="{:.1f}", unit=""):
