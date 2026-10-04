@@ -93,29 +93,6 @@ def read_json(path: str | os.PathLike[str]) -> dict[str, Any]:
     return payload
 
 
-def _umask_file_mode() -> int:
-    """The mode an ordinary ``open(path, "w")`` would give a new file.
-
-    :func:`dse_research_utils.storage.files.atomic_write` creates its temporary
-    file with :func:`tempfile.mkstemp`, which is owner-only (0600) by design.
-    Every manifest, state file and comparison manifest this repository has
-    written was created by a plain ``open`` instead, so it carries
-    ``0o666 & ~umask`` -- readable by the group and by others under the usual
-    022. Those artefacts are read back by other accounts on a shared host and
-    by the uploader, so narrowing them to 0600 is a behaviour change,
-    not a hardening: this restores the historical mode explicitly rather than
-    inheriting whichever one the helper happens to use.
-
-    ``os.umask`` is the only way to read the process umask before 3.15, and it
-    is a read-modify-write. The window is between two consecutive syscalls in
-    the writing thread; fits create these files from one thread, outside
-    sampling.
-    """
-    current = os.umask(0o022)
-    os.umask(current)
-    return 0o666 & ~current
-
-
 def write_atomic(
     path: str | os.PathLike[str], write_temporary: Callable[[Path], object]
 ) -> None:
@@ -126,11 +103,7 @@ def write_atomic(
     report table cannot end up with three different modes.
     """
 
-    def write_and_share(temporary: Path) -> None:
-        write_temporary(temporary)
-        os.chmod(temporary, _umask_file_mode())
-
-    atomic_write(path, write_and_share)
+    atomic_write(path, write_temporary, mode="default")
 
 
 def write_json_atomic(path: str, payload: dict[str, Any]) -> None:

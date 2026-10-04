@@ -20,7 +20,11 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from dse_research_utils.statistics.diagnostics import ESS_THRESHOLD, RHAT_MAX
+from dse_research_utils.statistics.diagnostics import (
+    ESS_THRESHOLD,
+    RHAT_MAX,
+    diagnostic_extrema,
+)
 
 from vocab_growth.fit_artifacts import (
     ACCEPTED_EXCEPTION_KEY,
@@ -455,9 +459,9 @@ def diagnostics_gate(dirpath: str) -> DiagnosticsGate:
     df = _read(dirpath, "diagnostics.csv")
     if df is None or "r_hat" not in df.columns:
         return DiagnosticsGate(converged=None, max_rhat=None, min_ess=None)
-    max_rhat = float(np.nanmax(df["r_hat"].values))
+    max_rhat, reduced_ess, _ = diagnostic_extrema(df)
     ess_cols = [c for c in ("ess_bulk", "ess_tail") if c in df.columns]
-    min_ess = float(np.nanmin(df[ess_cols].min(axis=1).values)) if ess_cols else None
+    min_ess = reduced_ess if ess_cols else None
     converged = bool(
         max_rhat <= RHAT_MAX and min_ess is not None and min_ess >= ESS_THRESHOLD
     )
