@@ -71,9 +71,13 @@ import json
 import os
 import time
 from multiprocessing import freeze_support
+from typing import Any
 
 import numpy as np
 import pandas as pd
+from dse_research_utils.statistics.diagnostics import (
+    bfmi_per_chain as _shared_bfmi_per_chain,
+)
 
 ARMS = ("baseline", "repeaters", "calibrated", "calibrated-half", "calibrated-fixed")
 # Beta concentration multipliers for the tempered and the near-fixed arms.
@@ -231,9 +235,14 @@ def _scalar_names(idata):
     return [n for n, v in idata.posterior.data_vars.items() if v.values.ndim == 2]
 
 
-def bfmi_per_chain(idata) -> np.ndarray:
-    e = idata.sample_stats["energy"].values
-    return np.array([np.sum(np.diff(r) ** 2) / np.sum((r - r.mean()) ** 2) for r in e])
+def bfmi_per_chain(idata: Any) -> np.ndarray:
+    """Return per-chain values; stop if energy diagnostics are unavailable."""
+    if "energy" not in idata.sample_stats:
+        raise KeyError("energy")
+    values = _shared_bfmi_per_chain(idata)
+    if values is None:
+        raise ValueError("Energy diagnostics cannot be read in chain and draw order")
+    return np.asarray(values, dtype=float)
 
 
 def _summary(x: np.ndarray) -> dict:

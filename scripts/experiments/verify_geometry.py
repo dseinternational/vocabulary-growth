@@ -1,9 +1,16 @@
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 """Recompute every geometry number quoted in the findings note, from the traces."""
 import os
+from typing import Any
 
 import arviz as az
 import numpy as np
 import pandas as pd
+from dse_research_utils.statistics.diagnostics import (
+    bfmi_per_chain as _shared_bfmi_per_chain,
+)
 from scipy import stats
 
 ROOT = "/scratch/vocabulary-growth/output/models"
@@ -24,6 +31,16 @@ def flat(idata, name):
 
 def energy(idata):
     return idata.sample_stats["energy"].values.reshape(-1)
+
+
+def bfmi_per_chain(idata: Any) -> np.ndarray:
+    """Return per-chain values; stop if energy diagnostics are unavailable."""
+    if "energy" not in idata.sample_stats:
+        raise KeyError("energy")
+    values = _shared_bfmi_per_chain(idata)
+    if values is None:
+        raise ValueError("Energy diagnostics cannot be read in chain and draw order")
+    return np.asarray(values, dtype=float)
 
 
 def scalar_names(idata):
@@ -76,17 +93,7 @@ for model, idata, tau_s, kap in [
         continue
     a, b = flat(idata, tau_s), flat(idata, kap)
     ee = energy(idata)
-    # BFMI per chain, computed directly: sum of squared successive energy
-    # differences over the energy variance (Betancourt 2016).
-    e2d = idata.sample_stats["energy"].values  # (chain, draw)
-    bfmi = float(
-        np.min(
-            [
-                np.sum(np.diff(row) ** 2) / np.sum((row - row.mean()) ** 2)
-                for row in e2d
-            ]
-        )
-    )
+    bfmi = float(bfmi_per_chain(idata).min())
     print(f"  {model}: corr({tau_s}, {kap}) = {np.corrcoef(a, b)[0,1]:+.3f}   "
           f"corr({tau_s}, energy) = {np.corrcoef(a, ee)[0,1]:+.3f}   min BFMI = {bfmi:.3f}")
 
