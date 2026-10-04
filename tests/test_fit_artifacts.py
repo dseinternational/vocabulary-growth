@@ -803,6 +803,26 @@ def test_write_json_atomic_leaves_the_destination_intact_on_failure(tmp_path):
     assert sorted(path.name for path in tmp_path.iterdir()) == ["fit_manifest.json"]
 
 
+def test_a_failed_mode_probe_keeps_the_previous_manifest(tmp_path, monkeypatch):
+    import dse_research_utils.storage.files as shared_files
+
+    from vocab_growth.fit_artifacts import write_json_atomic
+
+    target = tmp_path / "fit_manifest.json"
+    target.write_text('{"state": "complete"}\n', encoding="utf-8")
+    previous = target.read_bytes()
+
+    def fail(_directory):
+        raise PermissionError("mode probe failed")
+
+    monkeypatch.setattr(shared_files, "default_file_mode", fail)
+    with pytest.raises(PermissionError, match="mode probe failed"):
+        write_json_atomic(str(target), {"state": "new"})
+
+    assert target.read_bytes() == previous
+    assert sorted(path.name for path in tmp_path.iterdir()) == [target.name]
+
+
 def test_promote_staged_fit_retains_no_backup_after_success(tmp_path):
     """``.previous`` is a rollback slot, not an archive.
 

@@ -28,10 +28,12 @@ import argparse
 import json
 import os
 import re
+from types import SimpleNamespace
 
 import arviz as az
 import numpy as np
 import xarray as xr
+from dse_research_utils.statistics.diagnostics import bfmi_per_chain
 
 from vocab_growth.fit_artifacts import SAMPLED_PARAMETERS_ATTR
 
@@ -54,14 +56,14 @@ def _open(path, group):
         return None
 
 
-def _bfmi(sample_stats):
-    energy = sample_stats["energy"].values
-    return np.array(
-        [
-            np.sum(np.diff(row) ** 2) / np.sum((row - row.mean()) ** 2)
-            for row in energy
-        ]
-    )
+def _bfmi(sample_stats: xr.Dataset) -> np.ndarray:
+    """Read energy in named sample order; stop if the diagnostic is unavailable."""
+    if "energy" not in sample_stats:
+        raise KeyError("energy")
+    values = bfmi_per_chain(SimpleNamespace(sample_stats=sample_stats))
+    if values is None:
+        raise ValueError("Energy diagnostics cannot be read in chain and draw order")
+    return np.asarray(values, dtype=float)
 
 
 def _scalar(posterior, name):
