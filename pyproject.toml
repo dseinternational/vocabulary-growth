@@ -43,13 +43,13 @@ dependencies = [
 # `dev`, `uv run ruff` syncs the whole project environment — 174 packages,
 # PyMC and JAX among them — to run a self-contained Rust binary.
 lint = [
-  "ruff>=0.16.9"
+  "ruff>=0.16.10"
 ]
 # Static type checking, split out for the same reason `lint` is: mypy reads
 # source rather than importing it, so the narrow set of modules it covers can be
 # checked without syncing PyMC, JAX and ArviZ to do it.
 typecheck = [
-  "mypy>=2.3.1"
+  "mypy>=2.4.0"
 ]
 dev = [
   "ipython>=9.17.1",
