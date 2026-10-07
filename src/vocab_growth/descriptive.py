@@ -25,7 +25,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from dse_research_utils.plot.styles import categorical_palette
+from dse_research_utils.plot.styles import CHART_COLOURS, categorical_palette
 from matplotlib.colors import to_rgb
 
 from vocab_growth.data_utils import WORDBANK_FORM_ITEMS, load_combined_data, load_data
@@ -333,7 +333,7 @@ def plot_observations_by_group(
 
     groups = sorted(obs[group].astype(str).unique())
     if group_colors is None:
-        group_colors = dict(zip(groups, categorical_palette(len(groups)), strict=True))
+        group_colors = dict(zip(groups, _group_palette(len(groups)), strict=True))
 
     fig, ax = plt.subplots(figsize=figsize)
     for name in groups:
@@ -511,7 +511,7 @@ def plot_repeat_measures_by_group(
     ``age_range`` bounds the observations used (excluded, not merely clipped
     from view), and bins with fewer than ``min_bin_n`` observations are not
     summarised. ``group_colors`` maps group name to colour; when None the
-    colours come from ``categorical_palette`` over the groups that contribute a
+    colours come from :func:`_group_palette` over the groups that contribute a
     fragment — pass a shared mapping (see :func:`drawable_groups`) when several
     figures must keep group colours aligned. Saves ``.png``/``.svg`` and the
     binned summary as ``.csv`` when ``output_dir``/``filename`` are given.
@@ -532,7 +532,7 @@ def plot_repeat_measures_by_group(
         groups = drawable_groups(
             df, (outcome,), group=group, subject_col=subject_col, form_col=form_col
         )
-        palette = categorical_palette(len(groups))
+        palette = _group_palette(len(groups))
         group_colors = dict(zip(groups, palette, strict=True))
 
     fig, ax = plt.subplots(figsize=figsize)
@@ -637,7 +637,7 @@ def scatter_by_group(
     """
     sub = df[[x, y, group]].dropna(subset=[x, y])
     groups = sorted(sub[group].dropna().unique(), key=str)
-    palette = categorical_palette(len(groups))
+    palette = _group_palette(len(groups))
 
     fig, ax = plt.subplots(figsize=figsize)
     for k, gname in enumerate(groups):
@@ -692,6 +692,21 @@ TD_REPEAT_AGE_RANGE = (8, 30)
 TD_REPEAT_BIN_WIDTH = 3
 
 
+def _group_palette(n: int) -> list:
+    """``n`` colours for the groups (studies) of a descriptive figure.
+
+    Up to six groups take the design language's chart colours, in order. It
+    allows no more, but these figures colour by study and the pools hold more:
+    fifteen Down syndrome studies and twelve typically developing ones. Larger
+    figures therefore keep the matplotlib palettes ``categorical_palette`` gave
+    them before dse-research-utils 0.18.0, ``tab10`` widened to ``tab20`` above
+    ten groups, until they are redesigned.
+    """
+    if n <= len(CHART_COLOURS):
+        return categorical_palette(n)
+    return categorical_palette(n, palette="tab10" if n <= 10 else "tab20")
+
+
 def _shared_group_colours(groups):
     """One group -> colour mapping shared by every figure of a population.
 
@@ -700,12 +715,13 @@ def _shared_group_colours(groups):
     trajectories alike (each figure's legend lists only the groups it draws).
     Reddish palette entries are skipped: the pooled-summary overlay every
     figure draws is pure red, and a red-toned study would read as part of it.
+    The chart colours have no red; ``tab10`` and ``tab20`` each have one.
     """
     groups = sorted(set(groups))
     colours: list = []
     extra = 0
     while len(colours) < len(groups):
-        candidates = categorical_palette(len(groups) + extra)
+        candidates = _group_palette(len(groups) + extra)
         colours = [c for c in candidates if not _is_reddish(c)]
         extra += 2
     mapping = dict(zip(groups, colours[: len(groups)], strict=True))
@@ -717,8 +733,14 @@ def _shared_group_colours(groups):
 
 
 def _is_reddish(colour) -> bool:
+    """Whether ``colour`` would read as part of the red pooled-summary overlay.
+
+    True for the red of ``tab10`` and ``tab20`` (``#d62728``). Their orange
+    (``#ff7f0e``) and chart-3 orange (``#e8721c``) stay distinct from the
+    overlay and are kept.
+    """
     r, g, b = to_rgb(colour)
-    return r > 0.55 and g < 0.45 and b < 0.45
+    return r > 0.55 and g < 0.35 and b < 0.45
 
 
 def write_descriptive_artefacts(out_dir: str) -> None:

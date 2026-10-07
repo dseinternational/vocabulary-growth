@@ -79,10 +79,21 @@ _TRAJECTORY_COLOUR = "0.30"
 #: enough to see through to the bands and the observed lines underneath.
 DEFAULT_PREDICTIVE_TRAJECTORIES = 60
 
-#: The predictive trajectories take the median's own colour, thin and
-#: translucent, because that is what they are: draws of the quantity the median
-#: line summarises, not a separate series.
-_PREDICTIVE_TRAJECTORY_COLOUR = plot_styles.COLOUR_DARK_BLUE
+#: The predictive trajectories take the median's own colour, the first chart
+#: colour, thin and translucent, because that is what they are: draws of the
+#: quantity the median line summarises, not a separate series.
+_PREDICTIVE_TRAJECTORY_COLOUR = plot_styles.CHART_COLOURS[0]
+
+#: Prior figures draw the prior's samples in the third chart colour, against
+#: observed data in the first.
+_PRIOR_DRAW_COLOUR = plot_styles.CHART_COLOURS[2]
+_PRIOR_OBSERVED_COLOUR = plot_styles.CHART_COLOURS[0]
+
+#: A posterior predictive count distribution: the histogram, its interval bands
+#: and its median line, with their labels in the secondary text colour.
+_PPC_HISTOGRAM_COLOUR = plot_styles.CHART_COLOURS[0]
+_PPC_INTERVAL_COLOUR = plot_styles.CHART_COLOURS[1]
+_PPC_MEDIAN_COLOUR = plot_styles.CHART_COLOURS[2]
 
 
 def _draw_subject_trajectories(
@@ -268,7 +279,7 @@ def plot_prior_samples_ratio(
     y_label: str,
     filename: str | None = None,
     output_dir: str | None = None,
-    colour: str = plot_styles.COLOUR_ORANGE,
+    colour: str = _PRIOR_DRAW_COLOUR,
     alpha: float = 0.1,
     lw: float = 1.0,
     n_curves: int = 500,
@@ -329,12 +340,12 @@ def plot_prior_predictions(
     # (matches the seeded RNG used by the other spaghetti/scatter plots).
     rng = np.random.default_rng(42)
     for i in rng.integers(0, y_pred.shape[1], 500):
-        plt.scatter(x, y_pred[:, i], color=plot_styles.COLOUR_ORANGE, alpha=0.01, s=12)
+        plt.scatter(x, y_pred[:, i], color=_PRIOR_DRAW_COLOUR, alpha=0.01, s=12)
 
     plt.scatter(
         x_obs,
         y_obs,
-        color=plot_styles.COLOUR_BLUE,
+        color=_PRIOR_OBSERVED_COLOUR,
         alpha=0.4,
         s=10,
         label="Observed data",
@@ -392,10 +403,10 @@ def _draw_ppc_count_distribution(
 
     # Outer + inner credible interval
     ax.fill_betweenx(
-        [0, ylim_max * 0.96], lo, hi, color=plot_styles.COLOUR_GREEN, alpha=0.10
+        [0, ylim_max * 0.96], lo, hi, color=_PPC_INTERVAL_COLOUR, alpha=0.10
     )
     ax.fill_betweenx(
-        [0, ylim_max * 0.96], lo50, hi50, color=plot_styles.COLOUR_GREEN, alpha=0.18
+        [0, ylim_max * 0.96], lo50, hi50, color=_PPC_INTERVAL_COLOUR, alpha=0.18
     )
     # Both bands are annotated. The inner one was drawn but unlabelled, which left
     # the reader to guess what the darker shading meant -- and the two are easy to
@@ -406,27 +417,27 @@ def _draw_ppc_count_distribution(
         hi + label_off,
         ylim_max * 0.9,
         f"{pct}% {kind_label}: {lo:.0f} to {hi:.0f}",
-        color=plot_styles.COLOUR_GREEN,
+        color=plot_styles.MUTED_TEXT_COLOUR,
         ha="center",
     )
     ax.text(
         hi + label_off,
         ylim_max * 0.82,
         f"{inner_pct}% {kind_label}: {lo50:.0f} to {hi50:.0f}",
-        color=plot_styles.COLOUR_GREEN,
+        color=plot_styles.MUTED_TEXT_COLOUR,
         ha="center",
     )
 
     # PMF histogram
-    ax.bar(centres, pmf_bins, width=bin_width, color=plot_styles.COLOUR_BLUE, align="center")
+    ax.bar(centres, pmf_bins, width=bin_width, color=_PPC_HISTOGRAM_COLOUR, align="center")
 
     # median
-    ax.axvline(med, lw=2, ls="--", color=plot_styles.COLOUR_RED)
+    ax.axvline(med, lw=2, ls="--", color=_PPC_MEDIAN_COLOUR)
     ax.text(
         med + med_off,
         ylim_max * 0.98,
         f"median: {med:.0f}",
-        color=plot_styles.COLOUR_RED,
+        color=plot_styles.MUTED_TEXT_COLOUR,
         ha="center",
     )
 

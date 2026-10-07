@@ -254,7 +254,12 @@ def test_rows_with_a_missing_outcome_are_not_joined_across():
 # Posterior predictive unseen-child trajectories
 # ---------------------------------------------------------------------------
 def _pp_lines():
-    return [ln for ln in plt.gca().get_lines() if ln.get_color() == _PP_COLOUR]
+    """The predictive trajectories: thin lines in the median's own colour."""
+    return [
+        ln
+        for ln in plt.gca().get_lines()
+        if ln.get_color() == _PP_COLOUR and ln.get_linewidth() < 1
+    ]
 
 
 def _samples(n_grid=25, n_samples=200, seed=0):

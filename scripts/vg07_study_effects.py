@@ -35,6 +35,11 @@ from vocab_growth.models.definitions import Population
 MODEL_DIR = os.path.join(env.models_output_dir(), "VG07-age-understood-spoken-ds-re")
 HDI_PROB = 0.89
 
+# Understood and production-ratio effects take the understood and spoken chart
+# colours of the model figures ("C0" and "C1").
+UNDERSTOOD_COLOUR = plot_styles.CHART_COLOURS[0]
+PRODUCTION_RATIO_COLOUR = plot_styles.CHART_COLOURS[1]
+
 
 def study_labels() -> list[str]:
     df = load_data(Population.DOWN_SYNDROME,
@@ -107,9 +112,9 @@ def main() -> None:
 
     for ax, samples_da, title, colour in (
         (axes[0], delta_u, "delta_u — understood-trajectory shift (logit)",
-         plot_styles.COLOUR_BLUE),
+         UNDERSTOOD_COLOUR),
         (axes[1], delta_q, "delta_q — production-ratio shift (logit)",
-         plot_styles.COLOUR_ORANGE),
+         PRODUCTION_RATIO_COLOUR),
     ):
         for i in range(len(labels)):
             samples = samples_da.isel(study_id=i).values
@@ -120,7 +125,7 @@ def main() -> None:
                 xerr=[[median - hdi[0]], [hdi[1] - median]],
                 fmt="o", color=colour, ecolor=colour, capsize=3,
             )
-        ax.axvline(0, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
+        ax.axvline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6, linestyle="--")
         ax.set_yticks(y_positions)
         ax.set_yticklabels(labels)
         ax.set_title(title)

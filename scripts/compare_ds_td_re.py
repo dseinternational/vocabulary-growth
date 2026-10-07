@@ -215,9 +215,9 @@ def resolve_joint(key: str) -> tuple[str, int, str]:
     return trace, C.n_trials(base), label
 
 
-COL_TD = plot_styles.COLOUR_ORANGE
-COL_DS = plot_styles.COLOUR_BLUE
-COL_D = plot_styles.COLOUR_GREEN
+COL_TD = plot_styles.CHART_COLOURS[2]
+COL_DS = plot_styles.CHART_COLOURS[0]
+COL_D = plot_styles.CHART_COLOURS[1]
 
 
 # ----------------------------------------------------------------------------
@@ -477,7 +477,7 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
 
     def delay(ax):
         _band(ax, ad, "words", "DS - TD", COL_D, cov=MIN_COVERAGE)
-        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
 
     _save_single(
         pre + "attainment_delay",
@@ -500,7 +500,7 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
 
     def spread_contrast(ax):
         _band(ax, dSD, "age_months", f"{td_lab} - {disp_ds_lab}", COL_D)
-        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
 
     _save_single(
         pre + "spread_contrast",
@@ -605,7 +605,7 @@ def _plot_comprehension(ds_key, td_key, q_td_s, q_ds_s, dq_s,
 
     def dq(ax):
         _band(ax, dq_s, "words", "TD - DS", COL_D, cov=MIN_COVERAGE)
-        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
 
     _save_single(
         pre + "dq",
