@@ -50,7 +50,7 @@ def test_uv_lock_covers_the_supported_platforms():
 
 
 def test_uv_lock_pins_the_shared_library_to_an_exact_revision():
-    selected = _pyproject()["tool"]["uv"]["sources"]["dse-research-utils"]
+    tag = _pyproject()["tool"]["uv"]["sources"]["dse-research-utils"]["tag"]
     locked = [
         package
         for package in _uv_lock()["package"]
@@ -60,15 +60,10 @@ def test_uv_lock_pins_the_shared_library_to_an_exact_revision():
     assert len(locked) == 1
     source = locked[0]["source"]["git"]
     assert source.startswith("https://")
+    assert f"tag={tag}" in source
     revision = source.rsplit("#", maxsplit=1)[1]
     assert len(revision) == 40
     assert all(character in "0123456789abcdef" for character in revision)
-    if "tag" in selected:
-        assert f"tag={selected['tag']}" in source
-    else:
-        # A commit selected ahead of its release tag must be the one locked.
-        assert f"rev={selected['rev']}" in source
-        assert revision == selected["rev"]
 
 
 def _instruction_copy(relative_path: str) -> str:
