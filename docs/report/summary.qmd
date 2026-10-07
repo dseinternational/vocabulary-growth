@@ -1,3 +1,7 @@
 # Summary {.unnumbered}
 
-[TODO]
+::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6.
+:::
+
+This chapter is unfinished. The summary will state the reviewed findings, their uncertainty and their practical limits.

@@ -9,17 +9,11 @@ included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable
 # What these numbers are not
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+Revised with assistance from OpenAI Codex/GPT-6. Earlier skeleton drafted by Claude Code/Fable 5.1. This summary remains unfinished.
 :::
 
-<!--
-Planned page content (item 9): not a diagnosis, not a target, not a
-description of any one child; what the studies are (countries, years,
-instruments, that several are intervention cohorts); what the models leave out.
--->
+The estimates describe a research pool. They are not population norms, diagnostic thresholds or teaching targets. A child can develop differently from the model's central trajectory, and a range does not predict that child's certain course.
 
-[TODO: not a diagnosis, not a target, not a description of any one child.]
+The studies differ in recruitment, language, age coverage and checklist content. Some include children in intervention projects. These differences limit how well pooled estimates describe other children.
 
-[TODO: what the studies are.]
-
-[TODO: what the models leave out.]
+The models describe counts rather than the words known, speech clarity, grammar or use in conversation. They do not estimate the effects of teaching, health or intervention exposure. An association between signing and speech cannot show that one causes the other.

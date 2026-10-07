@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 
@@ -54,7 +50,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks what signing and speaking have to do with each other **within a child, word by word**: of the words a child with Down syndrome understands, how many can they sign, how many can they say, and does being able to sign a word tell you anything about whether they can say it? Answering the last question is what lets the model count the _distinct_ words a child can express in any modality, instead of assuming the two sets do not overlap. It is the model of record for signing and for total expressive vocabulary.
+VG15 estimates understood, spoken and signed vocabulary in children with Down syndrome. It models the overlap between speech and signing so a word expressed in both ways is counted once in total expressive vocabulary. It is the model of record for signing trajectories, the within-word sign-speech association and total expressive vocabulary.
 
 ```{python}
 #| echo: false
@@ -71,12 +67,6 @@ from vocab_growth.report_cells import render_reading_routes
 
 render_reading_routes('record', signing=True, robustness=True, recovery=True)
 ```
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
-
-:::
 
 ![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
@@ -785,9 +775,9 @@ for k, lab in labels.items():
 pd.DataFrame(_rows).set_index("Milestone")
 ```
 
-Each milestone is found **in every posterior draw and then summarised**, not read off the median curve — the median of crossings is not the crossing of the median, and for a peak the difference is not subtle, since averaging curves whose peaks sit at different ages flattens the peak and drags it toward the middle of the grid. Intervals on milestone ages are highest-density intervals, the same policy the association uses.
+The calculation searches for each milestone within each posterior draw, then summarises the draws with a genuine interior crossing or peak. It does not read an age from the median curve. The median of crossing ages can differ from the crossing of the median curve. These conditional milestone intervals are highest-density intervals.
 
-Two disclosure columns qualify every row. A crossing is only counted when it is a genuine **transition** — the state flips from false to true inside the grid; a draw in which the state already holds at the youngest established age (for instance, speech-only ahead of sign-only from the start) is **censored**, not an early crossing, and a peak whose maximum falls on a grid edge is likewise censored rather than located. `Draws reaching it` is the fraction with a genuine transition or interior peak; `Draws censored` is the fraction where the milestone's state is censored; the remainder never satisfy the condition at all. A milestone reached in only part of the posterior is a bound, not an estimate. A milestone is also only read once a draw's child has at least one expressive word, which matters at the youngest ages.
+Two disclosure columns qualify every row. `Draws reaching it` gives the fraction with a genuine transition or interior peak. `Draws censored` gives the fraction already satisfying the condition at the first eligible age, or peaking on a grid edge. The remainder never satisfies the condition within the window. Report these fractions with the age summary. An interval based on the reaching draws describes that subset, not the whole posterior. The calculation only assesses a milestone once the draw has at least one expressive word.
 
 The spacing between milestone ages describes the fitted reference curves. Establish their order and uncertainty from this fit before drawing a developmental conclusion. These observational comparisons cannot establish that learning speech causes signing to decline.
 

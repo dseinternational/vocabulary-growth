@@ -58,8 +58,8 @@ This follows the **`nz_01`** (Foster-Cohen) convention, **not** the total-sign c
 
 The `vocab_combined` view therefore re-derives them exactly as it does for `nz_01`:
 
-- `spoken` (any modality) = `spoken + spoken_signed`
-- `signed` (any modality) = `signed + spoken_signed`
+- Total `spoken` = source `spoken + spoken_signed`
+- Total `signed` = source `signed + spoken_signed`
 - `produced` = the source column, already a de-duplicated union
 
 The re-derived `signed` is consequently a **total** sign count, comparable with `uk_02`, `nz_01` and `es_01` without item-level re-derivation. uk_07 is **not** a `SIGNED_ONLY_STUDIES` case (as `uk_01` is), and its coding is documented. Its signing values are included in the primary analyses. The `uk_06` coding was also confirmed on 2026-08-12.
@@ -70,7 +70,7 @@ Unlike `nz_01`, uk_07 records comprehension at every retained point. It is there
 
 VG15 consumes those cells (`common_joint_modality._load_uk07_four_cell`), alongside the other composition sources. The uk_07 and uk_02 age ranges overlap between 34 and 56 months. On the four-cell rows uk_07's marginal `spoken` and `signed` are suppressed, because the composition term already carries them; every other model reads uk_07's marginals from `vocab_combined` as usual.
 
-The `include_uk07_cells` definition flag (default `True`) turns this off. Unlike `include_nz01_cells`, turning it off does **not** drop the study — uk_07's marginals stand on their own — so the flag isolates uk_07's pull on the association alone.
+The `include_uk07_cells` definition flag (default `True`) turns this off. Unlike `include_nz01_cells`, turning it off does **not** drop the study — uk_07's marginals stand on their own — so the flag changes which data inform the association while retaining the marginal observations. Refitting shared parameters can still change the marginal trajectories.
 
 Two caveats bear on that contribution. uk_07 is a randomised trial sample, so the intervention may have affected growth across assessments; and the association has a study-specific offset but no age trend within a study. Age differences and study differences can therefore be difficult to separate.
 

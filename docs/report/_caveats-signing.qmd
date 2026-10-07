@@ -1,40 +1,13 @@
-<!--
-Transcluded scope-and-caveats note for the signing findings.
-Included via {{< include _caveats-signing.qmd >}} in the signing findings
-chapter. (It once served a separate signing lineage chapter too; that chapter no
-longer exists and this note claimed two call sites until 2026-08-16.) Edit here
-only, and see below on freeze. The long-form
-treatment is the Limitations section of the Discussion (@sec-limitations);
-keep the two consistent. Redrafted by an LLM-based AI tool (Claude Code/Fable 5)
-after the uk_07 integration and the psi heterogeneity investigation
-(notes/202608120030, notes/202608121030). The Type-M paragraph was extended by
-Claude Code/Opus 5 to state the recovery shrinkage alongside it
-(notes/202608161700, issue #226) — the two biases run in opposite directions and
-only one of them was stated. The es_01 construct sentences (symbolic gesture, not
-taught signing) were added by Claude Code/Fable 5 per notes/202608271551, and
-revised by Claude Code/Fable 5.1 on 2026-09-02 per notes/202609021903, which
-retracts the construct-difference claim to "not established" and adds the
-category-coverage candidate.
-The peak-age sentence was corrected by Claude Code/Fable 5 on 2026-08-31:
-VG15 samples the peak's position (sign_peak_prior, adopted 2026-08-06 per
-notes/202608060900 §5c), so "fixed by construction" described VG14, not the
-model of record.
-
-FREEZE: `execute.freeze` is `auto`, which invalidates a chapter when its OWN
-source changes and NOT when an included file like this one does. Editing this
-file and re-rendering therefore leaves the old text in place, silently. Delete
-`_freeze/<chapter>/` for every chapter that includes this file before rendering.
-Same applies to `_report_data.qmd`, which nearly every chapter includes.
--->
+<!-- Shared signing caveats. Earlier drafting and revisions used Claude Code/Fable 5, Fable 5.1 and Opus 5. Revised with OpenAI Codex/GPT-6 on 2026-10-07. Editing an include requires invalidating the including chapters' Quarto freeze cache; see the full-refit runbook. -->
 
 ::: {.callout-note}
 Revised with assistance from OpenAI Codex/GPT-6.
 :::
 
 ::: {.callout-important title="The association is descriptive and exploratory"}
-The within-understood sign–speech association $\psi$ — and therefore the data-identified total expressive vocabulary $p_{\text{any}}$ — is identified from the four sources that record, per word, whether a child signs it (gestures it, in the Spanish source), says it, or both: `uk_02`, `uk_07`, `es_01` and `nz_01` (@sec-speech-sign-association). It is **descriptive / exploratory**, not a test of a hypothesis, and no causal reading is licensed: $\psi > 1$ says that a word a child understands is more often both signed and spoken than independence predicts, not that signing causes, accelerates or delays speech.
+The sign–speech association $\psi$ informs estimated total expressive vocabulary, including the overlap between speaking and signing. Four sources supply per-word categories for signs or gestures, speech and both: `uk_02`, `uk_07`, `es_01` and `nz_01` (@sec-speech-sign-association). The first three classify words within comprehension; the New Zealand source classifies produced words. The model uses their distinct likelihoods. An association above independence describes overlap under the model. It does not show that signing causes, speeds or delays speech.
 
-**The sources disagree, and the model says so.** $\psi$ carries a study-level term; the per-study values are the primary read, and the population value is a shrunk centre, not a consensus. The Spanish source sits close to independence where the UK and New Zealand sources do not, and why is not established. Three candidates of unknown size stand. The first is what parents counted: the Spanish column is defined to include spontaneous symbolic gestures alongside taught signs, while the other sources' "signs" columns carry no recorded definition, so the distinction cannot be drawn on either side. The second is the coverage of the Spanish gesture column, which its authors restricted to ten of the form's 21 word categories after a validity check; if the totals supplied to us carry that elimination, a word signed and said in an eliminated category is recorded as spoken only, which pushes the cross-tabulation toward independence. The third is how the children were taught, which no source records. The spread should therefore not be read as evidence about teaching or compensation. An age-varying association was investigated and rejected ; the analysis did not find an added age effect after accounting for study, but with four informing sources the spread itself is weakly identified and the prior does real work.
+**Study differences need careful interpretation.** The study-specific $\psi$ estimates are the main summaries. The population parameter is a pooled centre, rather than agreement among the sources. Earlier fits placed the Spanish estimate closer to independence than the UK and New Zealand estimates. The reason remains unresolved. The Spanish source includes spontaneous symbolic gestures and taught signs, while the other sources do not define their signing columns. Its authors also restricted gesture analysis to ten of 21 categories; whether the supplied totals include that restriction remains unconfirmed. Teaching differences are another possibility, but the sources do not record them. These counts cannot separate those explanations. A dated age-varying analysis found no clear added age effect after accounting for study. It did not establish that the association is constant in age. With four informing sources, the study spread remains sensitive to the prior.
 
 **Signing coverage thins with age.** Signed observations are dense from about 12 to 60 months and sparse beyond: two small sources above 72 months and one above 84, so older-age estimates depend more on the assumed smooth trajectory. Both $r(a)$ and $p_{\text{any}}$ are reported only within the comprehension-conditioned age cap. The peak age of $r(a)$ is estimated, but under a fixed three-anchor shape whose outer reference ages are asserted rather than fitted, and the signed GP's length-scale is not identified, so the signed trajectory remains substantially parametric in practice. The registered signing models describe children with Down syndrome; there is no registered TD signing model.
 

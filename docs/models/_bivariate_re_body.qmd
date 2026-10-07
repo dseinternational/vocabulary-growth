@@ -7,7 +7,7 @@ fit wrote and sent the reader to VG10 -- a development step -- for every one
 it omitted. Every path here is relative to the fit's output directory, into
 which the report stage copies this file alongside `index.qmd`.
 
-Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07.
 
 Nothing model-specific belongs here. A section that only one of the four
 models needs goes in that model's own template.
@@ -50,7 +50,7 @@ summary_q = pd.read_csv("posterior_summary_q.csv")
 summary_q
 ```
 
-That table is the production ratio at the query ages, with an inner 50% and an outer 89% equal-tailed interval; the `interval_kind` column records the convention. It carries two estimands where this model puts a child effect on $q$. The `q_population_*` columns — and the historical `q_*` columns, which are the same numbers — are the zero-effect reference child in the average study. The `q_subject_marginal_*` columns are the same rate for a freshly drawn child, and are the wider pair: they are what to quote about an individual. There is no expected-count column for either, because $q$ is the share of a child's *own* comprehension that they speak, so multiplying it by the reference inventory would describe a child who understands every word in it.
+The table summarises the spoken share at the query ages with 50% inner and 89% outer equal-tailed intervals. The `interval_kind` column records the convention. Where the model includes a child effect on $q$, `q_population_*` and the equivalent legacy `q_*` columns describe the zero-effect reference profile. The `q_subject_marginal_*` columns draw a new child's persistent effects and describe uncertainty about that child's expected spoken share. They do not include variation in a realised spoken count. Multiplying $q$ by 810 would assume that the child understands the whole reference inventory.
 
 ### Comprehension-production gap
 
@@ -82,7 +82,7 @@ This conditional mean is not a causal effect. For a child whose effects are unkn
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$. $Y$ is a draw from the posterior predictive distribution. Read the `*_population_*` columns for the zero-effect reference child in the average study (not an average over children), and the `*_subject_marginal_*` and `Y_*` columns for where a single unseen child might fall; the latter are much the wider, and are the ones to quote about an individual.
+$p$ describes an expected vocabulary proportion and $Ey$ its expected count. The `*_population_*` columns describe the profile with study and child effects set to zero. The `*_subject_marginal_*` columns include a new child's persistent effects. The `Y_*` and `P(Y<=k)` columns also include variation in an observed count. Use those predictive-count columns for statements about a possible future assessment. The table gives 50% inner and 89% outer intervals; `interval_kind` records their convention.
 
 ```{python}
 #| echo: false

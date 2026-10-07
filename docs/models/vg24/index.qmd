@@ -56,7 +56,7 @@ render_sampling_banner()
 
 VG24 is VG15 with three added parameters. VG15 gives each child three deviations — one on the comprehension trajectory, one on the production ratio $q$, one on the signed ratio $r$ — and draws them independently, which fixes at zero every relationship between them. VG24 replaces that assumption with a free $3 \times 3$ correlation and lets the data answer. VG15 is nested exactly at the identity.
 
-The parameter the model exists to produce is $\rho_{sign\,q}$: **do children who persistently sign a larger share of what they understand also persistently say a larger share of it?** Nothing in the registry answers that question. $\rho_{uq}$ — the quantity VG20 estimates for VG10, here on the trivariate frame — and $\rho_{u\,sign}$ come with it.
+VG24 supplies the between-child correlation $\rho_{sign\,q}$. It asks whether children with persistently larger signed shares also have larger spoken shares of understood words. The same child-effect block estimates $\rho_{uq}$ and $\rho_{u\,sign}$. VG15 retains the reporting role for signing trajectories and total expressive vocabulary.
 
 ```{python}
 #| echo: false

@@ -1,6 +1,7 @@
----
-abstract: "*TODO*"
----
-
 # Results {#sec-results}
 
+::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6.
+:::
+
+This chapter is unfinished. Results will be added after the reporting fits, comparisons and required checks have been reviewed. See the [model inventory](../models/README.md) for the source of each quantity.

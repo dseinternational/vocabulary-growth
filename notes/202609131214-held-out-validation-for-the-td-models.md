@@ -1,6 +1,9 @@
 # Held-out validation for the typically-developing models, and why it is not pre-refit work
 
 > [!NOTE]
+> Documentation review, 7 October 2026, with assistance from OpenAI Codex/GPT-6. The [1 October harness](202610011300-td-held-out-validation-harness.md) implements child- and study-held-out validation for VG11, VG12, VG21, VG23 and VG26. The missing-tool statements below describe the September code. Harness and smoke-test completion do not establish that reporting-quality validation has been run.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Opus 5).
 
 **Date:** 2026-09-13. **Question:** should `scripts/kfold_loso.py` be extended to the typically-developing reference models (VG11, VG12, VG21, VG23), and should that happen before the refit? **Evidence:** the `loo_summary.csv` and `diagnostics.csv` of each TD fit of record (the 2026-09-08 `rep` fits), their prepared frames rebuilt through `vocab_growth.analysis_frames`, the memory-watch log those fits ran under, their rendered report pages, and the code of `kfold_loso.py`, `loso_compare.py` and `report_cells.render_loo_section`. **Answer:** yes, eventually. Nothing else can give these models a usable out-of-sample check, and [#240](https://github.com/dseinternational/vocabulary-growth/issues/240) cannot close without one. But it decides nothing, it costs tens of hours of fits, and #240's own open graph question could overtake it, so it is not pre-refit work. One small thing found on the way _was_ pre-refit work, and is fixed in the same change as this note: the report pages pointed readers at checks that cannot run on them (§2).
@@ -37,17 +40,6 @@ Rewording it is cheap but not free. The text is a string inside a `print` call, 
 - **Whether the reference curve transfers to a dataset it has not seen.** Each TD curve is "the average study" over 10 datasets (VG11) or 6, with language inseparable from dataset. Holding out a study, its intercept drawn from the prior as a held-out child's is, is the only test of that. With 6 to 10 studies it is also only 6 to 10 fits per model.
 - **#240 itself.** Its open item "Replace leave-one-administration-out PSIS-LOO as the principal generalisation check with leave-one-child-out and leave-one-study-out validation that integrates held-out effects", and its completion criterion "New-child and new-study performance is evaluated at the appropriate grouping level".
 
-## 4. Why it is not pre-refit work
+## 4. Outcome
 
-- **It decides nothing.** Model roles were settled on 2026-09-09 (`notes/202609091600-model-roles-settled.md`), and no choice between TD models is waiting on a predictive comparison. What it produces is a calibration and transfer statement for four reference pages.
-- **There is no refit window to miss.** It had been listed with the pre-refit work, on the ground that the refit window would otherwise have nothing to run for these models. That ground does not hold: `kfold_loso.py` fits its own folds and records the raw-data fingerprint rather than contributing fits, so the fits of record neither feed it nor are affected by it. It can run at any time.
-- **It could be overtaken.** #240's first open item — the form-scale compression, an age- or form-varying child loading, possibly a measurement model — may change the TD graphs. Folds scored before that settles would describe graphs that are no longer registered.
-- **It is expensive.** The 2026-09-08 `rep` fits' spans in `td-rep-memory.log` (UTC, matching each manifest's `created_at_utc`) were VG11 4 h 39 m, VG12 55 m, VG21 1 h 46 m and VG23 1 h 36 m, with VG11 and VG12 overlapping for 40 minutes, so they are indicative only. A fold fit is the whole graph with a fifth of its rows out of the likelihood, so roughly a full fit: five child folds per model comes to about 45 hours of fitting before any study holdout. A cheaper tier is unlikely to be scorable: the Down syndrome criterion-3 folds at `test` failed the element-wise gate in 9 of 10 with 943 children (worst ESS 265), and these models have 5,496 to 14,553. Plan for `rep-lite` or `rep` — an expectation, not a measurement.
-- **It is script work, not configuration.** The frame has to come from the definition (`analysis_frames.build_analysis_frame`, as `wave_forward_score.py` now does) rather than from the Down syndrome pool. `holdout_subject_elpds` scores the bivariate nested likelihood, so VG21 and VG23 (`bivariate_re`) are nearest, and VG11 and VG12 (`univariate_re`) need a univariate scorer. A `study` holdout unit is new for every model. Fitting the folds is already engine-general: `fold_fits.fit_holdout_fold` has dispatched on the definition's engine since #341.
-
-## 5. Recommendation
-
-Not yet decided by the study owner.
-
-1. **Before the refit:** reword the pointer in `render_loo_section` so that it names only checks that exist for the model on the page, batched with the other signature-moving changes. _Done in the same change (§2)._
-2. **After #240's form-scale question is settled:** extend `kfold_loso.py` — VG21 and VG23 first, with child folds and a study holdout, at `rep-lite` or above. VG11 and VG12 follow once a univariate scorer exists.
+The September review deferred the full validation work while correcting report pointers that named unsupported checks. The [October implementation](202610011300-td-held-out-validation-harness.md) now provides both subject and study holdouts, including a univariate scorer and integration over held-out effects. It records smoke runs and commands for reporting runs. Use that record for execution; the earlier cost estimates and proposed implementation sequence are superseded.

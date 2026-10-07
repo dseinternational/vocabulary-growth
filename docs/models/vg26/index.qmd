@@ -36,7 +36,7 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
@@ -350,7 +350,7 @@ render_family_notes()
 
 ![Expected words understood and words spoken on the same axes, across the modelled window.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 ![Predictive count trajectories with 50% inner and 89% outer equal-tailed intervals. These draws include new-child variation and administration noise as well as parameter uncertainty. They are not intervals on the curve with all random effects set to zero.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
 
@@ -384,7 +384,7 @@ render_dispersion_scope()
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Intervals are equal-tailed, an 89% outer and a 50% inner.
+$p$ describes an expected vocabulary proportion and $Ey$ its expected count. The `*_population_*` columns describe the profile with study and child effects set to zero. The `*_subject_marginal_*` columns include a new child's persistent effects. The `Y_*` and `P(Y<=k)` columns also include variation in an observed count. Use those predictive-count columns for statements about a possible future assessment. The table gives 50% inner and 89% outer intervals; `interval_kind` records their convention.
 
 ```{python}
 #| echo: false

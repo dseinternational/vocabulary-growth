@@ -69,7 +69,7 @@ Publication validation requires models of record, TD references and unclassified
 
 ### Limits on interpretation
 
-VG16's corrected lag uses complete child-age waves and is independent of row order. Its coefficient still mixes persistent differences between children with change within a child. The registered `corr` sensitivity adds VG20's correlated child block to VG16 and nothing else, so it measures whether the coefficient survives a persistent comprehension-conversion correlation; it has not been fitted. Parameter recovery is supported, but the [initial recovery check](../../notes/202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md) was insufficient to clear the withdrawal. Sequential validation uses `scripts/wave_forward_score.py`.
+VG16's corrected lag uses complete child-age waves and is independent of row order. Its coefficient still mixes persistent differences between children with change within a child. The registered `corr` sensitivity adds VG20's correlated child block to test dependence on that persistent correlation. Parameter recovery is supported, but the [initial recovery check](../../notes/202609111500-vg16-recovery-and-the-blocker-that-was-not-there.md) did not clear the numerical-headline withdrawal. Use current converged sensitivity and recovery outputs to assess that withdrawal. Sequential validation uses `scripts/wave_forward_score.py`.
 
 VG19 and VG22 support further study of differences in growth rates. The existing follow-up did not reliably recover the size of the production-rate variation. The [VG22 assessment](../../notes/202609091400-is-vg22-the-better-description.md) explains why its added structure did not replace VG20.
 
@@ -91,7 +91,7 @@ VG17 and VG18 live in `src/vocab_growth/models/exploratory/`. They are excluded 
 
 The earlier VG20 sex-shift experiment is now covered by the registered sex-covariate design. The experiment remains a dated comparison, not a separate reporting model.
 
-### Registering a new model: everything that has to be updated
+### Registering a new model
 
 1. Add the statistical definition to `MODEL_REGISTRY` and a wrapper module that dispatches to its engine.
 2. Add a `RegisteredModel` record in `catalogue.py`, including its role and reporting hooks. Dispatch tables derive from this record.
@@ -127,7 +127,7 @@ Fits write by-sex outcome and ratio tables, expected-count differences and coeff
 
 ### Interval reporting convention
 
-Reports use posterior medians, 50% inner intervals and 89% outer intervals. The default is an equal-tailed interval, with equal probability below and above its limits. Selected skewed quantities, including `psi`, `kappa` and milestone or peak ages, use highest-density intervals. The exact policy is in `vocab_growth.intervals`. An interval's width is not a decision threshold.
+Reports use posterior medians, 50% inner intervals and 89% outer intervals. The default is an equal-tailed interval, with equal probability below and above its limits. Selected skewed quantities, including `psi`, `kappa` and conditional signing milestone ages, use highest-density intervals. Count-attainment summaries retain probability before and beyond the supported age window in equal-tailed intervals. Read the output's interval and censoring fields; `vocab_growth.intervals` and `vocab_growth.censored_ages` define these policies. An interval's width is not a decision threshold.
 
 Summary tables use `*_ci50_lo` and `*_ci50_hi` for inner bounds, and `*_ci_lo` and `*_ci_hi` for outer bounds. Plot sidecars include the inner bounds when the figure draws them.
 

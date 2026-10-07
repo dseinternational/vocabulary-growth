@@ -1,5 +1,8 @@
 # Modelling the sign–speech link: a correlated subject block on VG15 first, a sign → speech cross-lag deferred
 
+> [!NOTE]
+> Documentation review, 7 October 2026, with assistance from OpenAI Codex/GPT-6. VG24 and VG25 have since been registered. VG24 supplies the persistent signed-share/spoken-share correlation; VG25 remains an unclassified prospective-association candidate. Its lag design changed in [September](202609151930-vg25-lag-out-of-the-cells.md). Use the [current roles](../docs/models/README.md#model-roles), not this proposal sequence.
+
 > [!IMPORTANT]
 > Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. A small number of study clusters limits precision but does not alone prove formal non-identifiability. Directional attenuation claims need a stated measurement model. Shared parameters can keep the relevant posterior quantities dependent even when the likelihood separates their direct roles. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
 

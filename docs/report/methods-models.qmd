@@ -5,7 +5,7 @@ abstract: "*Statistical models provide a framework for expressing hypotheses, qu
 # Models {#sec-models}
 
 ::: {.callout-note}
-Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07.
 :::
 
 We estimate distributions of words understood, spoken and signed at monthly ages. These describe both expected counts and the spread around them. A mean alone cannot show how much children differ.
@@ -20,7 +20,7 @@ Statistical modelling and inference offer methods for defining mathematical mode
 
 A statistical relationship does not identify its cause. Its interpretation depends on an account of the process being studied and on which alternative explanations the design can distinguish [@spanosProbabilityTheoryStatistical2019; @vanoijenBayesianCompendium2024; @farrellComputationalModelingCognition2018].
 
-The mapping between the two runs both ways: one empirical model admits many statistical models, and one statistical model is consistent with many empirical models. So even when a statistical model fits the observed data well, we cannot be certain its motivating explanation is 'the right one'; another, equally credible, explanation may fit just as well:
+One account of development can lead to several statistical models. Different accounts can also lead to the same statistical model. A good fit therefore does not identify the explanation that produced the data:
 
 > "Many models correspond to the same hypothesis, and many hypotheses correspond to a single model. This makes strict falsification impossible." [@mcelreathStatisticalRethinkingBayesian2020, page 4]
 
@@ -44,7 +44,7 @@ Bayesian inference begins with a prior distribution for unknown parameters. Baye
 
 #### Using existing knowledge
 
-A prior encodes what is plausible about each parameter before the current data are analysed. Priors can draw on previous research and the experience of people with relevant expertise, where this is available. A well-grounded prior combined with the data yields estimates that are more stable, and often more precise, than the data alone. This can be especially valuable when datasets are small or noisy and a substantial evidence base already exists [@gelmanStatisticalWorkflow2026; @mcelreathStatisticalRethinkingBayesian2020].
+A prior states assumptions about parameter values. It can draw on earlier research and relevant experience. Some priors in this study were calibrated using these same data, so they do not represent independent evidence obtained before the study. The [prior guide](../models/PRIORS.md) records that calibration and the sensitivity checks used to assess its effects.
 
 The need to specify a prior is sometimes criticised as subjective. However, all statistical analyses rest on subjective assumptions [@gillBayesianSocialScience2024, sec. 5; @bergerStatisticalAnalysisIllusion1988; @benjaminRedefineStatisticalSignificance2017; @stuntWhyWeHabitually2021a]. Arguably, Bayesian priors are more explicit and open to scrutiny. A prior "should be chosen, evaluated, and revised just like all of the other components of the model", and we can test directly how sensitive our estimates are to it [@gelmanBayesianWorkflow2020; @gelmanStatisticalWorkflow2026; @mcelreathStatisticalRethinkingBayesian2020]. For this study, priors express assumptions about plausible vocabulary trajectories. Sensitivity checks assess how much the reported estimates depend on those assumptions.
 
@@ -134,7 +134,7 @@ $$
 
 where $\alpha$ and $\beta$ are the Beta distribution's conventional shape parameters, related to ours by $p = \alpha/(\alpha+\beta)$ and $\kappa = \alpha+\beta$.
 
-Here $p$ is the expected proportion of the checklist that is checked, so the expected count is $\mathrm{E}[W] = np$. The concentration $\kappa$ controls the extra spread. As $\kappa$ grows large the Beta-Binomial approaches the Binomial (less dispersion); as it shrinks, counts spread more widely around the same mean $np$ (more dispersion). This extra variation describes observations around a population trajectory. It should not be confused with uncertainty about the trajectory itself.
+Here $p$ is the expected proportion of the checklist that is checked, so the expected count is $\mathrm{E}[W] = np$. The concentration $\kappa$ controls the extra spread. As $\kappa$ grows large the Beta-Binomial approaches the Binomial (less dispersion); as it shrinks, counts spread more widely around the same mean $np$ (more dispersion). This extra variation describes counts around their modelled expected value, after any included study and child effects. It should not be confused with uncertainty about the trajectory itself.
 
 Where a model estimates several outcomes jointly (@sec-joint-outcomes), parameters carry the outcome's subscript: $p_{\text{und}}$ is the expected proportion for the count $W_{\text{und}}$, and likewise the concentration $\kappa_{\text{und}}$.
 
@@ -199,9 +199,9 @@ The amplitude $\eta$ scales the departure, while $\ell$ controls its smoothness.
 
 #### HSGP approximation {#sec-hsgp}
 
-A full Gaussian-process calculation can be expensive. A dense covariance calculation relates every observed age to every other, and the cost of that comparison grows with the cube of the number of observations: doubling the data multiplies the work by eight. With several hundred observations per model this would be manageable once, but the sampler must repeat it thousands of times, once for every candidate set of parameter values it tries.
+A full Gaussian-process calculation can be expensive. Factorising a dense covariance matrix has a cost that grows roughly with the cube of the number of age points represented. Repeated observations at the same age need not add distinct points. The sampler may repeat this calculation for many candidate parameter values.
 
-We therefore use the Hilbert-space Gaussian process (HSGP) approximation [@solinHilbertSpaceMethods2020; @riutort-mayolPracticalHilbertSpace2022]. It builds the departure $g_{\mathrm{unit}}$ from a fixed set of smooth waves, from long slow ones to short rapid ones, much as a sound is built from pure tones, and lets the data decide how much of each wave to use. The rules of behaviour are unchanged: the length-scale $\ell$ governs the contribution of faster-varying basis functions, and the amplitude $\eta$ scales the result exactly as before. The parameters keep their meaning, and for a fixed basis size, the main evaluation cost grows approximately in proportion to the number of observations.
+We use the Hilbert-space Gaussian process (HSGP) approximation [@solinHilbertSpaceMethods2020; @riutort-mayolPracticalHilbertSpace2022]. It represents the departure with a finite set of smooth basis functions. The length-scale controls the contribution of faster changes, and the amplitude scales their size. This approximates the full covariance rather than preserving it exactly. With a fixed basis size, evaluation cost grows roughly in proportion to the number of observations. Prior checks assess whether the chosen basis and domain represent the intended curves.
 
 Two settings control how faithful the approximation is. The first is the number of waves, $m$. More basis functions can improve the approximation but cost more to fit, and a function allowed to change quickly (a short $\ell$) needs more of them. The second is the width of the age window over which the waves are defined. It must extend some way beyond the ages a model is fitted to, because the approximation deteriorates near its edges, and the boundary factor $c$ sets how far.[^hsgp-domain] The definition and age-grid code determine the units of the length-scale range; inspect their conversion rather than treating every stored bound as months. We choose $m$ and $c$ for that range, following the recommendations implemented in PyMC [@abril-plaPyMCModernComprehensive2023; @riutort-mayolPracticalHilbertSpace2022].
 
@@ -260,7 +260,7 @@ Multiplying the two steps gives a single, coherent probability for the observed 
 
 This graph describes the likelihood, not a causal theory of development. Its direction follows the assumed nesting of speech within comprehension. It does not establish whether a change in comprehension causes a change in speech.
 
-Note also the arrow the diagram does not contain: $q$ varies with age but, given age, not with the size of the child's understood vocabulary; the understood count affects the spoken count only as the pool of words the ratio applies to. Two same-age children who understand 100 and 400 words are given the same expected production ratio. Whether the ratio additionally depends on comprehension itself is a question we return to with the cross-lag model (VG16, @sec-child-structure).
+The diagram shows the basic age relationship. At fixed age and fixed child, study and sex effects, the understood count sets the denominator for speech but does not directly change $q$. In models with correlated child effects, an observed understood count can still inform the child's production ratio through those shared effects. VG16 adds an explicit relationship with earlier comprehension (@sec-child-structure).
 
 ### The production ratio $q$ {#sec-production-ratio}
 
@@ -428,7 +428,7 @@ The four spreads keep the names, priors and meanings they have in VG19 and VG20,
 
 ### The cross-lag
 
-The joint models make the production ratio a function of age alone: given age, how much a child understands affects the expected spoken count only through the pool of understood words the ratio applies to (@sec-joint-outcomes). **VG16** asks whether a child's comprehension history shifts the ratio itself. For each administration with an earlier one from the same child, the previous understood count, expressed as a deviation from the population curve at that age, enters the current production ratio with a coefficient $\beta_{\text{lag}}$ under a prior centred on zero, so that neither direction is imposed.[^wave] The estimate needs careful reading. Because a deviation from the population curve retains each child's persistent standing, $\beta_{\text{lag}}$ mixes a between-child association; children who understand more also say more of it; with a within-child one, and it is not evidence of a temporal direction. VG16 exists to estimate this single quantity and supplies no other reported number. Its estimate is currently withdrawn: the construction of the lag was corrected after review, and no figure will be reported until the corrected model has passed a reporting-quality fit (@sec-models-of-record).
+The joint models let the production ratio vary with age and, where included, study, child and sex effects. **VG16** adds a predictor based on the child's earlier comprehension. It expresses the earlier count as a deviation from the population curve at that age and estimates a coefficient $\beta_{\text{lag}}$ under a prior centred on zero.[^wave] Because that deviation retains the child's persistent standing, the coefficient combines differences between children with change within a child. It does not identify a causal or temporal direction. VG16's reporting role is limited to this coefficient. The estimate remains withdrawn pending the corrected model's fit, recovery and sensitivity checks (@sec-models-of-record).
 
 [^wave]: An administration wave contains all rows for a child at one recorded age. Rows in the same wave receive the same earlier source, so the predictor does not depend on input row order.
 
@@ -454,8 +454,8 @@ The twenty-three registered models differ in population, outcomes and structure.
 | VG15  | Down syndrome        | Understood + spoken + signed | VG14 + the estimated association $\psi$, study and child intercepts on all three trajectories, an estimated signed middle-anchor age, and VG10's anchoring.                      |
 | VG16  | Down syndrome        | Understood + spoken          | VG09 + the comprehension-history cross-lag on $q$ (@sec-child-structure), plus VG10's anchoring.                                                                        |
 | VG19  | Down syndrome        | Understood + spoken          | VG10 + child rates as well as levels on both trajectories.                                                                                                             |
-| VG20  | Down syndrome        | Understood + spoken          | VG10 + the correlation $\rho_{uq}$ between a child's two intercepts.                                                                                                   |
-| VG21  | Typically developing | Understood + spoken          | VG13 with the age window widened to 8–22 months, for the comparison at matched comprehension.                                                                           |
+| VG20  | Down syndrome        | Understood + spoken          | VG10 plus correlated child intercepts and a sex covariate. |
+| VG21  | VG13 extended to the wider TD window, with revised anchors and a sex covariate. |
 | VG22  | Down syndrome        | Understood + spoken          | VG10 + the low-rank factor over all four child effects.                                                                                                                |
 | VG23  | Typically developing | Understood + spoken          | VG13 + the same correlated child effects as VG20, under a matched prior.                                                                                               |
 | VG24 | Down syndrome | Understood + spoken + signed | VG15 with correlated child effects across the three trajectories. |
@@ -492,7 +492,9 @@ Divergent transitions and energy BFMI below 0.3 are recorded as caveats. They ca
 
 ## Posterior predictive checks and calibration {#sec-predictive-calibration}
 
-Posterior predictive checks generate replicated outcomes from the fitted model and compare them with the observations: distributional overlays, bounded-count behaviour across age and, for the joint models, the paired outcomes together, fallback rows included; the signing model additionally checks the sign-by-speech cells that identify $\psi$. Alongside the visual checks, every fit writes a numerical calibration table recording, for each outcome, overall and within age bands, the mean observed and predicted counts, the empirical coverage of the predictive interval at its stated width, and the distribution of the probability integral transform; each observation's position within its own predictive distribution. Coverage near nominal and a near-uniform transform indicate a predictive distribution that is neither too wide nor overconfident, and departures are directional, so the table says not only whether but how a model misfits. These checks are in-sample; the replications condition on parameters the same observations informed; so their value is comparative, across models, outcomes and ages, and gross misfit is what they catch first; the out-of-sample counterpart is the comparison standard below (@sec-supersedes). A model can pass every sampler diagnostic and fail these checks: convergence shows that computation characterised the specified posterior, not that the specification represents the data.
+Posterior predictive checks compare outcomes simulated from the fitted model with the observations. They assess count distributions across age, paired outcomes and the signing cells that inform $\psi$. Each fit also writes observed and predicted means, predictive-interval coverage and probability integral transform summaries. The transform describes where an observation falls in its predictive distribution. Patterns across ages and outcomes can reveal misfit.
+
+These checks use the same observations that informed the parameters. Coverage near the stated interval probability and a nearly uniform transform do not establish performance for new children or studies. Use held-out checks for that question. The [TD validation record](../../notes/202610011300-td-held-out-validation-harness.md) describes the separate TD child, study and repeated-visit checks. Sampling diagnostics assess computation; predictive checks assess how the specified model describes observations.
 
 ## Parameter recovery
 
@@ -508,7 +510,7 @@ A reporting role requires a recorded decision based on the model's purpose and e
 
 ## Reporting conventions {#sec-interval-convention}
 
-The usual summaries are the posterior median and inner 50% and outer 89% intervals [@mcelreathStatisticalRethinkingBayesian2020]. Intervals are equal-tailed by default. Selected skewed or boundary-censored quantities use highest-density intervals, including association, concentration and some milestone summaries. Read each output's `interval_kind` rather than assuming one convention applies everywhere. Density plots show features that intervals can hide.
+The usual summaries are the posterior median and inner 50% and outer 89% intervals [@mcelreathStatisticalRethinkingBayesian2020]. Intervals are equal-tailed by default. Selected skewed quantities, including association and concentration, use highest-density intervals. Count-attainment ages retain probability before and beyond the reporting window in equal-tailed summaries. Signing milestone tables instead summarise draws that reach an interior milestone and disclose the fractions reaching it or censored. Read each output's interval and censoring fields rather than assuming one convention applies everywhere. Density plots can show features that intervals hide.
 
 Several estimands rest on modest samples, and a point estimate selected for looking decisive is on average inflated in magnitude and can even take the wrong sign; the Type-M and Type-S errors that follow from selecting on a noisy estimate. We therefore lead with the interval and the strength of evidence for a named claim, and treat the point estimate as the least informative summary.
 
@@ -524,7 +526,7 @@ Which model supplies each reported estimate is a recorded decision under the tax
 
 ### Words understood
 
-The Down syndrome comprehension estimates come from **VG20**, the joint model of record. It replaced VG10 in August 2026, when VG10's assumption of independent child effects was contradicted by its own fitted deviations; the population trajectories are reproduced essentially unchanged, so the succession supersedes VG10's child-level intervals rather than withdrawing its curves. Down syndrome comprehension quantities are reported to 72 months: the 72–84-month band is populated, but the candidate child structures disagree there by most of an interval width while remaining indistinguishable out of sample, so a number in that band would reflect the model choice more than the data. The typically developing comprehension reference is **VG12**, reported to 25 months, where its pool's comprehension observations stop.
+The Down syndrome comprehension estimates come from **VG20**, the joint model of record. It replaces VG10 for both trajectories and child-level predictions. A comparison of earlier fits found similar central curves, but that is a dated result, not a constraint on future fits. Comprehension is reported to 72 months under the [recorded age-cap decision](../../notes/202609091700-comprehension-cap-check-rerun.md). The typically developing reference is **VG12**, reported to 25 months, where its admitted comprehension observations stop.
 
 ### Words spoken
 

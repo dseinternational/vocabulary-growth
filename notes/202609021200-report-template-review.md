@@ -1,6 +1,9 @@
 # Report template review: twenty templates, three readers
 
 > [!NOTE]
+> Documentation review, 7 October 2026, with assistance from OpenAI Codex/GPT-6. The final work list predates [persisted new-child spoken-share summaries](202609071730-subject-marginal-production-rate.md), [repeated-child calibration](202610011500-repeated-child-calibration.md) and the current [report style guide](../docs/models/REPORT_STYLE.md). Read those successors before treating an omission here as still open.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 
 **Date:** 2026-09-02, during the reporting-quality refit of #281. **Scope:** every `docs/models/vg*/index.qmd`, reviewed one by one against `REPORT_STYLE.md` and against the artefacts each fit of that run wrote, for what each page shows about its priors, its predictive checks, its diagnostics and its findings — and what a family, a practitioner and a researcher would each still lack. The changes described here were made on a branch in a worktree while the fits ran, so no in-flight fit recorded a dirty checkout.
@@ -29,6 +32,6 @@ The three false templates were corrected; VG15's LOO prose was reconciled with t
 
 All twenty templates edited by one script with an asserted anchor for every edit. Thirteen pages rendered from copies of this run's fits (trace symlinked), with zero unresolved cross-references, zero Quarto filter errors and zero stale phrases; the six development-step pages rendered on the first pass, and the pages carrying the family notes exposed one Quarto rule — an id on a callout is a cross-reference and must use Quarto's prefixes — fixed by wrapping the callout in a plain div. The contraction table and the factor matrix were rendered from real trace output, not only their fallback state. The fast test suite passes with the new blocks under test; `tests/test_environment.py::test_report_figs_dir_stays_repo_local` fails only in a worktree whose path begins with `/scratch/vg`, because it checks that literal as a substring.
 
-## What remains, and needs the engines
+## Follow-up
 
-Persist a `prior_predictive_summary.csv` at fit time so the prior predictive check can carry a computed verdict; write a per-study table from the multivariate engines (the render-time rebuild covers it meanwhile); shade the monthly figures where `n_obs` is small; emit VG22's two per-outcome offset–rate correlations as scalars so `render_variation_table` can tabulate the age-varying between-child spread; confirm whether this run's traces carry the persisted subject-marginal $q$ that #233 asked for.
+Persisted new-child spoken-share summaries were added on 7 September. Later template and calibration work is linked in the notice above. The remaining proposals in the original review are recorded in Git history; their implementation status must be checked in current code and generated artefacts.

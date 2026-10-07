@@ -1,5 +1,8 @@
 # VG25 registered: the sign → speech cross-lag, and the boundary share that changed a default
 
+> [!NOTE]
+> Documentation review, 7 October 2026, with assistance from OpenAI Codex/GPT-6. The original design placed the lag in the composition likelihoods as well as speech. The [15 September decision](202609151930-vg25-lag-out-of-the-cells.md) confines it to the spoken marginal. The [designed-truth option](202609121113-setting-a-parameter-in-a-recovery-truth.md) and [forward scorer](202609121430-the-forward-score-vg25-was-sent-to.md) also replace the missing-tool statements in this registration record.
+
 > [!IMPORTANT]
 > Correction added on 23 September 2026 with assistance from OpenAI Codex/GPT-6. Correlated child effects do not prove that all persistent confounding has been removed. The lag remains a conditional association. Variation in a source predictor does not itself measure regression information, and form extent need not cancel from a ratio when item composition differs. See the [statistical review corrections](202609231200-statistical-review-corrections.md). The original interpretation below remains as a dated record.
 

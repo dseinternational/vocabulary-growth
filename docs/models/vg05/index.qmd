@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
@@ -52,7 +48,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks two questions at once: how does the number of words a child with Down syndrome understands change with age, and what fraction of those understood words does the same child also say? Age here is a proxy for everything that happens over time ($A \rightarrow U$, $A \rightarrow S$), not a cause in itself, and the link from comprehension to production ($U \rightarrow S$) is a structural one inside the model rather than a causal claim about children.
+This model asks two questions at once: how does the number of words a child with Down syndrome understands change with age, and what fraction of those understood words does the same child also say? The model describes age-related patterns in these observations, and the link from comprehension to production ($U \rightarrow S$) is a structural one inside the model rather than a causal claim about children.
 
 ```{python}
 #| echo: false
@@ -69,12 +65,6 @@ from vocab_growth.report_cells import render_reading_routes
 
 render_reading_routes('development', instead='VG20')
 ```
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
-
-:::
 
 ![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
@@ -160,7 +150,7 @@ Above the high age anchor the straight-line part of the production ratio's trend
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -170,7 +160,7 @@ Above the high age anchor the straight-line part of the production ratio's trend
 
 ### Production-ratio trajectory
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line trend in the production ratio, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 

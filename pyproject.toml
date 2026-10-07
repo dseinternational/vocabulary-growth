@@ -40,7 +40,7 @@ dependencies = [
 # package metadata, so none of this reaches anything that depends on us.
 #
 # `lint` is split out so CI's lint job can install ruff alone. Left inside
-# `dev`, `uv run ruff` syncs the whole project environment — 174 packages,
+# `dev`, `uv run ruff` syncs the whole project environment,
 # PyMC and JAX among them — to run a self-contained Rust binary.
 lint = [
   "ruff>=0.16.10"
@@ -92,8 +92,8 @@ packages = ["src/vocab_growth"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # `not slow` by default, so the inner loop stays short. The deselected count is
-# printed on every run, and CI overrides it with `-m ""` so nothing is skipped
-# where it matters — see the `Test` section of AGENTS.md for both commands.
+# printed on every run. CI runs the fast and slow sets in separate jobs; see
+# the Environment and checks section of AGENTS.md for both commands.
 addopts = "-q -m 'not slow'"
 markers = [
     "slow: real sampling, compilation or numerical optimisation — minutes, not seconds. Deselected by default; the `tests-slow` CI job runs them with `-m \"slow\"`.",

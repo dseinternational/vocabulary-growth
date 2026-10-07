@@ -14,9 +14,9 @@ This Irish source records repeated assessments on DSE Checklists 1 and 2. The po
 
 The study owner decided on 2026-09-15 to keep `ie_02`'s counts in the pool on the 810-item reference scale, as the nested Oxford CDI and MB-CDI forms are, rather than to mask them as a partial administration, as `ie_01`'s Checklists 1 + 2 baseline is (`data_utils.INCOMPLETE_ADMINISTRATION_CEILINGS`). The evidence the decision rested on, from `ie_01`'s follow-up wave, the only wave in the pool with all three checklists recorded: Checklist 3 adds little below about 300 words on Checklists 1 + 2, but a median of 100 words at 300–400 and 233 at 400–476, where it is 22–35% of the full count. 17.5% of `ie_02`'s comprehension counts are at or above 300, and its spoken counts are almost all small. The rule is `data_utils.DSE_SHORT_FORM_CEILINGS`.
 
-Three consequences follow.
+The correction had three consequences on the 15 September 2026 preparation. The counts below describe that revision, not the current prepared frames.
 
-- **One more administration leaves the pool.** Three totals exceed 476 (`understood` 477, from a Checklist 2 count of 350 against 349 achievable words): both rows of the already-withheld `ID_79C464EF367C4D5B`, and `ID_FCFE8CE511D0687B` at t1, which the form-ceiling guard now drops. Every Down syndrome prepared frame goes from 1,708 rows to 1,707.
+- **One more administration leaves the pool.** Three totals exceed 476 (`understood` 477, from a Checklist 2 count of 350 against 349 achievable words): both rows of the already-withheld `ID_79C464EF367C4D5B`, and `ID_FCFE8CE511D0687B` at t1, which the form-ceiling guard now drops. At that revision, the Down syndrome frame went from 1,708 rows to 1,707.
 - **`ie_02` is no longer DSE-native.** `dse-native-only` keeps `ie_01`'s 810 wave, `uk_02`'s DSE form and `uk_06`: 153 fitted rows from 116 children, where it kept 264 from 181. On VG15 that leaves 50 signed observations, from `uk_02` and `uk_06`.
 - **The understatement has a registered check.** `ie02-comprehension-masked` on VG10, VG15 and VG20 masks `ie_02`'s 110 comprehension counts and keeps its spoken and signed counts, through the `mask_dse_short_form_comprehension` definition field.
 

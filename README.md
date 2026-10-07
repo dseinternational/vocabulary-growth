@@ -14,7 +14,7 @@ The aim is to give families, teachers and practitioners evidence to help interpr
 
 We fit Bayesian statistical models, which express uncertainty as probability distributions. The models allow vocabulary growth to vary with age and account for differences between studies and children. Joint models describe spoken and signed words as proportions of words understood.
 
-The typically developing comparison data come from Wordbank. All models report on a common 810-word reference scale. Differences between checklists and limited follow-up remain important constraints on interpretation.
+The typically developing comparison data come from Wordbank. The models express counts on an 810-word reference scale, while the source checklists have different item lists and ceilings. This common scale is a modelling assumption; it does not make the checklists equivalent. Limited follow-up also constrains interpretation.
 
 The study examines:
 

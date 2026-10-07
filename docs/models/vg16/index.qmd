@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 4.8, revised with Claude Code/Opus 5).
@@ -77,12 +73,6 @@ VG16 uses the population-relative baseline. Its definition measures earlier comp
 **The lag construction was corrected on 2026-08-23** ([#242](https://github.com/dseinternational/vocabulary-growth/issues/242)). The previous implementation assigned lag sources row by row, so which of two same-recorded-age checklist rows carried the lag depended on arbitrary tie order and 66 spoken observations lost their lag to it. Sources are now assigned per complete child-age administration wave. Fits made before the correction — including the previously quoted `+0.203` — used a different, defective predictor and are quotable only as historical values with that provenance.
 
 **The coefficient mixes between-child and within-child differences.** The population-relative baseline does not subtract each child's persistent level. A positive coefficient would associate earlier above-reference comprehension with greater later conversion to speech, conditional on the model and observed history. It could also reflect a persistent comprehension-conversion correlation, which VG20 estimates directly. VG16 alone does not establish a within-child effect or causal direction. See `notes/202608231714-vg16-statistical-model-review.md`.
-
-:::
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
 
 :::
 
@@ -265,7 +255,7 @@ Because the model already gives every child a persistent production-ratio offset
 
 ### Hierarchy
 
-Study offsets are constrained to sum to zero, so the population curve is the average study rather than an arbitrary reference. Child offsets are ordinary random intercepts on both the understood trajectory and the production ratio. All four blocks use the non-centred form $\delta = \tau z$.
+Study offsets sum to zero over the retained studies. The zero-study-effect curve is their centre on the logit scale, not generally the arithmetic mean of their expected counts. Child offsets are ordinary random intercepts on both the understood trajectory and the production ratio. All four blocks use the non-centred form $\delta = \tau z$.
 
 ## Priors {#sec-priors}
 
@@ -369,7 +359,7 @@ descriptive_stats
 
 The pool is the same aggregated Down syndrome frame the rest of the family uses, with per-study row counts in this fit's `fit_manifest.json`; the glance box above gives the frame size and the number of rows carrying each outcome.
 
-What this table cannot show is the structure that identifies the cross-lag. The panel is **short and irregular**: a large share of children appear only once and contribute nothing to $\beta$, and among those seen more than once the number of visits and the gaps between them vary considerably — this is an aggregation of studies with different follow-up designs, not a single cohort on a fixed schedule. The design consequence is that $\beta$ must be extracted as one population coefficient from many short series rather than estimated from long per-child series. The counts that quantify this are stated in @sec-crosslag-def, read from this fit's own `cross_lag_audit.csv`. One further structural fact matters, and it has now been counted rather than asserted (audit: `notes/202609071000-vg16-available-case-audit.md`). The lag is active only where an earlier understood count and a later spoken count are both observed, and that pattern is **overwhelmingly a property of the instrument, not of the child**: 391 of the 448 rows without a comprehension count sit on one of three checklist forms that never record comprehension anywhere in the pool, and 284 of the 287 rows without a production count are `us_03`, which records no production at all. Of the 1,128 rows carrying no lag, 975 are simply a child's first wave. What remains is the assumption that this observation pattern is ignorable given the modelled study, age and child structure — and the audit finds that **form assignment is not a function of age alone**. In the three studies that use both a comprehension-measuring and a comprehension-less form, the children on the comprehension-less one have substantially larger spoken vocabularies at the same study and age band (rank correlations to +0.73; in `it_01` at 48–60 months, a median of 344 words against 46), and that gap is far too large to be the longer form's own item pool, which is measured at one word. Matching age exactly leaves only eight thin strata, six of them in the same direction, so the finding is directional rather than decisive. The registered complete-pair (`conditional-only`) and form-restricted (`lag-same-form`, `dse-native-only`) checks in [#242](https://github.com/dseinternational/vocabulary-growth/issues/242) are what would settle it, and none has been fitted.
+The frame table does not show which visits identify the lag coefficient. The fit's `cross_lag_audit.csv` records supporting rows, prior-wave sources, gaps and form changes. A child's first wave and visits without usable prior comprehension supply no active lag. The [September available-case audit](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202609071000-vg16-available-case-audit.md) found that missing outcomes and form assignment were strongly related to study design. Those dated counts do not describe every later fit. Complete-pair, same-form, gap and DSE-native sensitivities assess dependence on this observation pattern. Read their current status in the robustness matrix; registration alone does not establish that they were fitted.
 
 ::: {.callout-note}
 
@@ -553,7 +543,7 @@ The joint-trajectory figures below are **subject-marginal**; the production-rati
 
 ![Words understood and words spoken against age, as **subject-marginal** predictive counts: the band is where individual children fall, not uncertainty in the average. The understood line stops before the spoken line for the reasons in @sec-clamp.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
 ![The same subject-marginal predictive trajectories with an inner 50% and an outer 89% equal-tailed interval on each outcome.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
@@ -582,7 +572,7 @@ summary_q = pd.read_csv("posterior_summary_q.csv")
 summary_q
 ```
 
-That table is the production ratio at the query ages, with an inner 50% and an outer 89% equal-tailed interval; the `interval_kind` column records the convention. It carries two estimands where this model puts a child effect on $q$. The `q_population_*` columns — and the historical `q_*` columns, which are the same numbers — are the zero-effect reference child in the average study. The `q_subject_marginal_*` columns are the same rate for a freshly drawn child, and are the wider pair: they are what to quote about an individual. There is no expected-count column for either, because $q$ is the share of a child's *own* comprehension that they speak, so multiplying it by the reference inventory would describe a child who understands every word in it. It is the table step 3 of the worked example draws on.
+The table summarises the spoken share at the query ages with 50% inner and 89% outer equal-tailed intervals. The `interval_kind` column records the convention. Where the model includes a child effect on $q$, `q_population_*` and the equivalent legacy `q_*` columns describe the zero-effect reference profile. The `q_subject_marginal_*` columns draw a new child's persistent effects and describe uncertainty about that child's expected spoken share. They do not include variation in a realised spoken count. Multiplying $q$ by 810 would assume that the child understands the whole reference inventory.
 
 ### Comprehension-production gap
 
@@ -600,7 +590,7 @@ The path relates expected comprehension and speech across ages. Its slope does n
 
 ## Posterior predictions -- words understood
 
-$p$ is the latent proportion of the reference inventory a child is expected to understand; $Ey$ the expected count it implies; $Y$ a draw from the posterior predictive distribution. Read the `*_population_*` columns for the zero-effect trajectory — a profile with zero child and study effects, which need not be the median or mean of the joint expected count and the `*_subject_marginal_*` and `Y_*` columns for a single unseen child — the latter are much the wider, and are the ones to quote about an individual.
+$p$ describes an expected vocabulary proportion and $Ey$ its expected count. The `*_population_*` columns describe the profile with study and child effects set to zero. The `*_subject_marginal_*` columns include a new child's persistent effects. The `Y_*` and `P(Y<=k)` columns also include variation in an observed count. Use those predictive-count columns for statements about a possible future assessment. The table gives 50% inner and 89% outer intervals; `interval_kind` records their convention.
 
 ```{python}
 #| echo: false

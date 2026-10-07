@@ -9,19 +9,13 @@ included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable
 # What this is and who it is for
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+Revised with assistance from OpenAI Codex/GPT-6. Earlier skeleton drafted by Claude Code/Fable 5.1. This summary remains unfinished.
 :::
 
-<!--
-Planned page content (item 1): the study in three sentences; the 810-word
-list; parent report; "children in these studies"; the version and date, taken
-from the pack manifest rather than typed.
--->
+This study describes words understood, spoken and signed by children with Down syndrome. It combines parent-reported checklist counts from research studies and uses statistical models to describe age-related patterns and differences between children. This summary is for families and practitioners who want context for vocabulary records.
 
-[TODO: the study in three sentences.]
+The models use a reference of `{python} N_WORDS` items. The studies used different word lists, languages and response options. A common reference scale does not mean that each checklist asked about the same words.
 
-[TODO: the word list — every count on this site is out of the same `{python} N_WORDS` words, whichever questionnaire a study used.]
-
-[TODO: parent report, and what "children in these studies" means.]
+Parents reported the words their children understood, said or signed. The families took part in research projects and were not selected as a random sample of all children with Down syndrome. Predictions therefore describe possible counts under the model for the contributing research pool.
 
 This summary describes the fitted output recorded as `{python} generated_from()`.

@@ -1,76 +1,24 @@
 # Vocabulary data - UK (2)
 
+> [!NOTE]
+> Revised with assistance from OpenAI Codex/GPT-6.
+
 This data was collected as part of a research project in 2010.
 
-## Fields
+## Measures and preparation
 
-<!-- spellchecker: disable -->
+The prepared CSV records DSE and Oxford CDI assessments. `form` identifies the instrument. The DSE checklist uses the 810-item reference; the Oxford form has 416 items. Preserve the form label when comparing assessments or linking repeated visits.
 
-- subject_id
-- participant_number
-- gender
-- group
-- age_in_months
-- se_raw
-- se_stand
-- se_comp
-- ab_comp
-- ab_com_raw
-- ab_cu_raw
-- ab_fa_raw
-- ab_hl_raw
-- ab_hs_raw
-- ab_ls_raw
-- ab_sc_raw
-- ab_sd_raw
-- ab_soc_raw
-- ab_motor_raw
-- ab_com_ss
-- ab_cu_ss
-- ab_fa_ss
-- ab_hl_ss
-- ab_hs_ss
-- ab_ls_ss
-- ab_sc_ss
-- ab_sd_ss
-- ab_soc_ss
-- ab_motor_ss
-- total_ab_scaled
-- cog_raw
-- cog_t
-- cog_ae
-- rl_raw_1
-- rl_t_1
-- rl_ae_1
-- el_raw_1
-- el_t_1
-- el_ae_1
-- yarc_words_1
-- vocabu
-- vocabusign
-- vocabusay
-- age_in_months_2
-- rl_raw_2
-- rl_t_2
-- rl_ae_2
-- el_raw_2
-- el_t_2
-- el_ae_2
-- yarc_words_raw
-- yarc_words_ss
-- yarc_words_ae
-- yarc_letters_core
-- yarc_letters_ext
-- yarc_letters_ss
-- yarc_letters_ae
-- difference_t1_t2_yarc
-- difference_t1_t2_rl
-- difference_t1_t2_el
-- understood
-- says_or_signs
+The current prepared fields are:
 
-<!-- spellchecker: enable -->
+- `study`, `subject_id`, `age`, `sex` and `form`.
+- `comprehension`, `spoken`, `signed` and `production`.
+- `understood_only`, `signed_only`, `spoken_only` and `signed_spoken`.
+
+The four last fields partition understood words by expression. A word spoken and signed contributes once to the union, twice to the sum of the marginal speech and signing totals. Do not add those margins to obtain distinct expressive words.
+
+`cross_tab_sources.load_uk02_four_cell` uses a cross-tabulation only when all four counts are present, the margins reconcile and their total is positive. Its total supplies comprehension for that likelihood. Other rows can still contribute their usable marginal counts. A comprehension count below recorded speech is masked by the shared nesting rule. See the [data guide](readme.md) and the [cross-tabulation loader](../src/vocab_growth/cross_tab_sources.py).
 
 ## License
 
-This data is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) — see `LICENSE` for details.
+This data is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) See [LICENSE](LICENSE) for details.

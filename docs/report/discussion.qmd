@@ -1,10 +1,11 @@
----
-abstract: "Summary --- *TODO*"
----
-
 # Discussion {#sec-discussion}
+
+::: {.callout-note}
+Revised with assistance from OpenAI Codex/GPT-6.
+:::
+
+This chapter is unfinished. The discussion must assess the findings against the data and model limits, sensitivity analyses, recovery and held-out validation.
 
 ## Limitations {#sec-limitations}
 
-[TODO]
-
+The shared scope notes state the current [Down syndrome caveats](_caveats-ds.qmd) and [signing caveats](_caveats-signing.qmd). This section will bring those limits together after the findings are reviewed.

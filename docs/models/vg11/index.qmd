@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
@@ -52,7 +48,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks two questions at once: how does the number of words a typically-developing child speaks change with age, and how much does that answer depend on which study the child was recruited into? Age here is a proxy for everything that happens over time ($A \rightarrow S$), not a cause in itself.
+This model asks two questions at once: how does the number of words a typically-developing child speaks change with age, and how much does that answer depend on which study the child was recruited into? The model describes age-related patterns in these observations.
 
 ```{python}
 #| echo: false
@@ -77,12 +73,6 @@ VG11 is a **reference model**. It exists to give the Down syndrome spoken-vocabu
 It succeeds **VG03**, which asked the same question of the same population but on a subsample, with no study or child effects, and on an English-only pool. VG11 uses the full pool, adds both kinds of random effect, and widens the language scope, so a difference between the two is not attributable to hierarchy alone.
 
 **A reference is not a target.** A typically-developing trajectory describes what typically-developing children in these datasets did. It is a comparison baseline, not a goal against which an individual child with Down syndrome should be judged or an intervention scored.
-
-:::
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
 
 :::
 
@@ -178,7 +168,7 @@ One consequence for the table above: the priors block reports the standalone chi
 
 ### Length-scale
 
-![How far apart in age two points must be before the trend is allowed to move independently.](ell_unit_dist.png){#fig-lengthscale .lightbox fig-align="left"}
+![Prior for the age scale over which the Gaussian process correction changes.](ell_unit_dist.png){#fig-lengthscale .lightbox fig-align="left"}
 
 ### Amplitude
 
@@ -369,7 +359,7 @@ render_family_notes()
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to produce at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability. $Y$ is therefore much the wider of the two, and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — study and child effects set to zero, which is not an average across children — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+$p$ describes an expected vocabulary proportion and $Ey$ its expected count. The `*_population_*` columns describe the profile with study and child effects set to zero. The `*_subject_marginal_*` columns include a new child's persistent effects. The `Y_*` and `P(Y<=k)` columns also include variation in an observed count. Use those predictive-count columns for statements about a possible future assessment. The table gives 50% inner and 89% outer intervals; `interval_kind` records their convention.
 
 ```{python}
 #| echo: false

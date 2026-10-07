@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
@@ -52,7 +48,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks the same two questions as VG05 — how comprehension grows with age, and what fraction of understood words a child also says — but adds one thing VG05 lacks: the contributing studies are allowed to differ from one another. It therefore also asks a third question. How much of what looked like variation between children is really variation between the studies they came from?
+VG07 estimates comprehension by age and the spoken share of understood words. It adds study offsets to VG05 so contributing studies can differ in vocabulary level. These offsets describe study differences under the model; they do not explain whether recruitment, measurement or other factors caused them.
 
 ```{python}
 #| echo: false
@@ -69,12 +65,6 @@ from vocab_growth.report_cells import render_reading_routes
 
 render_reading_routes('development', instead='VG20')
 ```
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
-
-:::
 
 ![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations and over studies.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
@@ -177,7 +167,7 @@ Above the high age anchor the straight-line part of the production ratio's trend
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -187,7 +177,7 @@ Above the high age anchor the straight-line part of the production ratio's trend
 
 ### Production-ratio trajectory
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line trend in the production ratio, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -357,7 +347,7 @@ The two curves stop at different ages, and that is deliberate rather than an art
 
 ![Median **posterior-predictive** words understood and words spoken against age for the average study, with the observed data. The curves are medians of predictive count draws, not the expected trajectory.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
 ![The same predictive medians with 50% inner and 89% outer equal-tailed intervals. The bands summarise posterior-predictive count draws for the average study, so they are intervals on where a single new fully-paired administration would fall — carrying between-administration dispersion as well as trajectory uncertainty — not the far narrower intervals on the mean trajectory, and not a prediction for a new study.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}

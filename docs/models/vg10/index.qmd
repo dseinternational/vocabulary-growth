@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
@@ -52,16 +48,16 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks two questions at once, about the same children: how many words does a child with Down syndrome understand at a given age, and what fraction of those words do they also say? The second question is what the joint structure exists for. Spoken vocabulary is modelled as understood vocabulary multiplied by a production ratio $q$, so _knowing more words_ and _saying more of the words you know_ are separated rather than confounded. Age here is a proxy for everything that happens over time ($A \rightarrow U$, $A \rightarrow S$, $U \rightarrow S$), not a cause in itself.
+This model asks two questions at once, about the same children: how many words does a child with Down syndrome understand at a given age, and what fraction of those words do they also say? The second question is what the joint structure exists for. Spoken vocabulary is modelled as understood vocabulary multiplied by a production ratio $q$, so _knowing more words_ and _saying more of the words you know_ are separated rather than confounded. The model describes age-related patterns in these observations.
 
 VG10 is the interpretive template the rest of the Down syndrome family follows, and was the headline Down syndrome joint model until 2026-08-19.
 
 ::: {.callout-important title="Superseded as the model of record on 2026-08-19"}
 [VG20](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/vg20/index.qmd) — this model plus one free correlation `rho_uq` between a child's comprehension and production-ratio random intercepts — replaced VG10 as the model of record for the Down syndrome joint understood + spoken estimands, after the four gates of [#224](https://github.com/dseinternational/vocabulary-growth/issues/224). VG10 is now a **development step** and supplies no reported number.
 
-The **population-level** results below are not withdrawn: expected words on both outcomes and the production ratio are reproduced by VG20 inside VG10's own 89% interval at every reported age, which is what a correlation between two mean-zero deviations must do. What is superseded is everything **child-level**. VG10 draws each child's two deviations independently, which its own fitted deviations contradict — they correlate positively against a prior asserting zero, and VG20 estimates the free parameter well above it (on the 2026-08-19 fits: +0.151 [0.106, 0.195] here, +0.368 [0.287, 0.447] there; VG20's findings table carries the current value). The consequence is that VG10's subject-marginal intervals for words spoken are **too narrow** — by about a tenth at the top of the range and a third at the bottom on those fits — and every between-child DS-versus-TD spoken contrast derived from this model understated the Down syndrome side.
+VG20 replaced VG10 for both reference trajectories and child-level predictions. Adding correlated child effects can change the posterior of shared parameters, so agreement between their reference curves must be checked in fitted results. It is not guaranteed by the zero means of the child effects. VG20 also includes sex, which VG10 does not.
 
-Read this report for the lineage and for the trajectory results; read VG20's for anything about how much children differ from one another.
+Use this report to inspect the earlier structure and its sensitivities. Use VG20 for reported understood and spoken trajectories and variation between children.
 :::
 
 ```{python}
@@ -79,12 +75,6 @@ from vocab_growth.report_cells import render_reading_routes
 
 render_reading_routes('development', instead='VG20')
 ```
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
-
-:::
 
 ![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations, studies and children. The two trajectories — words understood, and the production ratio — each carry their own trend, flexible term, study effect and child effect, and meet in the spoken likelihood.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
@@ -165,13 +155,13 @@ $$h(a, s, i) = \text{intercept}_q + \text{slope}_q \cdot a_z + \tilde g_q(a) + \
 
 where $a_z$ is age standardised, $\delta[s]$ is the offset of study $s$, $\delta^{\text{subj}}[i]$ the offset of child $i$, and $\tilde g$ the anchored Gaussian process described below. The likelihood's $q$ is the _child's_ ratio, $\operatorname{logit}^{-1} h(a, s, i)$, including both random effects — not the population curve plotted later in this report.
 
-Neither straight line is given a prior directly. Priors are placed instead on the expected proportion at two reference ages, so the prior can be expressed in terms of vocabulary at those ages. One caution on reading them: the anchors parameterise the straight-line component only. The anchored Gaussian process below is pinned to zero at the reference age and orthogonalised against the trend on the observed rows, but it is not zero at the anchor ages themselves, so the fitted curve there is the anchor plus the process's contribution — the anchors are coordinates of the trend, not exact values of the fitted curve. A second caution, which VG05 and VG07 state and this report has not: the understood anchors and the high production-ratio anchor are calibrated against this project's own frame rather than against independent Down syndrome norms — data-informed regularisation, not external evidence — so posterior agreement with them is partly by construction and is not independent corroboration. Every Down syndrome model from VG05 to VG22 carries these same anchor values, so the caution applies identically across the lineage; the registered broad-anchor sensitivities are what would test it.
+Priors on expected proportions at two reference ages define each straight-line trend. The Gaussian process is zero at its own reference age and orthogonal to the trend on observed rows, but need not be zero at the trend anchors. The anchors therefore describe the trend component rather than the complete fitted curve. The understood anchors and the high spoken-share anchor use this project's data. The low spoken-share anchor uses an independent typically developing estimate. Agreement with data-informed anchors is not independent validation; the broad-anchor sensitivities assess their influence. See [the prior guide](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/PRIORS.md).
 
 Children of the same age differ far more than a Binomial count would allow, so both likelihoods are Beta-Binomial with a dispersion that is itself allowed to change with age.
 
 ### Hierarchy
 
-Study offsets are constrained to sum to zero, so the population curve is the _average study_ rather than an arbitrary reference study; an individual study offset therefore cannot be read as a free per-study level. Child offsets are ordinary random intercepts. All four random-effect blocks use the non-centred form $\delta = \tau z$, which is why the trace and pair plots show the raw $z$ variables and the scales $\tau$ separately.
+Study offsets sum to zero over the retained studies. The zero-study-effect curve is their centre on the logit scale, not generally the arithmetic mean of their expected counts. Child offsets are ordinary random intercepts. All four random-effect blocks use the non-centred form $\delta = \tau z$, which is why the trace and pair plots show the raw $z$ variables and the scales $\tau$ separately.
 
 ### The GP anchor {#sec-gp-anchor}
 
@@ -215,7 +205,7 @@ Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ a
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -225,7 +215,7 @@ Both dispersion blocks use the two-anchor form, with priors stated as $\kappa$ a
 
 ### Production ratio
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -421,7 +411,7 @@ The table lists every registered VG10 sensitivity variant, read from the compari
 
 Read the `verdict` column rather than the deltas. Variants marked robust moved nothing outside the baseline's own intervals, so the reported conclusions do not depend on that choice. A variant marked **sensitive** did move quantities outside, and is a live caveat on everything above it in this report: where the harness names a quantity in `quantities_outside_ci`, statements about that quantity at the ages where the two fits disagree should be read as conditional on the modelling choice the variant changes. Two comparisons carry no verdict at all — one because it was fitted against a baseline that has since changed and needs refitting, the other because too few of its reported ages are shared with the baseline for a comparison to mean anything. Both are disclosed rather than quietly dropped, and neither should be read as evidence either way.
 
-Three of the registered variants -- `paired-only`, `fallback-dispersion` and `marginal-moments` -- vary one thing this report has previously only disclosed: the treatment of spoken rows with no usable understood count. A substantial minority of the spoken observations take that branch — the branch-split rows of the predictive-calibration table below count them for this fit — and the substitute likelihood $S\sim\mathrm{BetaBinomial}(N,p_Uq,\kappa_S)$ has the paired model's mean but not its variance. The discrepancy is exact and signed: the true marginal is more dispersed than the substitute exactly when $q\kappa_S > \kappa_U$, and less when the inequality reverses, so which way this model errs is a question about its own fitted concentrations rather than a structural bias in a known direction. `paired-only` drops those rows and bounds the effect; `fallback-dispersion` keeps them and measures it with one signed scalar that nests the default at zero; `marginal-moments` removes it by matching the true marginal's first two moments. Read them together: the first two disagreeing would mean the branch matters and the rows carry something the paired rows do not, and `marginal-moments` moving nothing would mean the approximation was harmless here after all. The branch-stratified rows of the predictive-calibration table are the companion diagnostic: the two branches differ systematically in age and study composition, so a well-behaved pooled row can hide a badly-behaved branch.
+Three of the registered variants -- `paired-only`, `fallback-dispersion` and `marginal-moments` -- vary one thing this report has previously only disclosed: the treatment of spoken rows with no usable understood count. A substantial minority of the spoken observations take that branch — the branch-split rows of the predictive-calibration table below count them for this fit — and the substitute likelihood $S\sim\mathrm{BetaBinomial}(N,p_Uq,\kappa_S)$ has the paired model's mean but not its variance. The discrepancy is exact and signed: the true marginal is more dispersed than the substitute exactly when $q\kappa_S > \kappa_U$, and less when the inequality reverses, so which way this model errs is a question about its own fitted concentrations rather than a structural bias in a known direction. `paired-only` drops those rows and checks dependence on their inclusion; `fallback-dispersion` keeps them and measures it with one signed scalar that nests the default at zero; `marginal-moments` matches the nested marginal's first two moments, but does not make the distributions identical. Read them together: the first two disagreeing would mean the branch matters and the rows carry something the paired rows do not, and `marginal-moments` moving nothing would mean the approximation was harmless here after all. The branch-stratified rows of the predictive-calibration table are the companion diagnostic: the two branches differ systematically in age and study composition, so a well-behaved pooled row can hide a badly-behaved branch.
 
 
 ### Parameter recovery
