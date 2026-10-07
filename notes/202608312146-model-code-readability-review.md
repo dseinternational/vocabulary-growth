@@ -310,50 +310,9 @@ One substantive gap surfaced that was not in the review: `build_univariate_re_mo
 
 `models/cross_lag.py` (VG16's lag machinery, out of the twelve-model engine), `cross_tab_sources.py` (the four study cross-tab loaders, out of the joint engine's PyMC module), `posterior_analysis.expand_observed_to_obs_id` (the issue-#67 alignment check, from five verbatim copies), `common.kappa_config_fields` (the pure half of the kappa translation, which is what `vg17`'s copy actually needed), and `common.AnyModelFitContext`. Test count 1638 → 1699.
 
-## A sequence for acting on this
+## Later implementation
 
-### Tier 1 — safe today: text, deletions and provably value-identical substitutions, no refit and no equivalence argument
-
-1. Correct the four misstatements in finding 2 (both RE prior blocks, `common_bivariate`'s three docstrings, `common_trivariate`'s licence paragraph and its VG15 tense, the four joint uk_02 labels), plus `intercept_and_gp` and the `gp_utils` module docstring, `regenerate_plots`' extractor comment, `common.py:1608`'s trim claim, the three agent-instruction copies and `docs/models/README.md` item 4, and the `definitions.py` orphaned docstrings, invented `tau_u_study_sigma` and `subject_scale_spec` selectors.
-2. Add a comment at every site where a deliberate omission currently reads as an oversight: the explicit `max_age_months=None` for the untrimmed monthly companion citing `docs/models/vg02/index.qmd:268`; `summary_s`' no-op trim; the `sign_peak_prior` probe in `common_trivariate`; the plot-stage-versus-summary-stage boundary in `_run_joint_plots`; the `subject_variance_partition` probe's subclass home; the three missing `subject_ids`/`form_max`/`trajectory_samples` in the trivariate plot helper.
-3. Delete provably dead code: the three post-cast count-validation blocks (with the mirrored comment at `common_univariate_re.py:313`), the two `sign_gp_mode` branches, `role_of`'s dead `if`, `_analysis_data_hash`, `slope_anchor_logit_coeffs`, the six unread sample fields, the discarded `tau_subj_*` assignments, the two `/scratch/vg-output` lines, and `intercept_and_gp` if it is not kept as a documented reference.
-4. Fix VG14's observed-scatter caps and route its companion CSV through `_multi_outcome_frame`; run `regenerate_plots.py vg14`.
-5. Fix `prior_child_checks`' factor-branch reference age and substitute `DEFAULT_SLOPE_REF_AGE_MONTHS` at the three literal sites.
-6. Thread the reporting quantity through `posterior_summary` (both engines' stage lists), resolve the caps once per plot function, and add the two missing `interval_kind=` arguments while the value is still ETI.
-7. Make `definition` required on the four stage functions and delete the `"outcome"` and `getattr(..., False)` fallbacks.
-8. Rewrite `extract_model_samples` against `posterior_analysis`, unify the three extractor aliases, add `expand_observed_to_obs_id`, and rename the six private-but-public helpers with their catalogue strings, monkeypatch and script imports.
-9. Splat the DS-joint shared field dicts in `definitions.py` (serialised values byte-identical) and replace the hand-listed model counts with machine-checked assertions in `tests/test_fit_identity.py`.
-10. Add the three completeness guards and their missing entries (`recovery/spec.py`, `prior_predictive_audit.py`'s default, the two `EngineAdapter` hook fields), and call `validate_model_definition` from `make_variant`.
-11. Annotations: the `ModelDefinition` union alias, `_as_definition_subclass`, `RegisteredModel.definition`, `subject_effects.resolve`, `analysis_frames`; `ModelFitContext`'s class docstring, `AnyModelFitContext`, the `_require` helper and the `set_model_data` parameter rename.
-12. Name the tier check in `run_fit_pipeline` and hoist `recovery/refit.py`'s stage-0 assertion beside the manifest write.
-13. Promote `CLAMP_SOFTNESS` to `build_utils` and share it with the figure script; add the suffix legend; hoist the two exploratory non-publishable statements to their first lines and tighten the test.
-14. Move the four cross-tab loaders to a public data-layer module and re-point the two audit scripts and the tests (loaders only — not the `p_any_validation` denominator).
-15. Fix `plot_p_any_validation`'s bin guard, its model/observed age-distribution mismatch, its silent `return None` and its hidden window constant; record usable/total counts.
-16. Move `_as_definition_subclass` out from under the VG20 banner; move the cross-lag block to `models/cross_lag.py` with public names and one validation source.
-
-### Tier 2 — needs a byte-identity argument, with `tests/test_graph_equivalence.py` as the instrument; still no refit
-
-1. Extract `run_outcome_plots` into `models/outcome_plots.py` and reduce the bivariate and trivariate helpers to call sites, keeping every filename; update `tests/test_monthly_summary_wiring.py`.
-2. Extract the shared bivariate likelihood emission (the 65 identical lines) into `models/likelihood_blocks.py` with the two `hold_kappa_*` parameters.
-3. Extract `build_utils.age_geometry` and `common.finalise_build` for the seven prologues and six epilogues, adding VG14's three missing `kappa_anchor_derived_rows`.
-4. Extract `gp_utils.slice_grid` and `common.kappa_grid_block` for the 120 Deterministic statements and nine kappa blocks; do not reorder outcomes.
-5. Add `use_study_codes` to `prepare_bivariate_observations` and route `common_bivariate.build_model` through it; add the `prepare_trivariate_observations` and `prepare_joint_observations` siblings with their own tests.
-6. Route the child-structure question through `SubjectEffectPlan` in `sample_posterior_predictive`, `pair_plot_priority`, `prior_child_checks` and `common_univariate_re`; delete the duplicated refusal and the dead `definition` parameter; collapse the duplicated u/q predictive branches.
-7. Split the five long functions into named steps, gate-first: `common.diagnostics` (naming `_gate_or_preserve_trace`), `_run_joint_plots` (explicit percentile bounds), the three `build_model`s and `build_model_re`.
-8. Split `common.py` into `pipeline` / `convergence_gate` / `loo` / `kappa_config` with re-exports, re-targeting the three module-path monkeypatches and correcting the banner.
-9. Add `common.finalise_predictive` for the four matching predictive tails; adopt the joint engine's loop shape for the prior-figure, prior-configuration, ratio-rename and posterior-summary stages (leaving the joint engine's own summary schema alone), and give its `probability_summary` the `filename`/`extra_columns` parameters so the p_any block routes through it with identical columns and order.
-10. Read `spec.rho_uq_eta` directly in `build_child_factor` and replace the `named_vars` probe with a local flag.
-11. Normalise the four cross-tab loaders' output columns and drive the three assembly blocks from a record table, asserting `analysis_frame_hash(build_joint_analysis_frame(VG15)[0])` unchanged.
-12. Have `rebuild_model_context` run `bivariate_re_stages`' prefix rather than re-implementing it.
-
-### Tier 3 — decisions, not tasks
-
-1. **The HSGP basis-centre pin.** Land the mechanism (Tier 2 item 3 is the natural carrier), then read the graph-equivalence baseline diff per model. Models whose midpoints coincide are pinned free; any model whose logp moves is a recorded reporting-quality refit. Until this is decided, `fit_identity`'s classification of `ages_query` as `REPORTING` is not true for sixteen models, so the decision includes whether that classification stands or gains a caveat.
-2. **Whether `plot_p_any_validation` adopts the reconciled four-cell denominator.** It selects the same 56 rows, so it recovers no evidence; what it buys is one reconciliation rule and the authoritative understood total. It moves VG14's published gap numbers and needs a replot.
-3. **Whether `q`, spoken and signed get their own reporting-cap fields.** Currently avoided because it would invalidate seventeen models; `reporting_ages`' docstring already records the cost of not doing it. Tier 1 item 6 makes the switch a one-line change if the decision is ever taken.
-4. **Whether VG14's median-trend figures should carry child-trajectory overlays.** Needs a new graph node and two new frame columns, i.e. a frame-hash change and a refit, on a model already superseded for reporting. Probably no.
-5. **Whether the `sign_gp_mode` alternatives should be exercisable at all.** A field on `JointModelDefinition` invalidates every VG15 fit; a sibling subclass via `_as_definition_subclass` invalidates nothing. The comparison was settled on 2026-08-06, so the honest answer may be to record that and delete the branches.
-6. **Whether a reporting-only definition difference should block publication.** Already flagged as undecided in `CLAUDE.md`; a changed `ages_query` currently leaves stored query outputs describing ages the report no longer asks for — and, per item 1, may not be reporting-only at all.
+The staged work list is superseded. The section above records the first implementation and its verification. The [5 September fixes](202609051042-statistical-model-review-fixes.md) addressed further correctness and compatibility issues. The [13 September implementation record](202609131044-model-review-implementation.md) describes the later shared builders and observation, effect and likelihood helpers. Use those records and the current source before acting on any earlier finding. Original line references and proposed task order remain historical evidence.
 
 ## Where the code misled a reviewer
 

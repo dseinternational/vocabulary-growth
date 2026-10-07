@@ -1,7 +1,7 @@
 # Model report house style
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07.
 
 Each `docs/models/vgNN/index.qmd` is copied into a fit's output directory and rendered there. The template explains the model; the fit supplies its numbers. This guide replaces the former template-review checklist, which is retained in Git history.
 
@@ -51,8 +51,8 @@ Write for a reader who understands basic arithmetic but may not know statistical
 Distinguish these targets wherever they appear:
 
 - A reference curve sets study and child effects to zero. It need not equal the average or median of the sampled children.
-- A child-averaged estimate integrates over a stated distribution of child effects. Name the source column, such as `p_subject_marginal_*`, when needed to remove ambiguity.
-- A new child's expected trajectory includes uncertainty about persistent child effects.
+- A new child's expected trajectory includes uncertainty about persistent child effects. The `p_subject_marginal_*` and `Ey_subject_marginal_*` summaries describe draws of that new child's proportion and expected count. They are not intervals on a population average.
+- An estimate averaged over children integrates their effects before it is summarised. Name that target explicitly and check how the source calculation averages it.
 - A future observed count also includes variation between assessments. Use this distribution for statements about a child's possible observed score.
 
 For models with sex as a covariate, the reference curve uses the midpoint on the logit scale. It is not generally the arithmetic average of girls' and boys' expected counts.

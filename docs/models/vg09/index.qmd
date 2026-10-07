@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5 and Claude Code/Fable 5).
@@ -54,11 +50,11 @@ render_sampling_banner()
 
 This model asks whether children differ from one another not only in how many words they understand but in how much of that comprehension they turn into speech. It extends VG08 by adding a child-level random intercept to the production ratio as well as to the understood trajectory.
 
-::: {.callout-important title="A development step — do not quote these numbers"}
+::: {.callout-important title="Development model"}
 
-VG09 exists to complete a structural argument, not to supply an estimate. The model of record for the Down syndrome understood-and-spoken estimands is **VG20**, which takes VG10's structure — VG09's, plus a per-draw Gaussian process anchor for stability — and adds a correlation between the child's two random intercepts; VG09 was once the recommended model and has since been superseded twice over.
+VG09 is a development model. VG10 adds a per-draw Gaussian process anchor. VG20 adds correlated child effects and sex to VG10 and supplies the reported Down syndrome understood and spoken trajectories.
 
-That is a statement about model structure, not about how this fit sampled — the diagnostics section below is explicit that the fit reaching this page is a clean one. It nevertheless matters that the caution be taken seriously: VG09 and its predecessor VG08 differ in two ways at once — this model adds a child effect on the production ratio **and** migrates both dispersion blocks from the legacy constrained form to the two-anchor form — and they disagree substantially about how much of a child's comprehension is spoken at older ages, and about whether the gap between understanding and speaking stays open or closes. A reader who quotes either report is quoting a superseded number, and the two reports do not agree on what it should be.
+VG09 adds a child effect on the spoken share and changes both dispersion priors relative to VG08. Their comparison cannot isolate either change. Read the diagnostics for the fit shown here; a development role does not imply that sampling passed or failed.
 
 :::
 
@@ -77,12 +73,6 @@ from vocab_growth.report_cells import render_reading_routes
 
 render_reading_routes('development', instead='VG20')
 ```
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
-
-:::
 
 ![The model's structure. Arrows show which quantities depend on which; boxes are repeated over observations, studies or children.](gp_model_graph.svg){#fig-model .lightbox fig-align="left"}
 
@@ -197,7 +187,7 @@ The dispersion priors use calibration on the Down syndrome frame. Earlier simula
 
 ### Understood trajectory
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -207,7 +197,7 @@ The dispersion priors use calibration on the Down syndrome frame. Earlier simula
 
 ### Production ratio
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line trend in the production ratio, on the logit scale.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -381,7 +371,7 @@ Read this table together with the dispersion figures below rather than instead o
 
 ![Predicted vocabulary for an unseen child: **subject-marginal**, with a fresh child's random effects drawn for each posterior draw and held across the whole age grid. Points are the observed administrations.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
 ![The same **subject-marginal** prediction with the 50% inner and 89% outer equal-tailed intervals drawn explicitly.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
@@ -444,7 +434,7 @@ Read across from a child's comprehension score to the line for their age, and th
 
 ### Posterior summary table
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child and occasion-level variability, so it is much the wider of the two. The `_population_` and `_subject_marginal_` columns state the two estimands explicitly; the unprefixed columns are the population-level ones. Quote $Y$ or a `subject_marginal` column when asking where a single child might fall, and a `population` column when asking about the reference curve at zero study and child effects. Columns labelled `ci` are the 89% outer interval and those labelled `ci50` the 50% inner interval, both equal-tailed.
+$p$ describes an expected vocabulary proportion and $Ey$ its expected count. The `*_population_*` columns describe the profile with study and child effects set to zero. The `*_subject_marginal_*` columns include a new child's persistent effects. The `Y_*` and `P(Y<=k)` columns also include variation in an observed count. Use those predictive-count columns for statements about a possible future assessment. The table gives 50% inner and 89% outer intervals; `interval_kind` records their convention.
 
 ```{python}
 #| echo: false

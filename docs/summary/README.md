@@ -4,13 +4,13 @@
 > Drafted with assistance from Claude Code/Fable 5.1; revised by OpenAI Codex/GPT-6.
 
 > [!WARNING]
-> These pages are an unfinished outline. One worked sentence demonstrates computed values; the remaining findings, interactive components and site export are not complete.
+> This summary remains unfinished. General guidance is drafted, but the numerical findings, figures, interactive components and site export still need verified output and review.
 
 ## What this is
 
-The plain-language companion to the technical report, written for families and practitioners intended for the main website. Quarto is the authoring tool here, not the publishing one: each page is one `.qmd`, rendered to Markdown for import into `dsegroup/content`, and the same sources render as one combined DOCX or PDF for partners to review before publication. The interactive tools are not built here; the pages carry placeholders (`data-chart-id` blocks) for the site's chart components, which read a prediction pack exported from the models of record.
+These pages form an unfinished plain-language companion for families and practitioners. Quarto renders each `.qmd` to Markdown for planned import into `dsegroup/content`. The same sources can form a combined DOCX or PDF for review. Chart blocks reserve places for future site components. The prediction-pack export and site integration are not implemented.
 
-No number in the prose is typed. Each is computed in a code cell from the fitted output through the helpers in `_summary_data.qmd` and exported as `<span data-vg="…">216</span>`: the value is baked into the Markdown, DOCX and PDF, The spans provide hooks for a future site component. This repository does not implement or verify live updates.
+Fit-derived numbers come from `_summary_data.qmd`, which reads the report cache. Helpers write values into the rendered documents. Their `<span data-vg="…">` bindings reserve hooks for future site components; they do not provide live updates or verify the cache's provenance.
 
 ## Layout
 
@@ -43,7 +43,7 @@ or `--to pdf` (needs the report's XeLaTeX setup and fonts). A bare `uv run quart
 uv run quarto render docs/summary/words-understood.qmd --to html
 ```
 
-The cells read `docs/report/figures/` (the cache `scripts/sync_report_figures.py` fills), so the VG20 output must be synced first, and VG15's for the signing figure. Nothing is frozen: the cells are cheap, and `freeze: auto` cannot see edits to an included file.
+The cells read `docs/report/figures/` (the cache `scripts/sync_report_figures.py` fills), so compatible VG20 output must be synced before reading its worked example. A completed signing page will also need VG15 assets. Nothing is frozen: the cells are cheap, and `freeze: auto` cannot see edits to an included file.
 
 ## Conventions
 

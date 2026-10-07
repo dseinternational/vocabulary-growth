@@ -9,20 +9,14 @@ included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable
 # How to read a range
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+Revised with assistance from OpenAI Codex/GPT-6. Earlier skeleton drafted by Claude Code/Fable 5.1. This summary remains unfinished.
 :::
 
-<!--
-Planned page content (item 2): why one number misleads; what "half of
-children" and "1 in 20" mean; the expected-average line and why it is narrow.
-Component 6.1 introduced here at one fixed age.
--->
+Children of the same age can have different vocabulary counts. The middle estimate describes the centre of a predictive distribution. The range describes possible observed counts under the model, including variation between children and between assessments.
 
-[TODO: why one number misleads.]
+A 50% predictive interval contains at least half the model's probability for a possible count. It does not promise that half of children in every classroom will fall inside it. A probability of one in 20 means 5% under the stated model and conditions.
 
-[TODO: "half of children" and "1 in 20", in words.]
-
-[TODO: the average line, and why it is narrow when the range is wide.]
+An interval around the reference curve describes uncertainty about that curve. It can be narrow even when the range of possible counts for a new child is wide. Use the predictive range when discussing a possible assessment.
 
 <!-- Component 6.1 at one fixed age; static figure in DOCX and PDF. -->
 

@@ -13,16 +13,14 @@ For current practice, use the [model inventory](../docs/models/README.md), [prio
 - [Total vocabulary spread](202609141600-total-spread-estimand.md).
 - [VG25's revised lag](202609151930-vg25-lag-out-of-the-cells.md) and [VG11's amplitude prior](202609161440-vg11-eta-sigma-0.4.md).
 
-Keep data decisions, analysis evidence and completed run records when later work relies on them. Correct a historical conclusion with a clear notice and a link to its successor. Remove obsolete work lists and duplicate summaries once their useful content is covered elsewhere. The item-difficulty pre-registration remains unchanged except through its deviation log.
-
-The September documentation review removed the May meeting summary, August project-status summary, July plain-language findings and July combined-run plan. Their historical text remains in Git. The August refit handover now retains decisions and links to the current runbook. The superseded model-template review was removed in favour of [the report style guide](../docs/models/REPORT_STYLE.md).
+Keep data decisions, analysis evidence and completed run records when later work relies on them. Preserve pre-registrations and their deviation logs. Correct a historical conclusion with a clear notice and a link to its successor. Remove obsolete work lists and duplicate summaries once their useful content is covered elsewhere.
 
 ## Dated records
 
 | Note                                                                             | Topic                                                        | Type                                        |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------- |
 | [202605131400](202605131400-vg09-sampler-diagnostics.md)                         | VG09 sampler diagnostics                                     | Dated analysis                              |
-| [202605131500](202605131500-vg09-structural-options.md)                          | VG09 structural options                                      | Historical plan; see successor notice       |
+| [202605131500](202605131500-vg09-structural-options.md)                          | VG09 structural options                                      | Superseded plan; see successor notice       |
 | [202605141200](202605141200-vg09b-findings.md)                                   | VG09B findings                                               | Dated analysis                              |
 | [202605151630](202605151630-vg06-ws-comprehension-issue.md)                      | VG06 WS comprehension issue                                  | Dated analysis                              |
 | [202606151500](202606151500-vg14-signing-baseline.md)                            | VG14 signing baseline                                        | Dated analysis                              |
@@ -31,7 +29,7 @@ The September documentation review removed the May meeting summary, August proje
 | [202606171200](202606171200-vg15-subject-re-stabilisation.md)                    | VG15 child effects stabilisation                             | Dated analysis                              |
 | [202606270930](202606270930-ie02-refit-and-findings.md)                          | ie_02 refit and findings                                     | Dated analysis                              |
 | [202606281600](202606281600-literature-review.md)                                | Literature review                                            | Dated analysis                              |
-| [202607031200](202607031200-vg16-within-child-scoping.md)                        | VG16 within child scoping                                    | Historical plan; see successor notice       |
+| [202607031200](202607031200-vg16-within-child-scoping.md)                        | VG16 within child scoping                                    | Superseded plan; see successor notice       |
 | [202607061200](202607061200-us01-edgin-ws-comprehension-issue.md)                | us_01 Edgin WS comprehension issue                           | Dated analysis                              |
 | [202607121200](202607121200-statistical-model-review.md)                         | Statistical model review                                     | Dated analysis                              |
 | [202607121753](202607121753-reporting-config-fit-run-and-findings.md)            | Reporting config fit run and findings                        | Run record                                  |
@@ -101,7 +99,7 @@ The September documentation review removed the May meeting summary, August proje
 | [202608251100](202608251100-prior-predictive-compile-mode.md)                    | Prior predictive compile mode                                | Dated analysis                              |
 | [202608251500](202608251500-comprehension-below-production.md)                   | Comprehension below production                               | Dated analysis                              |
 | [202608251900](202608251900-vg16-vg21-vg23-sensitivities.md)                     | VG16 VG21 VG23 sensitivities                                 | Dated analysis                              |
-| [202608261000](202608261000-models-review.md)                                    | Models review                                                | Dated analysis                              |
+| [202608261000](202608261000-models-review.md)                                    | Models review                                                | Superseded retirement proposal              |
 | [202608261700](202608261700-issue-266-remediation.md)                            | Issue 266 remediation                                        | Dated analysis                              |
 | [202608271551](202608271551-es01-gesture-construct.md)                           | Es01 gesture construct                                       | Dated analysis; see successor notice        |
 | [202608281147](202608281147-study-term-pooling-licence.md)                       | Study term pooling licence                                   | Dated analysis                              |
@@ -127,7 +125,7 @@ The September documentation review removed the May meeting summary, August proje
 | [202609031930](202609031930-vg20-vg22-decision.md)                               | VG20 VG22 decision                                           | Decision record                             |
 | [202609041206](202609041206-sex-differences-in-vocabulary.md)                    | Sex differences in vocabulary                                | Dated analysis                              |
 | [202609041530](202609041530-vg20-sex-shift-arm.md)                               | VG20 sex shift arm                                           | Dated analysis                              |
-| [202609041722](202609041722-sign-speech-modelling-proposals.md)                  | Sign speech modelling proposals                              | Historical plan; see successor notice       |
+| [202609041722](202609041722-sign-speech-modelling-proposals.md)                  | Sign speech modelling proposals                              | Superseded plan; see successor notice       |
 | [202609051042](202609051042-statistical-model-review-fixes.md)                   | Statistical model review fixes                               | Implementation record                       |
 | [202609061530](202609061530-vg24-registration-and-the-lkj-primitive.md)          | VG24 registration and the lkj primitive                      | Implementation record                       |
 | [202609061630](202609061630-research-utils-013-migration.md)                     | Research utils 013 migration                                 | Implementation record                       |
@@ -175,3 +173,5 @@ The September documentation review removed the May meeting summary, August proje
 | [202610011200](202610011200-gompertz-mean-harness.md)                            | Gompertz mean-function harness (#330)                        | Implementation record; result pending       |
 | [202610011300](202610011300-td-held-out-validation-harness.md)                   | TD held-out validation harness                               | Implementation record                       |
 | [202610011500](202610011500-repeated-child-calibration.md)                       | Repeated-child calibration                                   | Dated analysis                              |
+| [202610041345](202610041345-research-utils-017-upgrade.md)                       | Shared library 0.17.0 upgrade                                | Dependency change record                    |
+| [202610071042](202610071042-documentation-review.md)                             | Documentation and instructions review                        | Documentation review record                 |

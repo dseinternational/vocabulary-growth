@@ -37,7 +37,7 @@ format:
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
@@ -67,7 +67,7 @@ from vocab_growth.report_cells import render_reading_routes
 render_reading_routes('development', instead='VG20')
 ```
 
-Every model in this family from VG08 onward gives each child a **constant** offset from the population trajectory: a child who is 30 words ahead at two years is assumed to be the same distance ahead, on the model's scale, at six. VG19 relaxes that. Each child gets a **rate** as well as an offset, so a child can pull away from the population curve, or drift toward it, as they grow.
+VG10 gives each child a constant offset on the logit scale for comprehension and the spoken share. That does not imply a constant difference in words. VG19 adds a child-specific slope to each offset, so a child's distance from the reference curve can change with age. It remains a development model; VG20 supplies the reported trajectories.
 
 ![The model graph. VG19 differs from VG10 by replacing each child's single offset with an offset and a rate.](gp_model_graph.svg){#fig-graph .lightbox fig-align="left"}
 
@@ -213,9 +213,9 @@ $\tau_0$ keeps VG10's own prior on both outcomes, so the offset is unchanged and
 
 ### Length-scales
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ### Dispersion -- understood
 

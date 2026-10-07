@@ -102,7 +102,7 @@ The 2026-09-08 Windows run measured these per-process peaks with `full` traces:
 | VG21  |       28 GB | 1 h 45 m |
 | VG23  |       27 GB | 1 h 36 m |
 
-These are dated measurements, not upper bounds or proof that concurrent TD fits are safe. The much larger pre-August memory figures describe engines that stored observation-sized deterministic arrays. See the [memory investigation](../../notes/202609071440-td-fits-on-96gb-hardware.md).
+These measurements describe that run. They are not upper bounds or evidence that concurrent TD fits are safe. The much larger pre-August memory figures describe engines that stored observation-sized deterministic arrays. See the [memory investigation](../../notes/202609071440-td-fits-on-96gb-hardware.md).
 
 ### The output root
 
@@ -314,7 +314,7 @@ A commit that changes nothing hashed or validated can be brought into the worktr
 uv run python scripts/check_fit.py vg11 vg12 vg15 vg20 vg21 vg23 vg24 vg25 vg26 --config rep --purpose publish
 ```
 
-The only errors it may report are soft-tier caveats, which the `--allow-caveats` paths disclose. Re-render the affected reports with `--render-only` and republish them. A commit that changes a module under `src/vocab_growth/` (other than comments and docstrings; a string inside `raise` or `print` is hashed), a registered definition, a loader rule, the data or `uv.lock` needs a refit. So does a change to a comparison generator under `scripts/` or its local imports, for the comparisons it generates.
+Review every reported error before proceeding. The `--allow-caveats` paths disclose recorded soft-tier caveats; they do not bypass definition, data or executable-signature errors. Re-render validated fits with `--render-only`. Follow the publication decision in section 3 before uploading. A change to a registered definition, loader rule or prepared data can require new samples. Other executable changes under `src/vocab_growth/` also change the fit signature; comments and docstrings do not, but strings inside `raise` or `print` do. The default validation refuses old signatures. A reviewed code-only change can use the recorded resume override described in section 1 when the sampled model and numerical libraries are unchanged. A changed numerical library requires a refit. A comparison generator or one of its local imports changing requires regeneration of that comparison; it does not by itself require resampling unchanged model fits.
 
 ### What the worktree does not separate
 

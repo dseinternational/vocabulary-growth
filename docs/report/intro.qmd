@@ -5,7 +5,7 @@ abstract: "*Children with Down syndrome acquire language skills more slowly than
 # Introduction {#sec-intro}
 
 ::: {.callout-note}
-Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07.
 Drafted in part by an LLM-based AI tool (Claude Code/Fable 5.1).
 :::
 
@@ -13,9 +13,9 @@ Children with Down syndrome acquire language skills more slowly than other child
 
 ## Practical importance
 
-Understanding vocabulary development matters for practice because teaching and therapy are most effective when they are matched to what a child currently knows and can do. A description of age-related trajectories provides a reference for discussion. Vocabulary counts alone cannot determine a child's teaching needs or readiness for a particular intervention. Vocabulary is well suited to guiding practice in this way because it is observable and countable in ways that many other language skills are not. Parents can observe and record the words their child understands, says and signs [@hutchinsMacArthurBatesCommunicative2013; @deckersConcurrentPredictiveValidity2016; @millerValidityParentReport1995], and progress is visible word by word as new words are learned.
+Vocabulary records can help families and practitioners discuss a child's current skills and possible teaching goals. Parents can report words their child understands, says and signs [@hutchinsMacArthurBatesCommunicative2013; @deckersConcurrentPredictiveValidity2016; @millerValidityParentReport1995]. Age-related trajectories give context for those records. A count alone cannot determine teaching needs, readiness for an intervention or its likely benefit.
 
-The progress a child has made in their vocabulary development can inform what they can learn next across language, speech and reading. Words are a prerequisite for learning grammar. Vocabulary size therefore indicates readiness to move from teaching first words to teaching two-word phrases and, later, sentence structures [@fensonVariabilityEarlyCommunicative1994; @batesInseparabilityGrammarLexicon1997; @zampiniLexicalSyntacticDevelopment2011; @sepulvedaCanIndividualsSyndrome2013]; readiness rather than a guarantee, since in Down syndrome grammar lags behind vocabulary and needs teaching of its own (@sec-ds-vocabulary-grammar). Children practise speech by saying the words they know. A child's productive vocabulary therefore defines the opportunities available for practising speech sounds and improving clarity. When learning to read, children most readily learn to read words that are already in their vocabulary, and vocabulary knowledge predicts later reading development and comprehension [@naessReadingSkillsChildren2012; @hulmeGrowthReadingSkills2012]. Reading instruction can, in turn, offer a further route for teaching new vocabulary and supporting spoken language. Knowing where a child is on each of these fronts helps parents and practitioners to choose teaching targets that are neither so far ahead of the child that they result in frustration, nor so far behind that they fail to move learning forward.
+Vocabulary, grammar, speech and reading develop together, but a word count does not establish readiness for a particular teaching step. Vocabulary size relates to the development of phrases and sentences [@fensonVariabilityEarlyCommunicative1994; @batesInseparabilityGrammarLexicon1997; @zampiniLexicalSyntacticDevelopment2011; @sepulvedaCanIndividualsSyndrome2013]. In Down syndrome, grammar can lag behind vocabulary and needs assessment of its own (@sec-ds-vocabulary-grammar). Known words also provide material for speech practice, and vocabulary knowledge predicts later reading development [@naessReadingSkillsChildren2012; @hulmeGrowthReadingSkills2012]. Families and practitioners can use counts alongside information about word use, clarity, grammar and comprehension in context.
 
 ## Existing research
 

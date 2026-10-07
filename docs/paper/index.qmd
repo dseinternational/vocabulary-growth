@@ -1,7 +1,6 @@
 ---
-# Working title. Frontiers advises specific, keyword-bearing titles and
-# discourages vague constructions ("Towards…", bare "Role of…"); revisit once
-# the headline findings are settled.
+# Working title. Revisit after the findings are settled and check the
+# intended journal's current submission requirements.
 title: "Vocabulary growth in children with Down syndrome: Bayesian trajectories of words understood, spoken and signed from pooled international studies"
 author:
   - name: Frank Buckley
@@ -22,19 +21,17 @@ author:
         state: Hampshire
         country: UK
 abstract: |
-  TODO: one paragraph, at most 350 words, structured (background, methods,
-  results, conclusion) with no citations, figures or abbreviations where
-  avoidable. Draft it last, from the settled Results section.
+  Unfinished abstract. Draft from the settled results and check the
+  intended journal's current limits and structure before submission.
 keywords:
   - Down syndrome
   - vocabulary development
   - language development
   - Bayesian modelling
-  - TODO (5–8 keywords required; mix generic and specific)
 ---
 
 ::: {.callout-note}
-Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07.
 Drafted by an LLM-based AI tool (Claude Code/Fable 5). Retain attribution in the repository. Prepare the submission copy's AI disclosure according to the journal's requirements.
 :::
 
@@ -46,7 +43,7 @@ Unfinished manuscript outline. The intended journal is *Frontiers in Psychology*
 
 # Introduction
 
-<!-- Frontiers: no subheadings in the Introduction. Condense from the report's
+<!-- Condense from the report's
 intro.qmd and intro-language-development.qmd:
 why vocabulary trajectories in Down syndrome matter for expectations and
 teaching practice; what existing single-study estimates cannot provide; the
@@ -57,9 +54,9 @@ TODO.
 
 # Materials and methods
 
-<!-- Condense from methods-data.qmd, methods-models.qmd and
-methods-workflow.qmd. Detail lives in the supplementary technical report;
-this section must still stand alone at the level Frontiers requires. -->
+<!-- Condense from ../report/methods-data.qmd and ../report/methods-models.qmd.
+Use the runbooks for workflow details. The technical report remains a local
+validation draft; publishing a supplement needs a separate decision. -->
 
 ## Participants and data sources
 
@@ -71,7 +68,7 @@ TODO: the checklists (MB-CDI Words & Gestures / Words & Sentences, Oxford CDI, D
 
 ## Statistical models
 
-TODO: the shared skeleton (logit-scale trend plus HSGP, Beta-Binomial with age-varying dispersion), the `q(a)`/`r(a)` decomposition, study and child random effects with the estimated child-effect correlation, and the sign–speech association. Name the models of record (VG20, VG15, VG24, VG11/VG12, VG21 and VG23) and cite the supplementary report for the full family.
+TODO: the shared skeleton (logit-scale trend plus HSGP, Beta-Binomial with age-varying dispersion), the `q(a)`/`r(a)` decomposition, study and child random effects with the estimated child-effect correlation, and the sign–speech association. State which quantity comes from VG20, VG15 or VG24 and distinguish those models of record from the TD references VG11, VG12, VG21 and VG23. Cite the current model inventory for the full family.
 
 ## Inference, validation and reporting
 

@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
@@ -52,7 +48,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks how words understood and words spoken develop **together** in typically-developing children over a narrow window of early infancy: not just how many words a child of a given age knows and says, but what fraction of the words they understand they also say, and how that fraction changes with age.
+This model estimates understood vocabulary and the spoken share of understood words in typically developing children. It describes how both quantities change with age within its registered window.
 
 ```{python}
 #| echo: false
@@ -72,17 +68,11 @@ render_reading_routes('superseded', instead='VG21', joint=True, robustness=True)
 
 ::: {.callout-important title="What this model is for"}
 
-VG13 is **superseded** as the typically-developing joint comparator by VG21, its 8–22-month window, which took the role on 2 September 2026 because VG13's support ends at about 221 understood words; nothing on this page is a reported number. It was registered to give the Down syndrome joint models — VG05 without hierarchy, VG20 with it — a typically-developing comprehension-and-production picture to be read against, and it superseded the retired VG06. It remains the exact nested null of VG23, which adds the between-child correlation this model fixes at zero.
+VG13 is **superseded** as the typically-developing joint comparator by VG21, its 8–22-month window, which took the role on 2 September 2026 because VG13's support ends at about 221 understood words; nothing on this page is a reported number. It was registered to give the Down syndrome joint models — VG05 without hierarchy, VG20 with it — a typically-developing comprehension-and-production picture to be read against, and it superseded the retired VG06. VG23 adds correlated child effects and sex. VG13 with the same sex covariate added is its nested zero-correlation comparison.
 
 VG03 and VG04 provide single-level spoken and understood baselines on English-only subsamples. VG12 estimates comprehension with study and child effects over a wider range. Agreement with VG12 within shared support is a check across model specifications fitted to overlapping data, not independent validation.
 
 **A reference is not a target.** A typically-developing trajectory describes what typically-developing children in these datasets did. It is a comparison baseline, not a goal against which an individual child with Down syndrome should be judged or an intervention scored.
-
-:::
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
 
 :::
 
@@ -169,7 +159,7 @@ render_priors_table()
 
 The low-age anchor is concentrated near the floor, deliberately a little below the published norm rather than tightened onto it, because percentiles are unstable where a skill is only just emerging. The high anchor is set from the same published norms and kept clear of the comprehension form's own ceiling — an earlier, much broader setting overshot the norm by roughly a factor of two and sat against that ceiling, which is a prior asserting something the instrument cannot show.
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line understood trend, on the logit scale.](eta_u_dist.png){#fig-eta-u .lightbox fig-align="left"}
 
@@ -191,7 +181,7 @@ The GP amplitude prior on $q$ is narrower in this young window than in the wider
 
 :::
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ![How far the flexible term may depart from the straight-line production-ratio trend, on the logit scale. This is the narrowed prior described above.](eta_q_dist.png){#fig-eta-q .lightbox fig-align="left"}
 
@@ -397,7 +387,7 @@ render_family_notes()
 
 ![Expected words understood and words spoken on the same axes, across the modelled window. The vertical distance between the two curves is the comprehension-production gap, quantified below.](joint_trajectory.png){#fig-joint-trajectory .lightbox fig-align="left"}
 
-![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects — the child in the average study) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
+![Where each study sits. One curve per study over the ages it actually covers, the **reference child** (zero study and child effects) in bold, and the **administration-weighted child** — the same fit re-weighted to the studies present at each age — dashed. Studies are segregated by age, so at a given age the reference child can sit above or below every study sampled there; every population figure and milestone on this page is the reference child's.](study_fans.png){#fig-study-fans .lightbox fig-align="left"}
 
 
 ![Predictive count trajectories with 50% inner and 89% outer equal-tailed intervals. These draws include new-child variation and administration noise as well as parameter uncertainty. They are not intervals on the curve with all random effects set to zero.](joint_trajectory_intervals.png){#fig-joint-trajectory-intervals .lightbox fig-align="left"}
@@ -472,7 +462,7 @@ Each line runs across the full width of the reference inventory, but at the youn
 
 ### Summary at selected ages
 
-$p$ is the latent success probability — the underlying proportion of the reference inventory a child is expected to understand at a given age. $Ey$ is the expected count implied by $p$, and reflects uncertainty in the mean trajectory alone. $Y$ is a draw from the posterior predictive distribution, and reflects both that uncertainty **and** between-child variability, so it is much the wider of the two and it is the one to quote when asking where a single child might fall. Where the table distinguishes `p_population_*` from `p_subject_marginal_*`, the first sets the child and study effects to zero — a profile with zero child and study effects, which need not be the median or mean of the joint expected count — and the second is where one more child might land. Intervals are equal-tailed, an 89% outer and a 50% inner.
+$p$ describes an expected vocabulary proportion and $Ey$ its expected count. The `*_population_*` columns describe the profile with study and child effects set to zero. The `*_subject_marginal_*` columns include a new child's persistent effects. The `Y_*` and `P(Y<=k)` columns also include variation in an observed count. Use those predictive-count columns for statements about a possible future assessment. The table gives 50% inner and 89% outer intervals; `interval_kind` records their convention.
 
 ```{python}
 #| echo: false

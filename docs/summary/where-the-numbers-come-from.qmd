@@ -9,17 +9,11 @@ included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable
 # Where the numbers come from
 
 ::: {.callout-note}
-Drafted by an LLM-based AI tool (Claude Code/Fable 5.1). Skeleton: structure only.
+Revised with assistance from OpenAI Codex/GPT-6. Earlier skeleton drafted by Claude Code/Fable 5.1. This summary remains unfinished.
 :::
-
-<!--
-Planned page content (item 10): the technical report, the repository, the
-model of record, how to cite, how the page updates. A citation is included so
-that the reference machinery is exercised in every format.
--->
 
 The draft technical report documents the data, models and checks, following a Bayesian workflow [@mcelreathStatisticalRethinkingBayesian2020].
 
-[TODO: the repository and the model of record — `{python} generated_from()`.]
+The [project repository](https://github.com/dseinternational/vocabulary-growth) records source data, model definitions and analysis code. The [model inventory](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/README.md) states which model supplies each reported quantity. This draft reads the fitted output recorded as `{python} generated_from()`.
 
-[TODO: how to cite this summary, and how the page updates when the models are refitted.]
+Quote the model, fit date and output version when citing a numerical estimate. A refit can change the numbers. Published pages need a deliberate update and validation; the prediction-pack export and interactive chart integration are still unfinished.

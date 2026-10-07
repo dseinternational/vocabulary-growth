@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (OpenAI Codex/GPT-5, revised with Claude Code/Opus 5).
@@ -79,13 +75,7 @@ VG14 differs from VG15 in two ways, and the second matters more than the first:
 1. **It assumes conditional independence between signing and speaking.** Its total-expressive estimate depends on that assumption. At fixed margins, positive association makes the independence total too high; negative association makes it too low. Use the current VG15 posterior to assess the association.
 2. **It carries no study or child random effects.** Its likelihood treats administrations as independent given age, so age patterns can also reflect study composition and repeated visits. A comparison with VG15 changes this structure as well as the association assumption. It does not isolate either change's effect. VG15 reports an independence comparison at its own fitted margins for that purpose.
 
-**What still stands on this page** is the _shape_ of the signing story — the signed trajectory, the rise and fall of the signed ratio, the sparsity of the signing data, and the direct check of the independence assumption against `uk_02`'s raw cross-tabulation. **What does not stand** is any number derived from the union of signing and speech: the $p_\text{any}$ figure, the $p_\text{any}$ table, and the sign-to-speech crossover timing. Each of those carries its own warning below.
-
-:::
-
-::: {.callout-note}
-
-For full details and discussion, please refer to the technical report.
+Use VG15 for current signing trajectories and derived quantities. This page retains VG14's structural explanation and checks as a development record. Similarity between an earlier VG14 curve and a later fit does not establish that its shape or uncertainty remains supported.
 
 :::
 

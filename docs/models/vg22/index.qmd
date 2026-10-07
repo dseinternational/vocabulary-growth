@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
@@ -52,7 +48,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks how children with Down syndrome differ from one another on four dimensions at once. Every child in the joint model carries four persistent effects: how far their comprehension sits from the expectation for their age (a level, $b^{0u}$), how quickly that gap widens or narrows (a rate, $b^{1u}$), and the same pair on the production ratio $q$ ($b^{0q}$, $b^{1q}$). VG19 gave children rates but drew the two outcomes' effects independently; VG20 correlated the two levels but froze each child's standing in age. VG22 is the successor to both: it draws all four effects from one low-rank factor, $\mathbf{b} = L\mathbf{z}$ with covariance $\Sigma = LL^\top$, so the cross-correlations the data can identify are estimated in one block. It is deliberately **not** a free $4 \times 4$ covariance: Gate 1 found the free form unidentified on these data — the residual maximum-likelihood correlation matrix is singular, and rank 3 reaches the identical likelihood — and the rate-to-rate coupling that first motivated a free form is the weakest of the six cross terms, while the strongest is one no other model estimates: a child's comprehension **level** predicting their production-ratio **rate** at nearly twice the strength of $\rho_{uq}$. See `notes/202608221000-four-by-four-gate1.md`.
+VG22 gives each child four effects on the logit scale, a level and a rate for comprehension and a level and a rate for the spoken share. A rank-three factor links these effects through three shared underlying scores. The covariance is $\Sigma=LL^\top$, where $L$ maps the scores to the four effects. Earlier residual analyses motivated this constrained structure; they do not prove that a full covariance is unidentifiable in every model. VG22 remains a development model because the available recovery evidence did not support adopting its rate magnitudes. See the [model inventory](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/README.md).
 
 ```{python}
 #| echo: false
@@ -133,7 +129,7 @@ render_glossary([
 
 **Loading matrix and rank ($L$, $k$)**
 
-: $L$ is the $(4, k)$ matrix that maps a child's $k$ factor scores onto their four effects; the rank $k$ is how many independent dimensions of between-child variation the model allows. $k$ is a definition field, fixed before fitting, because the residual likelihood cannot choose it.
+: $L$ maps a child's $k$ factor scores onto four effects. The rank $k$ is the number of independent dimensions of between-child variation allowed by the model. It is set in the model definition before fitting, rather than estimated within the fit.
 
 **Implied correlation ($\rho_{uq}$)**
 
@@ -177,7 +173,7 @@ $\rho_{uq}$ is emitted as a deterministic: the element of the implied correlatio
 
 At zero rate scales, the factor covariance can represent two correlated random intercepts. At zero level correlation, a rank-two factor can also represent VG10's independent intercepts. These are boundary statements about the covariance, not equivalences of the current full models. VG20 includes sex effects that VG22 and VG10 do not. VG19's general four-effect covariance requires rank four.
 
-**The rank is a definition field because the data cannot choose it.** Gate 1 puts rank 2 within 2.60 on 2 df of rank 3, and rank 3 within 0.0000 of the free $4 \times 4$, so rank 4 is excluded outright and 2 and 3 are both defensible on the residual likelihood. Ranks 1, 2 and 3 are fitted as a registered sensitivity family. Rank 1 forces $\lvert\rho_{uq}\rvert = 1$ by construction — one factor cannot express anything else — and its fit failed the hard convergence gate (838 parameters over the R-hat threshold, max 2.305, min ESS 7); it is retained under `output/failed/` as the record of that. The registered default moved from 2 to 3 on 2026-08-24, decided by the fits of that date (made under the earlier induced prior) rather than by the gate: rank 3 cleared the convergence gate on the plain `rep` configuration with 8 divergences where rank 2 needed a hightune to reach 18 (178 without one) — the larger factor model is the easier geometry, rank 2 having to press four child effects into a two-dimensional space — and the two disagreed on the spoken child-slope scale on those fits — 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at rank 3, about 2.8 combined standard errors on shared data — so the rank is not a free choice for any reading about how differently children's spoken trajectories steepen.
+The rank is a declared modelling choice. Earlier residual likelihood comparisons gave little separation between ranks two and three, but did not determine the rank of the fitted Bayesian model. The August fits also differed in their rate magnitudes and sampling behaviour. Rank three became the default on 2026-08-24, with ranks one and two retained as sensitivities. Those results concern the data and priors used then. See the [reporting decision](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202609091200-vg20-vg22-gate-resolved.md) and the current fit's diagnostics before interpreting a rate.
 
 ### Why the assumption was worth replacing
 
@@ -223,7 +219,7 @@ Removing the first row's entry also fixed a small defect in the tail. That row h
 
 **Rank 1 is exempt from all of this.** One latent dimension makes every child's four effects one deviate scaled four ways, so every implied correlation is $\pm 1$ by construction and no prior over $(-1, 1)$ can be placed on one. The registered `rank-1` variant reports that rather than a prior.
 
-**What still needs doing.** The fit shown on this page was made under the designed prior, so the level–level correlation below is estimated under the same $\mathrm{LKJ}(2)$ VG20 uses and the two are directly comparable. What remains before the default rank is re-selected is the rest of the rank family under the same prior, a parameter-recovery run of this model's own structure, and a whole-child predictive comparison against VG20; all three are tracked in [#281](https://github.com/dseinternational/vocabulary-growth/issues/281).
+**Reporting status.** The [September gate decision](https://github.com/dseinternational/vocabulary-growth/blob/main/notes/202609091200-vg20-vg22-gate-resolved.md) kept VG20 as the reporting source. VG22's predictive comparison and recovery evidence did not justify adopting its rate magnitudes. Use the current fit and sensitivity records for further evaluation; the former open work list is superseded.
 
 ### Understood trajectory
 
@@ -243,9 +239,9 @@ Removing the first row's entry also fixed a small defect in the tail. That row h
 
 ### Length-scales
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ### Dispersion -- understood
 
@@ -403,7 +399,7 @@ else:
     print("_This fit's `diagnostics.csv` carries no `rho_uq` row._")
 ```
 
-**This is the implied level–level correlation, read at the 36-month reference age.** Under VG10 it is exactly zero by construction; VG20 estimates it directly under a deliberately chosen $\mathrm{LKJ}(2)$ prior; here it is sampled under **the same $\mathrm{LKJ}(2)$** (see Priors), and the fit on this page was made under that prior, so the value above is a like-for-like comparison with VG20's — a difference between the two models is a difference between models, not between priors.
+This is the implied level correlation at the 36-month reference age. VG10 fixes it to zero. VG20 and VG22 give this correlation the same marginal $\mathrm{LKJ}(2)$ prior. Their surrounding covariance structures and joint priors differ, so matching this one marginal prior does not isolate the reason for a difference between their fitted estimates.
 
 Three qualifications belong with it.
 
@@ -574,9 +570,4 @@ render_loo_section()
 - **The child block varies with age; the headline correlation is read at one age.** Each child's effects include rates, so the between-child covariance — and every implied correlation — changes with age by construction. $\rho_{uq}$ as reported is the level–level correlation **at the 36-month reference age**, not a constant of the model and not an average over ages.
 - **It is one structure for the whole pool.** No study-level or subgroup variation in the loadings is estimated, and the pool spans several countries and languages.
 - **Matching one correlation prior does not match the whole joint prior.** The level-level correlation uses the same LKJ(2) marginal as VG20. Other correlations depend on the factor construction. Use comparisons with compatible prior settings and consult the resolved gate in `notes/202609091200-vg20-vg22-gate-resolved.md`.
-- **The rank is declared, not inferred.** The data cannot choose between ranks 2 and 3, and on the 2026-08-24 fits the two disagreed on the spoken child-slope scale — 0.348 (sd 0.047) against 0.576 (sd 0.066), about 2.8 combined standard errors — so any reading about how differently children's spoken trajectories steepen is rank-conditional. Intercept-level quantities agree closely across both.
-- **Population trajectories need an empirical comparison.** Shared-parameter posteriors can change when the child-effect structure or covariates change. Inspect current compatible fits and uncertainty; the model does not guarantee identical trajectories.
-- **Provenance.** Registered 2026-08-23. The rank-2 and rank-3 fits recorded against the induced prior on 2026-08-24 — the numbers the rank comparison in this report's Statistical-model section quotes — are historical and were made under a prior this page no longer uses; the sampling banner and diagnostics above describe the fit actually shown. **The model of record for the Down syndrome joint understood + spoken estimands remains VG20**; this model supplies no reported headline number.
-- **No VG22-specific parameter-recovery run exists yet.** Recovery evidence quoted in an earlier version of this page belonged to VG20 and has been removed. Nothing here is backed by a recovery check of this model's own structure, and the induced-prior issue above means a recovery run should follow the prior redesign rather than precede it.
-- **Age is not a mechanism.** Everything reported is an association with age, not an effect of it.
-- **The reference inventory is a harmonisation.** Counts from different checklists are placed on a common 810-word scale; it is a unit of measurement, not an instrument any child sat.
+- **The rank is declared, not inferred.** Rate estimates depend on that choice. Earlier comparisons did not establish a uniquely supported rank, and the available recovery evidence did not support adopting VG22's rate magnitudes for reporting.

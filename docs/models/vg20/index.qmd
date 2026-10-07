@@ -28,17 +28,13 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`. Quarto resolves `repo` by walking up
-      # for a git remote, and the per-model reports are rendered in the OUTPUT
-      # directory -- which since 2026-08-17 is a symlink to a scratch volume with
-      # no repository above it, so `repo` became a hard render error. This emits
-      # the identical link and does not depend on where the render happens.
+      # An absolute link works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/
 ---
 
-<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17. -->
+<!-- Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07. -->
 
 ::: {.callout-note}
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
@@ -52,7 +48,7 @@ from vocab_growth.report_cells import render_sampling_banner
 render_sampling_banner()
 ```
 
-This model asks one question, and adds one parameter to ask it: among children with Down syndrome, do the children who understand **more words than expected for their age** also say a **larger share** of what they understand? Every model from VG05 to VG16 gives each child two separate deviations — one on comprehension, one on the production ratio $q$ — and draws them independently, which fixes the answer at "no relationship" before any data are seen. VG20 replaces that assumption with a free correlation, $\rho_{uq}$, and lets the data answer (issue [#224](https://github.com/dseinternational/vocabulary-growth/issues/224)).
+VG20 estimates whether children who understand more words than expected for their age also speak a larger share of what they understand. VG10 gives children independent offsets on comprehension and the spoken share. VG20 estimates a correlation between those offsets and also includes sex. It is the model of record for Down syndrome understood and spoken trajectories.
 
 ```{python}
 #| echo: false
@@ -221,9 +217,9 @@ $\eta = 1$ would be uniform across every correlation from $-1$ to $+1$. The valu
 
 ### Length-scales
 
-![How far apart in age two points must be before the understood trend is allowed to move independently.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
+![Prior for the age scale over which the understood Gaussian process correction changes.](ell_unit_u_dist.png){#fig-ell-u .lightbox fig-align="left"}
 
-![How far apart in age two points must be before the production ratio is allowed to move independently.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
+![Prior for the age scale over which the production-ratio Gaussian process correction changes.](ell_unit_q_dist.png){#fig-ell-q .lightbox fig-align="left"}
 
 ### Dispersion -- understood
 
@@ -512,7 +508,7 @@ from vocab_growth.models.calibration import render_calibration_section
 render_calibration_section()
 ```
 
-The spoken rows appear three times: pooled, and then split by which likelihood branch fitted them. The spoken observations that cannot condition on an observed understood count — no comprehension total, or more spoken than understood words recorded; the branch rows give their number for this fit — take a substitute likelihood, $S\sim\mathrm{BetaBinomial}(N,p_Uq,\kappa_S)$, which has the paired model's mean but not its variance. The discrepancy is exact and signed: the true marginal is more dispersed than the substitute exactly when $q\kappa_S > \kappa_U$ and less when the inequality reverses, so which way this model errs is a question about its own fitted concentrations rather than a bias in a known direction. The two branches differ systematically in age and in study composition as well, so a well-behaved pooled row can hide a badly-behaved branch; that is what the split is for. Three registered sensitivities -- `paired-only`, `fallback-dispersion` and `marginal-moments` -- bound, measure and remove the approximation respectively ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233), [#236](https://github.com/dseinternational/vocabulary-growth/issues/236)).
+The spoken rows appear three times: pooled, and then split by which likelihood branch fitted them. The spoken observations that cannot condition on an observed understood count — no comprehension total, or more spoken than understood words recorded; the branch rows give their number for this fit — take a substitute likelihood, $S\sim\mathrm{BetaBinomial}(N,p_Uq,\kappa_S)$, which has the paired model's mean but not its variance. The discrepancy is exact and signed: the true marginal is more dispersed than the substitute exactly when $q\kappa_S > \kappa_U$ and less when the inequality reverses, so which way this model errs is a question about its own fitted concentrations rather than a bias in a known direction. The two branches differ systematically in age and in study composition as well, so a well-behaved pooled row can hide a badly-behaved branch; that is what the split is for. Three registered sensitivities -- `paired-only`, `fallback-dispersion` and `marginal-moments` -- omit the fallback rows, vary their concentration and match the nested marginal's first two moments respectively ([#233](https://github.com/dseinternational/vocabulary-growth/issues/233), [#236](https://github.com/dseinternational/vocabulary-growth/issues/236)).
 
 ## Out-of-sample prediction {#sec-loo}
 

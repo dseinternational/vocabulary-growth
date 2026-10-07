@@ -1449,32 +1449,6 @@ The study scale is worst in every typically-developing model, which have four or
 
 **This is not a prior problem and should not be treated as one.** The study scales' posteriors sit at prior CDF 0.43-0.82 across every model that has them; they are not fighting anything. It is a scale estimated from too few groups, and the candidate remedies are structural rather than a re-centring: a prior justified by the group count, partial pooling across outcomes, or simply treating study as a fixed effect on the typically-developing models, where four groups is arguably a fixed-effects situation to begin with. It replaces the subject scales at the head of the open list.
 
-## Open list after §23
+## Later decisions
 
-**Resolved by §§21–23**, from §20's list: item 1 (the 16–18 month spike, §21), item 2 (Down syndrome joint dispersion, §22), item 3 (refit VG16, done as part of §23's batch) and item 9 (the subject random-effect scales, §23).
-
-Eleven of the fifteen registered models now carry an empirically calibrated two-anchor dispersion prior, each matched to whether its own model has grouping structure, and every subject random-effect scale in the family sits inside the central half of its prior.
-
-Still open, in rough priority order:
-
-1. **Rerun `scripts/prior_predictive_audit.py` for the whole family.** §20's item 4, now much wider: eleven models changed dispersion parameterisation and every subject scale in the registry moved. Its `kappa` and random-effect rows are stale for all of them, and PRIORS.md's "Prior predictive audit" table quotes it. This is the largest single piece of unfinished validation and should come before any reporting-quality run.
-
-2. **The study random-effect scales** (§23). Now the worst-mixing parameter in all three typically-developing hierarchical models and in none of the four Down syndrome ones; the difference is four or seven studies against twelve. Not a prior problem — their posteriors sit at prior CDF 0.43–0.82 — so the remedies are structural: a prior justified by the group count, pooling across outcomes, or fixed study effects where there are only four.
-
-3. **VG05, VG07, VG08 and VG14 still carry the legacy dispersion prior, and §22 shows it is wrong for them too.** All four put `b_kappa_mag_u` at prior CDF 0.993–0.9998, and VG05, VG07, VG08 and VG14 all show _negative_ contraction on the spoken slope. They were left alone for a good reason — each needs a calibration matched to its own grouping, and three of them are lineage steps whose contrast a mid-sequence prior change would confound — but "deliberately not migrated" is now a decision to revisit rather than a settled state. The estimator's `Pool` can already express all three specifications.
-
-4. **VG13's divergences.** Down from 80 to 4, which is the largest single diagnostic improvement in this note, but nothing here targeted them and the cause is not established.
-
-5. **`kappa_min` is doing different things on different outcomes.** VG02's posterior pulls it to 1.34, the Down syndrome spoken ratio's to 9.2 against a median of 3 with contraction −0.05 (§22), and VG13's understood is a young-age asymptote at 34 rather than a floor. §18's item 6 asked whether to tighten `kappa_min_sigma` family-wide; the accumulated evidence says the answer is per-outcome, and that the parameter's _meaning_ varies with the sign of `b_kappa` more than its prior does.
-
-6. **How `kappa` on the understood outcomes should be reported** (§21). The priors are right for the models as specified. What the technical report should say about a parameter that is part observation-level dispersion and part subject-scale drift is not settled, and "dispersion rises with age" is the reading to avoid.
-
-7. **Test `eta_q = 0.4` on VG10** (§5). Untouched by any of this.
-
-8. **Pair a `dev`-config control against VG03's anchored fit** (§18's item 7) to settle the per-draw cost of the parameterisation.
-
-9. **Whether VG11 should carry subject random effects at all** (§19). §19 removed the argument that the data cannot arbitrate; the question of whether the effects earn their place is still open, and VG11's `tau_subject` at 1.061 ± 0.009 on 12,266 children is a strong argument that they do.
-
-10. **`tau_subj_sign` has no calibration of its own** (§23) and inherits the family scale. Nothing estimates a signing subject scale on this frame.
-
-11. **Nothing passes the convergence gate.** It requires zero divergences and R-hat below 1.01. VG09, VG15 and VG16 now have no divergences, and VG10, VG12 and VG16 are at or near the R-hat threshold, but no model clears both.
+The final work list from this calibration run is superseded. Current parameter settings and their basis are in [the prior guide](../docs/models/PRIORS.md). The [August conflict review](202608060900-three-prior-conflicts.md) records the next prior decisions. The [September TD geometry study](202609061900-td-bfmi-is-the-tau-kappa-ridge.md) and [total-spread decision](202609141600-total-spread-estimand.md) qualify the interpretation of child and residual scales. The correction notice at the top of this note applies to its historical lower-bound claims and variance calculations.

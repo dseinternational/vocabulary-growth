@@ -79,23 +79,6 @@ Model `mu_q = (logit p_low + logit p_hi)/2` (overall level) and `dlt_q = logit p
 **Pros:** orthogonalises the most r-hat-marginal pair; mostly a coordinate change rather than a model change.
 **Cons:** does not touch the GP or RE redundancy. May improve only `slope_q` / `intercept_q` r-hat.
 
-## Recommendation
+## Outcome
 
-If the goal is to clear diagnostic warnings without substantively changing the model's output, **A + D** is the smallest credible fix:
-
-- **A** narrows the anchor priors to where VG07 (no subject REs) already located them.
-- **D** removes the structural GP ↔ intercept overlap with a one-line constraint per GP that does not change the model's interpretation, only its parameterisation.
-
-A more conservative variant is **C + D**: tighten the new VG09-specific subject-RE shrinkage and add the GP anchor constraint, with no prior changes on the trajectory itself.
-
-Option E is a larger commitment than the diagnostic issue warrants on its own, and should be considered only as part of a broader move toward GP-only mean functions across the model family.
-
-## Suggested first experiment
-
-Implement **A + D** as a VG09 variant (e.g. `VG09b`) without touching VG09. Fit at `rep` config. Compare:
-
-1. `r_hat` and `ess_tail` for the previously flagged parameters.
-2. `q_query` and the joint trajectory medians/HDI bands against the canonical VG09 run — these should be substantively unchanged if the diagnosis is correct.
-3. The posterior of `tau_subj_q`; if it is similar to VG09's, the subject RE on q is robust to the parameterisation.
-
-If A + D resolves the diagnostics without moving the derived quantities, promote VG09b to VG09 and apply the GP anchor constraint symmetrically to `g_u` and (for consistency) to VG05–VG08.
+The proposed A + D experiment was run as VG09B. See [the dated findings](202605141200-vg09b-findings.md). Later work revised the anchor and amplitude priors, as the correction above records. The original experiment instructions and promotion recommendation are superseded; use the [inventory](../docs/models/README.md) and [prior guide](../docs/models/PRIORS.md) for the current model.

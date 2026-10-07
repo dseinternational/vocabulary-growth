@@ -1,6 +1,9 @@
 # VG16 scoping note: within-child cross-lagged receptive → expressive vocabulary
 
 > [!NOTE]
+> Documentation review, 7 October 2026, with assistance from OpenAI Codex/GPT-6. This is the original proposal, not the adopted estimand. The registered baseline does not isolate a within-child effect, and no lower bound on a causal effect follows from its coefficient. The [statistical review](202608231714-vg16-statistical-model-review.md) and [current model report](../docs/models/vg16/index.qmd) explain the limits.
+
+> [!NOTE]
 > Review status, 2026-09-17 (OpenAI Codex/GPT-6). Historical design proposal. The implemented lag construction was later corrected; the numerical headline remains subject to validation. [Follow-up](202608231900-vg16-lag-wave-correction.md).
 
 > [!NOTE]
@@ -116,20 +119,6 @@ predictive so a ±1-SD prior-understood deviation moves `q` by a plausible amoun
 - **Not a full autoregressive CLPM** (no explicit `S(t−1)→S(t)` beyond `δ_subj_q`); `β` reads as "prior within-child comprehension → current production beyond stable level".
 - **Direction not baked in.** `β ~ Normal(0, σ_β)` centered at 0; the DS receptive-advantage / expressive-delay literature predicts `β>0` (and its intervention relevance), but that is the hypothesis under test.
 
-## 6. Decision gate
+## 6. Implementation and later correction
 
-**GO** if the modelling lead approves this encoding (the `x_lag` definition, the
-observed-vs-latent choice, single `β`, no gap-decay in v1). Then: implement VG16
-as a cross-lag variant of `common_bivariate_re`, register
-(`definitions.VG16` / `model_vg16.py` / `fit_model.py` / `MODEL_REGISTRY`),
-prior-predictive-check `β`, fit dev→rep with nutpie, diagnostics (R̂/ESS/divergences),
-report `β` + HDI, add `docs/models/vg16/index.qmd` + a `docs/models/README.md` row.
-
-## 7. Implementation outline
-
-- **Data prep**: sort observations by `(subject, age)`; per child, shift the
-  understood-deviation to form `x_lag` (0 for first wave / missing prior understood).
-- **Definition**: extend `BivariateModelDefinition` (or a small subclass) with
-  `use_cross_lag_q: bool` + a `β` prior; `VG16` = VG09 settings + cross-lag on.
-- **Build**: add `β · x_lag_obs` to the `q` logit in the RE engine (guarded by the flag).
-- **Report**: a "Within-child receptive → expressive (cross-lag)" section reporting `β`, its HDI, and P(β>0).
+VG16 was implemented. The [wave-construction correction](202608231900-vg16-lag-wave-correction.md) and [statistical review](202608231714-vg16-statistical-model-review.md) replace this note's build instructions and qualify its within-child interpretation. The registered model uses a population-relative baseline, which mixes between-child standing with within-child movement. Its numerical headline remains withdrawn pending validation. Use the [current report](../docs/models/vg16/index.qmd) for the definition and caveats.

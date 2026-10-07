@@ -1,6 +1,9 @@
 # Model roles settled: seven models in the default refit scope, fourteen out
 
 > [!NOTE]
+> Documentation review, 7 October 2026, with assistance from OpenAI Codex/GPT-6. The seven-model scope describes the 9 September registry. The current default contains nine models, after VG25 and VG26 were registered as unclassified candidates. Use the [inventory](../docs/models/README.md#model-roles) and [runbook](../docs/runbooks/full-refit.md#which-models-a-run-covers) for the current set.
+
+> [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 
 **Date:** 2026-09-09. **Decides:** the "Model role assignments" item of [#320](https://github.com/dseinternational/vocabulary-growth/issues/320), on the study owner's instruction. **Evidence:** the 2026-09-07/08 full refit (twenty-one models at `rep`), the VG20/VG22 gate resolution ([`202609091200`](202609091200-vg20-vg22-gate-resolved.md)) and the VG22 recovery result ([`202609091400`](202609091400-is-vg22-the-better-description.md)), the reporting decision of 2026-08-22 ([`202608221200`](202608221200-reporting-source-by-quantity.md)), and the audit of the retirement evidence posted to #320 on 2026-09-08. **Record:** the roles table in [`docs/models/README.md`](../docs/models/README.md), which now names every classified model and which `tests/test_model_catalogue.py` pins against the catalogue in both directions.

@@ -28,7 +28,7 @@ Five things are not Python packages and so are not in the lock:
 - **Graphviz** (`brew install graphviz`, `apt install graphviz`, `winget install Graphviz.Graphviz`). The optional model-diagram figure uses `dot`; if it is absent, the fit skips that figure with a warning.
 - **[Quarto](https://quarto.org/docs/get-started/)** renders reports. Quarto resolves its Jupyter kernel from `PATH`, independently of the interpreter that ran the fit; see [Full refit](full-refit.md) for what that means in practice.
 - **LaTeX** (`quarto install tinytex`) is needed for the report book's `pdf` format. Use a XeLaTeX-capable distribution. The `html` format loads the three fonts from Google Fonts and does not need LaTeX. The `docx` format names them, so readers need them installed to see them. A Quarto post-render script, `scripts/restore_docx_math_settings.py`, restores the template's math font, which Pandoc drops.
-- **Node.js** runs CSpell and Prettier. Install these project tools with `npm install`.
+- **Node.js** runs CSpell and Prettier. Use Node.js 24 and install the locked project tools with `npm ci`.
 
 Quarto bundles Pandoc, Dart Sass, Deno and Typst. Run `quarto check` to inspect the installed versions and the resolved LaTeX, Python and Jupyter paths. Confirm that rendering uses this project's Python environment.
 
@@ -53,4 +53,4 @@ The lock reconstructs a known software environment prospectively. Every complete
 
 CI always runs lint, type and documentation checks. `scripts/ci_changes.py` compares parsed dependency files before skipping model tests and the smoke fit for Ruff, mypy or documentation-tool updates. It retains dependencies shared with the runtime or tests and treats unknown or unreadable changes as requiring the full checks. Changes to agent instructions and model documentation also run the full checks.
 
-The compiled-cache key records the locked environment apart from dependencies used exclusively by Ruff and mypy, the Python interpreter, runner image, compiler and compilation settings. A source digest lets subsequent runs save newly compiled functions. Restore prefixes include the complete environment digest, so a numerical-library change cannot restore an older environment's cache. The first run after changing this cache scheme starts cold.
+The compiled-cache key records the locked environment apart from dependencies used exclusively by Ruff and mypy, the Python interpreter, runner image, compiler and compilation settings. A source digest lets subsequent runs save newly compiled functions. Restore prefixes include the complete environment digest, so a numerical-library change cannot restore an older environment's cache. A changed environment digest starts a new compiled cache.

@@ -68,8 +68,8 @@ The pages carry no front matter of their own so that they can be included here
 and exported on their own to Markdown. Keep this list in step with README.md.
 -->
 
-::: {.callout-important title="Skeleton"}
-This is the structure of the summary report, not a draft of it. Every page is a placeholder except where a sentence demonstrates how quoted numbers are computed from the fitted output. Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+::: {.callout-important title="Unfinished summary"}
+This summary remains unfinished. General guidance has been drafted, but the numerical results, static figures and interactive tools still need verified output and editorial review. Revised with assistance from OpenAI Codex/GPT-6. Earlier skeleton drafted by Claude Code/Fable 5.1.
 :::
 
 {{< include what-this-is.qmd >}}

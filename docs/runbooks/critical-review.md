@@ -1,7 +1,7 @@
 # Critical review programme
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07.
 
 Agreed on 2026-08-05. Apply these reviews at the milestones below. A check is complete only when its findings and their disposition are recorded.
 
@@ -18,7 +18,7 @@ Six substantive errors were found in the fortnight to 2026-08-05, and none was c
 | An appendix the report cited as its disclosure mechanism was an empty stub            | Following a cross-reference     |
 | Two incorrect analysis recommendations, one withdrawn and one falsified by experiment | Checking them before acting     |
 
-The last row is the important one. Recommendations from any source, human or machine, need the same adversarial treatment as the numbers.
+Check recommendations from people and AI tools against evidence before acting on them.
 
 ## The reviews
 
@@ -108,12 +108,12 @@ Each is defined by what it checks, what it must produce, and what would count as
 
 ## Milestone gates
 
-| Milestone             | Must pass        |
-| --------------------- | ---------------- |
-| After any refit       | R1, R3, R4       |
-| After any data change | R5, then a refit |
-| Before a draft freeze | R1, R2, R4       |
-| Before release        | all of R1–R9     |
+| Milestone             | Must pass                                                 |
+| --------------------- | --------------------------------------------------------- |
+| After any refit       | R1, R3, R4                                                |
+| After any data change | R5; refit affected models if their prepared frames change |
+| Before a draft freeze | R1, R2, R4                                                |
+| Before release        | all of R1–R9                                              |
 
 A failed review blocks the unsupported claim. Disclosure can explain a limitation, but it does not make every result suitable for publication or override the fit-validation requirements. Revise, qualify or remove the claim according to the finding.
 
