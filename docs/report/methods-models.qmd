@@ -455,7 +455,7 @@ The twenty-three registered models differ in population, outcomes and structure.
 | VG16  | Down syndrome        | Understood + spoken          | VG09 + the comprehension-history cross-lag on $q$ (@sec-child-structure), plus VG10's anchoring.                                                                        |
 | VG19  | Down syndrome        | Understood + spoken          | VG10 + child rates as well as levels on both trajectories.                                                                                                             |
 | VG20  | Down syndrome        | Understood + spoken          | VG10 plus correlated child intercepts and a sex covariate. |
-| VG21  | VG13 extended to the wider TD window, with revised anchors and a sex covariate. |
+| VG21 | Typically developing | Understood + spoken | VG13 extended to the wider TD window, with revised anchors and a sex covariate. |
 | VG22  | Down syndrome        | Understood + spoken          | VG10 + the low-rank factor over all four child effects.                                                                                                                |
 | VG23  | Typically developing | Understood + spoken          | VG13 + the same correlated child effects as VG20, under a matched prior.                                                                                               |
 | VG24 | Down syndrome | Understood + spoken + signed | VG15 with correlated child effects across the three trajectories. |
@@ -510,7 +510,11 @@ A reporting role requires a recorded decision based on the model's purpose and e
 
 ## Reporting conventions {#sec-interval-convention}
 
-The usual summaries are the posterior median and inner 50% and outer 89% intervals [@mcelreathStatisticalRethinkingBayesian2020]. Intervals are equal-tailed by default. Selected skewed quantities, including association and concentration, use highest-density intervals. Count-attainment ages retain probability before and beyond the reporting window in equal-tailed summaries. Signing milestone tables instead summarise draws that reach an interior milestone and disclose the fractions reaching it or censored. Read each output's interval and censoring fields rather than assuming one convention applies everywhere. Density plots can show features that intervals hide.
+The usual summaries are the posterior median and inner 50% and outer 89% intervals [@mcelreathStatisticalRethinkingBayesian2020]. Intervals are equal-tailed by default. Selected skewed quantities, including association and concentration, use highest-density intervals. Density plots can show features that intervals hide.
+
+Count-attainment files from `scripts/time_to_milestone.py` report medians and highest-density intervals conditional on an identified crossing inside the supported age grid. `prop_reaching` records that fraction of all draws. The summary omits draws that never reach the target or already exceed it at the first grid age. These ages describe reference-trajectory crossings, not variation among individual children's milestone ages. The experimental VG20 and VG20/VG19 age-at-word-count scripts instead retain before-window and beyond-window probability in equal-tailed summaries through `vocab_growth.censored_ages`. These conventions are not interchangeable.
+
+Signing milestone tables also use conditional highest-density intervals, over genuine interior transitions or peaks, with `draws_reaching` and `draws_censored` disclosed. Read each output's interval convention and reaching or censoring fractions together. An age interval for a subset of draws does not describe the whole posterior.
 
 Several estimands rest on modest samples, and a point estimate selected for looking decisive is on average inflated in magnitude and can even take the wrong sign; the Type-M and Type-S errors that follow from selecting on a noisy estimate. We therefore lead with the interval and the strength of evidence for a named claim, and treat the point estimate as the least informative summary.
 

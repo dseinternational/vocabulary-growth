@@ -127,7 +127,15 @@ Fits write by-sex outcome and ratio tables, expected-count differences and coeff
 
 ### Interval reporting convention
 
-Reports use posterior medians, 50% inner intervals and 89% outer intervals. The default is an equal-tailed interval, with equal probability below and above its limits. Selected skewed quantities, including `psi`, `kappa` and conditional signing milestone ages, use highest-density intervals. Count-attainment summaries retain probability before and beyond the supported age window in equal-tailed intervals. Read the output's interval and censoring fields; `vocab_growth.intervals` and `vocab_growth.censored_ages` define these policies. An interval's width is not a decision threshold.
+Reports generally use posterior medians, 50% inner intervals and 89% outer intervals. Equal-tailed intervals, with equal probability in their two tails, are the default. Selected skewed quantities, including `psi` and `kappa`, use highest-density intervals under `vocab_growth.intervals`. An interval's width is not a decision threshold.
+
+Milestone outputs use different conventions:
+
+- `time_to_milestone*.csv`, written by [time_to_milestone.py](../../scripts/time_to_milestone.py), gives medians and highest-density intervals only for draws with an identified crossing inside the supported age grid. `prop_reaching` records that fraction of all draws. Draws that never reach the target, or already exceed it at the first grid age, are omitted from the age summary. These are reference-trajectory crossing ages, not a range of ages among individual children.
+- `signing_milestones.csv` gives highest-density intervals conditional on a genuine interior transition or peak. `draws_reaching` and `draws_censored` disclose the fractions reaching the milestone or censored.
+- The experimental [VG20 age-at-word-count](../../scripts/experiments/vg20_age_at_word_count.py) and [VG20/VG19 comparison](../../scripts/experiments/vg20_vg19_age_at_word_count.py) scripts use `vocab_growth.censored_ages`. Their equal-tailed summaries retain probability before and beyond the supported window. This convention does not apply to the main `time_to_milestone.py` exporter.
+
+Read each output's interval convention and reaching or censoring fractions together. A conditional age interval does not describe draws omitted from that interval.
 
 Summary tables use `*_ci50_lo` and `*_ci50_hi` for inner bounds, and `*_ci_lo` and `*_ci_hi` for outer bounds. Plot sidecars include the inner bounds when the figure draws them.
 

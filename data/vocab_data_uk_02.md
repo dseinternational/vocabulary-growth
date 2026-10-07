@@ -21,4 +21,4 @@ The four last fields partition understood words by expression. A word spoken and
 
 ## License
 
-This data is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) See [LICENSE](LICENSE) for details.
+This data is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0). See [LICENSE](LICENSE) for details.

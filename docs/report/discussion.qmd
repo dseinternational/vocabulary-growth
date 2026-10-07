@@ -8,4 +8,4 @@ This chapter is unfinished. The discussion must assess the findings against the 
 
 ## Limitations {#sec-limitations}
 
-The shared scope notes state the current [Down syndrome caveats](_caveats-ds.qmd) and [signing caveats](_caveats-signing.qmd). This section will bring those limits together after the findings are reviewed.
+The shared source notes state the current [Down syndrome caveats](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/report/_caveats-ds.qmd) and [signing caveats](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/report/_caveats-signing.qmd). This section will bring those limits together after the findings are reviewed.
