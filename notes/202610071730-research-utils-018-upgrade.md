@@ -3,11 +3,11 @@
 
 # Shared library 0.18.0 upgrade
 
-On 7 October 2026 the project moved `dse-research-utils` from `v0.17.0` towards `v0.18.0`, which takes its plot colours from the DSE design tokens ([research#121](https://github.com/dseinternational/research/pull/121), pinned to released tokens in [research#122](https://github.com/dseinternational/research/pull/122)). The `v0.18.0` tag did not exist yet, so `[tool.uv.sources]` selects the commit it will be cut from, `a1c2656e7d5c303c4938b04168b9b79cf78b2270`, by `rev`. At that commit the library still reports version 0.17.0. Once the tag exists, `rev` becomes `tag = "v0.18.0"` and the lock is refreshed with `uv lock --upgrade-package dse-research-utils`. The release commit will differ from `a1c2656`, so the executable-code signature changes again at that point.
+On 7 October 2026 the project moved `dse-research-utils` from `v0.17.0` to `v0.18.0`, which takes its plot colours from the DSE design tokens ([research#121](https://github.com/dseinternational/research/pull/121), pinned to released tokens in [research#122](https://github.com/dseinternational/research/pull/122)). `[tool.uv.sources]` selects tag `v0.18.0`, release commit `cb35ffb3b6fef8f940447b6b94a3e68b218912ae`.
 
 ## The lock
 
-`uv lock --upgrade-package dse-research-utils` moved only `dse-research-utils`, from `935bd38b` to `a1c2656e`. The only raised minimum, `jupytext>=1.19.6` in the `notebook` extra, is already the locked version, so no other package moved. The uv release used (0.12.23) writes lock revision 5, where the previous lock had revision 3.
+`uv lock --upgrade-package dse-research-utils` moved only `dse-research-utils`, from `935bd38b` to `cb35ffb3`. The only raised minimum, `jupytext>=1.19.6` in the `notebook` extra, is already the locked version, so no other package moved. The uv release used (0.12.23) writes lock revision 5, where the previous lock had revision 3.
 
 ## What the library changed
 
