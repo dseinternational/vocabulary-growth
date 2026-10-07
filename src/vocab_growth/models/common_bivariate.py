@@ -1944,8 +1944,8 @@ _AGE_MARKER_STEP_MONTHS = 12.0
 _OBSERVED_BIN_WORDS = 50
 _OBSERVED_BIN_MIN = 10
 
-#: Observed administrations and their binned summaries, drawn over a model path
-#: in the first chart colour.
+#: Observed administrations and their binned summaries, drawn in the third chart
+#: colour over a model path in the first.
 _OBSERVED_COLOUR = plot_styles.CHART_COLOURS[2]
 
 
