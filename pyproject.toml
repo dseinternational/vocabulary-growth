@@ -81,7 +81,9 @@ environments = [
 # dse-research-utils isn't published to PyPI — resolve it from the public git
 # tag. To develop against a sibling checkout instead, comment this out and use:
 #   dse-research-utils = { path = "../research/src/python", editable = true }
-dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.17.0" }
+# Until the v0.18.0 tag exists, the source is pinned to the commit it will be
+# cut from; replace `rev` with `tag = "v0.18.0"` and re-lock once it does.
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", rev = "a1c2656e7d5c303c4938b04168b9b79cf78b2270" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"
