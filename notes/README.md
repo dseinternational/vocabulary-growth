@@ -175,3 +175,4 @@ Keep data decisions, analysis evidence and completed run records when later work
 | [202610011500](202610011500-repeated-child-calibration.md)                       | Repeated-child calibration                                   | Dated analysis                              |
 | [202610041345](202610041345-research-utils-017-upgrade.md)                       | Shared library 0.17.0 upgrade                                | Dependency change record                    |
 | [202610071042](202610071042-documentation-review.md)                             | Documentation and instructions review                        | Documentation review record                 |
+| [202610071730](202610071730-research-utils-018-upgrade.md)                       | Shared library 0.18.0 upgrade and design-token colours       | Dependency change record                    |
