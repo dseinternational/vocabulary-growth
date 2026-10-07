@@ -62,6 +62,13 @@ to show the spread the prior implies without the fan becoming a solid block.
 ASSOCIATION_AGES = (12, 24, 36, 60)
 """Ages at which the induced joint (understood, spoken) association is drawn."""
 
+# Chart colours by role. Understood and spoken take the first two, as "C0" and
+# "C1" give them in the model figures; the child draws take the third.
+_UNDERSTOOD_COLOUR = plot_styles.CHART_COLOURS[0]
+_SPOKEN_COLOUR = plot_styles.CHART_COLOURS[1]
+_CHILD_DRAW_COLOUR = plot_styles.CHART_COLOURS[2]
+_CHILD_PAIR_COLOUR = plot_styles.CHART_COLOURS[0]
+
 
 def _flat(prior, name):
     """A prior variable as ``(draw, ...)``, chain and draw collapsed."""
@@ -304,7 +311,7 @@ def plot_unseen_child_trajectories(curves, definition, *, output_dir=None):
         else:
             values = _sigmoid(base[None, :] + deltas) * scale
             for row in values[: min(200, values.shape[0])]:
-                ax.plot(ages, row, color=plot_styles.COLOUR_ORANGE, alpha=0.12, lw=1.0)
+                ax.plot(ages, row, color=_CHILD_DRAW_COLOUR, alpha=0.12, lw=1.0)
             ax.plot(ages, _sigmoid(base) * scale, lw=3, color="black", label="Zero effect")
         ax.set_xlabel("Age (months)")
         ax.set_ylabel(label)
@@ -333,8 +340,8 @@ def plot_unseen_child_counts(curves, definition, *, output_dir=None):
     idx = np.arange(0, ages.size, step)
 
     for counts, colour, label in (
-        (curves["understood"], plot_styles.COLOUR_BLUE, "Words understood"),
-        (curves["spoken"], plot_styles.COLOUR_ORANGE, "Words spoken"),
+        (curves["understood"], _UNDERSTOOD_COLOUR, "Words understood"),
+        (curves["spoken"], _SPOKEN_COLOUR, "Words spoken"),
     ):
         lo, mid, hi = np.percentile(counts[:, idx], [5.5, 50, 94.5], axis=0)
         ax.fill_between(ages[idx], lo, hi, alpha=0.20, color=colour)
@@ -369,7 +376,7 @@ def plot_prior_joint_association(curves, definition, *, output_dir=None):
         j = int(np.argmin(np.abs(ages - age)))
         u = curves["understood"][:, j]
         s = curves["spoken"][:, j]
-        ax.scatter(u, s, s=8, alpha=0.35, color=plot_styles.COLOUR_BLUE)
+        ax.scatter(u, s, s=8, alpha=0.35, color=_CHILD_PAIR_COLOUR)
         ax.plot([0, n_trials], [0, n_trials], ls="--", lw=1, color="grey")
         r = float(np.corrcoef(u, s)[0, 1]) if np.std(u) > 0 and np.std(s) > 0 else np.nan
         ax.set_title(f"{ages[j]:.0f} mo (r = {r:+.2f})")

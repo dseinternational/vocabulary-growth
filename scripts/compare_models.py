@@ -63,10 +63,13 @@ OUT_DIR = env.comparisons_output_dir()
 #: overlay (issue #266 finding 1).
 CONTRIBUTING_MODELS = ("vg05", "vg07", "vg09", "vg10", "vg20", "vg21")
 
-DS_COLOUR = plot_styles.COLOUR_BLUE
-TD_COLOUR = plot_styles.COLOUR_ORANGE
-NO_RE_COLOUR = plot_styles.COLOUR_RED
-RE_COLOUR = plot_styles.COLOUR_GREEN
+DS_COLOUR = plot_styles.CHART_COLOURS[0]
+TD_COLOUR = plot_styles.CHART_COLOURS[2]
+NO_RE_COLOUR = plot_styles.CHART_COLOURS[0]
+RE_COLOUR = plot_styles.CHART_COLOURS[1]
+VG07_COLOUR = plot_styles.CHART_COLOURS[3]
+VG09_COLOUR = plot_styles.CHART_COLOURS[0]
+VG10_COLOUR = plot_styles.CHART_COLOURS[1]
 
 
 def _read(key: str, filename: str) -> pd.DataFrame:
@@ -125,17 +128,17 @@ def _merge_q_by_age(frames: list[tuple[str, pd.DataFrame]]) -> pd.DataFrame:
 def vg07_vg09_vg10_q_by_age() -> None:
     """Three-way overlay of q(age) for VG07, VG09 and VG10."""
     series = [
-        ("VG07 (no subject RE on q)", _read("vg07", "posterior_summary_q.csv"), plot_styles.COLOUR_PURPLE),
-        ("VG09 (subj REs, GP unanchored)", _read("vg09", "posterior_summary_q.csv"), plot_styles.COLOUR_BLUE),
-        ("VG10 (subj REs, GP anchored at 54mo)", _read("vg10", "posterior_summary_q.csv"), plot_styles.COLOUR_GREEN),
+        ("VG07 (no subject RE on q)", _read("vg07", "posterior_summary_q.csv"), VG07_COLOUR),
+        ("VG09 (subj REs, GP unanchored)", _read("vg09", "posterior_summary_q.csv"), VG09_COLOUR),
+        ("VG10 (subj REs, GP anchored at 54mo)", _read("vg10", "posterior_summary_q.csv"), VG10_COLOUR),
     ]
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
     for label, df, colour in series:
         ax.fill_between(df["age_months"], df["q_ci_lo"], df["q_ci_hi"],
                         color=colour, alpha=0.15, linewidth=0, label=f"{label} 89% interval")
         ax.plot(df["age_months"], df["q_median"], color=colour, lw=2.5, label=f"{label} median")
-    ax.axhline(0.5, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
-    ax.axhline(0.9, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
+    ax.axhline(0.5, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6, linestyle="--")
+    ax.axhline(0.9, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6, linestyle="--")
     ax.set_xlabel("Age (months)")
     ax.set_ylabel(r"Production ratio  q = $p_S$ / $p_U$")
     ax.set_ylim(0, 1)
@@ -161,7 +164,7 @@ def ds_td_q_by_age_vg20() -> None:
     ax.plot(td["age_months"], td["q_median"], color=TD_COLOUR, lw=2.5, label="TD median q (VG21)")
     ax.plot(ds["age_months"], ds["q_median"], color=DS_COLOUR, lw=2.5, label="DS median q (VG20)")
     for thresh in (0.5, 0.9):
-        ax.axhline(thresh, color=plot_styles.LINE_COLOUR, lw=0.6, linestyle="--")
+        ax.axhline(thresh, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6, linestyle="--")
     ax.set_xlim(min(ds["age_months"].min(), td["age_months"].min()),
                 max(ds["age_months"].max(), td["age_months"].max()))
     ax.set_ylim(0, 1)
@@ -235,7 +238,7 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     # eye reading the gap between the two curves as larger than the space
     # available for it.
     upper = max(td["words_understood"].max(), ds["words_understood"].max())
-    ax.plot([0, upper], [0, upper], color=plot_styles.LINE_COLOUR, lw=0.8,
+    ax.plot([0, upper], [0, upper], color=plot_styles.MUTED_TEXT_COLOUR, lw=0.8,
             linestyle=":", label="says everything understood (1:1)")
 
     ax.set_xlim(0, upper)

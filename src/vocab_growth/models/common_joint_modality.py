@@ -2420,8 +2420,14 @@ def run_joint_plots(context: JointContext):
 
     # 2) Four-cell composition trajectory (fractions of understood)
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
+    # "neither" is grey: the words understood but not produced. It was "C7",
+    # tab10's grey, which the six-colour cycle wraps round to the speak-only
+    # green.
     comp = {
-        "neither": (np.median(s.pi_neither_plot[keep_sign, :], axis=1), "C7"),
+        "neither": (
+            np.median(s.pi_neither_plot[keep_sign, :], axis=1),
+            plot_styles.MUTED_TEXT_COLOUR,
+        ),
         "sign-only": (np.median(s.pi_sign_only_plot[keep_sign, :], axis=1), "C2"),
         "sign+speech": (np.median(s.pi_both_plot[keep_sign, :], axis=1), "C4"),
         "speak-only": (np.median(s.pi_speak_only_plot[keep_sign, :], axis=1), "C1"),

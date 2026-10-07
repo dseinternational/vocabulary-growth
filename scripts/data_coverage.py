@@ -116,17 +116,22 @@ def _heatmap(pivot: pd.DataFrame, title: str, out_base: str) -> None:
         index=["TOTAL"], errors="ignore",
     )
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
-    im = ax.imshow(data.values, aspect="auto", cmap="viridis", origin="lower")
+    im = ax.imshow(
+        data.values, aspect="auto", cmap=plot_styles.SEQUENTIAL_CMAP, origin="lower",
+    )
     ax.set_yticks(range(len(data.index)))
     ax.set_yticklabels([f"Study {s}" for s in data.index])
     ax.set_xticks(range(len(data.columns)))
     ax.set_xticklabels(data.columns, rotation=45, ha="right")
+    # The sequential scale darkens as counts rise, and white text has the better
+    # contrast from about a third of the way up it.
     for i in range(data.shape[0]):
         for j in range(data.shape[1]):
             v = int(data.values[i, j])
             if v > 0:
                 ax.text(j, i, str(v), ha="center", va="center", fontsize=8,
-                        color="white" if v < data.values.max() * 0.5 else "black")
+                        color="white" if v >= data.values.max() / 3
+                        else plot_styles.TEXT_COLOUR)
     ax.set_xlabel("Age bin (months)")
     ax.set_ylabel("Study")
     ax.set_title(title)

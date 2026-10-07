@@ -133,10 +133,15 @@ N_GRID = np.array(
 )
 MIN_COVERAGE = 0.80
 
-COL_TD = plot_styles.COLOUR_ORANGE
-COL_DS = plot_styles.COLOUR_BLUE
-COL_D = plot_styles.COLOUR_GREEN
-COL_ALT = plot_styles.COLOUR_PURPLE if hasattr(plot_styles, "COLOUR_PURPLE") else "C3"
+COL_TD = plot_styles.CHART_COLOURS[2]
+COL_DS = plot_styles.CHART_COLOURS[0]
+COL_D = plot_styles.CHART_COLOURS[1]
+COL_ALT = plot_styles.CHART_COLOURS[3]
+# The composition of DS expressive vocabulary, in VG15's colours for the same
+# cells ("C1", "C4" and "C2" in common_joint_modality.py).
+COL_SPEECH_ONLY = plot_styles.CHART_COLOURS[1]
+COL_BOTH = plot_styles.CHART_COLOURS[4]
+COL_SIGN_ONLY = plot_styles.CHART_COLOURS[2]
 
 
 def _band(ax, frame, x, label, colour, *, cov=MIN_COVERAGE):
@@ -196,7 +201,7 @@ def run_expressive_delay() -> None:
 
     def delta(ax):
         _band(ax, dexp, "words", r"$\Delta_{exp}$ = D_S - D_U", COL_ALT, cov=MIN_COVERAGE)
-        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
     C.save_panel(OUT_DIR, "ds_td_expressive_delta",
                  dict(xlabel="Vocabulary level N (words)",
                       ylabel="Extra production delay (months)",
@@ -218,7 +223,7 @@ def run_expressive_delay() -> None:
     ca.to_csv(os.path.join(OUT_DIR, "ds_td_expressive_equivalent_age.csv"), index=False)
 
     def equiv(ax):
-        ax.plot(age_grid, age_grid, color=plot_styles.LINE_COLOUR, lw=0.8, ls="--",
+        ax.plot(age_grid, age_grid, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.8, ls="--",
                 label="no delay (a = a)")
         _band(ax, cea_u, "age_months", "Comprehension-equiv age", COL_DS)
         _band(ax, cea_s, "age_months", "Production-equiv age", COL_D)
@@ -231,7 +236,7 @@ def run_expressive_delay() -> None:
         _band(ax, del_u, "age_months", "Receptive delay", COL_DS)
         _band(ax, del_s, "age_months", "Expressive delay", COL_D)
         _band(ax, dexp_a, "age_months", r"Extra expressive ($\Delta_{exp}$)", COL_ALT)
-        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
     C.save_panel(OUT_DIR, "ds_td_expressive_delay_by_age",
                  dict(xlabel="DS chronological age (months)", ylabel="Delay (months)",
                       title="Receptive vs expressive delay, and the extra expressive gap"),
@@ -284,14 +289,14 @@ def run_sign_inclusive() -> None:
     def gap(ax):
         _band(ax, gap_spoken, "age_months", "TD - DS spoken", COL_TD)
         _band(ax, gap_any, "age_months", "TD - DS any (sign incl.)", COL_D)
-        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
     C.save_panel(OUT_DIR, "ds_td_sign_inclusive_gap",
                  dict(xlabel="Age (months)", ylabel="Expressive gap (words)",
                       title="DS expressive gap to TD: spoken-only vs sign-inclusive"), gap)
 
     def cred(ax):
         _band(ax, credit, "age_months", "p_any - spoken", COL_ALT)
-        ax.axhline(0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
     C.save_panel(OUT_DIR, "ds_td_sign_inclusive_credit",
                  dict(xlabel="Age (months)", ylabel="Extra expressive words from sign",
                       title="DS expressive credit from non-speech modalities"), cred)
@@ -387,9 +392,9 @@ def run_ds_signing_profile() -> None:
               f"censored in {m['draws_censored']:.0%})", flush=True)
 
     def composition(ax):
-        _band(ax, frames["speak_only"], "age_months", "Speech only", COL_TD)
-        _band(ax, frames["both"], "age_months", "Both sign and speech", COL_D)
-        _band(ax, frames["sign_only"], "age_months", "Sign only", COL_ALT)
+        _band(ax, frames["speak_only"], "age_months", "Speech only", COL_SPEECH_ONLY)
+        _band(ax, frames["both"], "age_months", "Both sign and speech", COL_BOTH)
+        _band(ax, frames["sign_only"], "age_months", "Sign only", COL_SIGN_ONLY)
     C.save_panel(OUT_DIR, "ds_signing_composition",
                  dict(xlabel="Age (months)", ylabel="Words",
                       title="How DS expressive vocabulary is expressed"), composition)
@@ -406,7 +411,7 @@ def run_ds_signing_profile() -> None:
     def upl(ax):
         _band(ax, frames["uplift"], "age_months",
               "Expressive vocabulary as a multiple of spoken", COL_D)
-        ax.axhline(1.0, color=plot_styles.LINE_COLOUR, lw=0.6)
+        ax.axhline(1.0, color=plot_styles.MUTED_TEXT_COLOUR, lw=0.6)
     C.save_panel(OUT_DIR, "ds_signing_uplift",
                  dict(xlabel="Age (months)", ylabel="p_any / spoken",
                       title="What counting sign adds to a child's own expressive vocabulary"), upl)

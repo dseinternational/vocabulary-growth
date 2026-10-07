@@ -51,6 +51,9 @@ MODELS_DIR = env.models_output_dir()
 #: Per-fit copy of the conflict rows, read by the report's contraction block.
 PER_FIT_CONTRACTION_FILENAME = "prior_posterior_contraction.csv"
 
+PRIOR_COLOUR = plot_styles.CHART_COLOURS[0]
+POSTERIOR_COLOUR = plot_styles.CHART_COLOURS[2]
+
 # Registry-derived: every registered model. Trivariate (VG14) and joint (VG15)
 # were excluded until 2026-08-06 because their signed-ratio, psi and
 # concentration priors were not reconstructed here. That exclusion hid a real
@@ -247,11 +250,11 @@ def _plot_panel(ax, name, prior, post_samples):
     post_pdf = kde(grid)
 
     ax.fill_between(grid, prior_pdf, alpha=0.2,
-                    color=plot_styles.COLOUR_BLUE)
-    ax.plot(grid, prior_pdf, color=plot_styles.COLOUR_BLUE, lw=1.5, label="Prior")
+                    color=PRIOR_COLOUR)
+    ax.plot(grid, prior_pdf, color=PRIOR_COLOUR, lw=1.5, label="Prior")
     ax.fill_between(grid, post_pdf, alpha=0.3,
-                    color=plot_styles.COLOUR_ORANGE)
-    ax.plot(grid, post_pdf, color=plot_styles.COLOUR_ORANGE, lw=1.5,
+                    color=POSTERIOR_COLOUR)
+    ax.plot(grid, post_pdf, color=POSTERIOR_COLOUR, lw=1.5,
             label="Posterior")
     ax.set_title(name)
     ax.set_yticks([])

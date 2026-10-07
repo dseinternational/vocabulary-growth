@@ -61,6 +61,8 @@ COMPARE_DIR = env.comparisons_output_dir()
 
 TARGETS = [25, 50, 100, 200, 400]
 
+MILESTONE_COLOUR = plot_styles.CHART_COLOURS[0]
+
 # Trivariate (VG14) and joint (VG15) models are intentionally excluded: they
 # carry per-modality (understood/spoken/signed) trajectories rather than the
 # {single, u, s} shape handled here, and would need their own loader.
@@ -83,7 +85,7 @@ def plot_milestone(table: pd.DataFrame, title: str, out_base: str) -> None:
         ]
         ax.errorbar(
             t["target_words"], t["age_median"], yerr=yerr,
-            fmt="o-", color=plot_styles.COLOUR_BLUE, lw=2, capsize=4,
+            fmt="o-", color=MILESTONE_COLOUR, lw=2, capsize=4,
             label="Median age (89% HDI)",
         )
         for _, r in t.iterrows():
@@ -92,7 +94,7 @@ def plot_milestone(table: pd.DataFrame, title: str, out_base: str) -> None:
                     f"{r['prop_reaching']:.0%} of draws",
                     (r["target_words"], r["age_ci_hi"]),
                     textcoords="offset points", xytext=(0, 6),
-                    ha="center", fontsize=7, color=plot_styles.LINE_COLOUR,
+                    ha="center", fontsize=7, color=plot_styles.MUTED_TEXT_COLOUR,
                 )
     ax.set_xlabel("Target words")
     ax.set_ylabel("Age reached (months)")

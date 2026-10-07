@@ -1944,6 +1944,10 @@ _AGE_MARKER_STEP_MONTHS = 12.0
 _OBSERVED_BIN_WORDS = 50
 _OBSERVED_BIN_MIN = 10
 
+#: Observed administrations and their binned summaries, drawn over a model path
+#: in the first chart colour.
+_OBSERVED_COLOUR = plot_styles.CHART_COLOURS[2]
+
 
 def _observed_pairs(samples):
     """``(understood, spoken)`` for every administration carrying both counts, or ``None``.
@@ -1996,7 +2000,7 @@ def _draw_observed_levels(ax, table, *, label):
     ax.errorbar(
         table["level"], table["median"],
         yerr=[table["median"] - table["q25"], table["q75"] - table["median"]],
-        fmt="s", ms=6, capsize=3, lw=1.2, color=plot_styles.COLOUR_ORANGE, label=label,
+        fmt="s", ms=6, capsize=3, lw=1.2, color=_OBSERVED_COLOUR, label=label,
     )
 
 
@@ -2245,7 +2249,7 @@ def plot_understood_vs_spoken(
     if observed is not None:
         u_obs, s_obs = observed
         ax.scatter(
-            u_obs, s_obs, s=8, alpha=0.25, color=plot_styles.LINE_COLOUR, zorder=1,
+            u_obs, s_obs, s=8, alpha=0.12, color=plot_styles.MUTED_TEXT_COLOUR, zorder=1,
             label=f"Observed administrations (n={u_obs.size:,})",
         )
         observed_table = _observed_by_level(u_obs, s_obs)
@@ -2264,7 +2268,7 @@ def plot_understood_vs_spoken(
     )
 
     # Reference line: understood = spoken, the ceiling no child can exceed.
-    ax.plot([0, limit], [0, limit], ls="--", lw=1, color=plot_styles.LINE_COLOUR,
+    ax.plot([0, limit], [0, limit], ls="--", lw=1, color=plot_styles.MUTED_TEXT_COLOUR,
             label="Spoken = understood")
 
     ax.set_xlabel("Words understood")
@@ -2331,7 +2335,7 @@ def plot_understood_vs_spoken_predictive(
     if observed is not None:
         u_obs, s_obs = observed
         ax.scatter(
-            u_obs, s_obs, s=8, alpha=0.35, color=plot_styles.COLOUR_ORANGE, zorder=2,
+            u_obs, s_obs, s=8, alpha=0.35, color=_OBSERVED_COLOUR, zorder=2,
             label=f"Observed administrations (n={u_obs.size:,})",
         )
 
@@ -2340,7 +2344,7 @@ def plot_understood_vs_spoken_predictive(
     _draw_age_markers(ax, X_plot, y_u_median, y_s_median)
 
     limit = float(n_trials)
-    ax.plot([0, limit], [0, limit], ls="--", lw=1, color=plot_styles.LINE_COLOUR,
+    ax.plot([0, limit], [0, limit], ls="--", lw=1, color=plot_styles.MUTED_TEXT_COLOUR,
             label="Spoken = understood")
 
     ax.set_xlabel("Words understood")
@@ -2677,16 +2681,16 @@ def plot_study_fans(context, n_trials, *, output_dir=None, filename=None,
     names = frame.groupby("study_code")["study"].first()
     spans = frame.groupby("study_code")["age"].agg(["min", "max"])
 
-    # The default cycle carries ten colours and the Down syndrome pool has
-    # fifteen studies, so the house palette is extended with its dark variants
-    # and, beyond twelve, a dotted line -- rather than letting two studies share
-    # a colour.
-    palette = [
-        plot_styles.COLOUR_BLUE, plot_styles.COLOUR_ORANGE, plot_styles.COLOUR_GREEN,
-        plot_styles.COLOUR_RED, plot_styles.COLOUR_PURPLE, plot_styles.COLOUR_YELLOW,
-        plot_styles.COLOUR_DARK_BLUE, plot_styles.COLOUR_DARK_ORANGE, plot_styles.COLOUR_DARK_GREEN,
-        plot_styles.COLOUR_DARK_RED, plot_styles.COLOUR_DARK_PURPLE, plot_styles.COLOUR_DARK_YELLOW,
-    ]
+    # One colour per study rather than letting two studies share one. The six
+    # typically developing studies take the chart colours. The fifteen Down
+    # syndrome studies exceed the six series the design language allows, so
+    # they take matplotlib's tab20 until this figure is redesigned; beyond
+    # twenty, colours repeat on a dotted line.
+    n_studies = len(names.index)
+    if n_studies <= len(plot_styles.CHART_COLOURS):
+        palette = plot_styles.categorical_palette(n_studies)
+    else:
+        palette = plot_styles.categorical_palette(min(n_studies, 20), palette="tab20")
     style_of = {
         k: {"color": palette[i % len(palette)], "ls": "-" if i < len(palette) else ":"}
         for i, k in enumerate(names.index)

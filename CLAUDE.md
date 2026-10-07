@@ -118,6 +118,8 @@ Wrappers select definitions and dispatch to shared engines. Put statistical defi
 
 Engines expose `build_model_graph` separately from reporting. Shared helpers build observations, effects, age functions and likelihoods. Most counts use Beta-Binomial likelihoods; signing cross-tabulations use Dirichlet-Multinomial likelihoods. Engines can use different study references and prediction targets. Use `reporting_ages` and `intervals` for reporting policy and [REPORT_STYLE.md](https://github.com/dseinternational/vocabulary-growth/blob/main/docs/models/REPORT_STYLE.md) for report wording.
 
+Figure colours come from `dse_research_utils.plot.styles`, named by role. Words understood, spoken and signed take `CHART_COLOURS[0]`, `[1]` and `[2]`, as `"C0"`, `"C1"` and `"C2"` do. Down syndrome, typically developing and their difference take `[0]`, `[2]` and `[1]`. The design language allows six categorical colours, so a figure with more groups needs an explicit matplotlib palette. Annotation text and reference lines with meaning, such as zero or equality, use `MUTED_TEXT_COLOUR`; `LINE_COLOUR` is for hairlines.
+
 Every Python source file starts with:
 
 ```python
