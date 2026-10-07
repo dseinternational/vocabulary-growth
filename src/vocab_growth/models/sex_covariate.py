@@ -1,32 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Sex as a covariate in the reporting models (issue #324).
+"""Shared sex coding and summary writers for the reporting models.
 
-The study owner decided on 2026-09-08 that the models whose numbers are reported
-should carry sex, so that predictions can be made by age **and** sex, in both
-populations. The design is a centred covariate estimated only where sex is
-recorded: girls ``+1/2``, boys ``-1/2``, and a child of unrecorded sex at zero,
-the logit midpoint between them. No row is dropped. In the Down syndrome pool
-missingness is exactly study-level, and every model carrying the term also
-carries study intercepts, which absorb the unrecorded studies' sex mix; the
-coefficients are identified from the studies that record sex, on the assumption
-that the effect is common across studies.
+Girls use contrast +1/2, boys -1/2, and unrecorded sex uses zero. Zero is
+the midpoint on the logit scale; it is not an arithmetic mixture of the two
+probabilities. The coefficient assumes a common logit difference across ages
+and studies. Missing-sex predictions therefore carry an additional assumption.
 
-This module holds what the three engines share:
-
-* the two readers :func:`sex_effect_sigma` and :func:`sex_known_only`, which are
-  the call sites ``fit_identity.BACKFILL_DEFAULTS`` makes its claim about -- a
-  definition that predates the fields resolves to "no sex term, no restriction";
-* :data:`SEX_LEVELS`, the contrast each reported level is evaluated at;
-* the writers for the by-sex summary tables, so the three engines emit the same
-  columns under the same names.
-
-Every population trajectory the reporting models write is at contrast zero, the
-sex-balanced midpoint, in both populations. The by-sex tables put the girls' and
-boys' trajectories half a coefficient either side of it, from the same posterior
-draws, so a girl-minus-boy difference is a paired quantity rather than a
-difference of two independent summaries.
+The field readers preserve the defaults recorded by fit_identity. The writers
+use shared columns and aligned posterior draws. By-sex differences are paired
+draw for draw, rather than subtracted from independent summaries.
 """
 
 from __future__ import annotations

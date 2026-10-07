@@ -189,7 +189,7 @@ def test_a_tier_that_cannot_be_applied_fails_rather_than_silently_writing_full(t
 
 
 def test_full_still_writes_anything_that_can_write_itself(tmp_path):
-    # FULL applies no policy, so it must not require a DataTree.
+    # For this supplied trace, FULL omits no additional arrays and needs no tree API.
     written = []
 
     class Minimal:
@@ -373,12 +373,10 @@ def test_a_scattered_effect_is_kept_because_it_is_not_a_scaling():
 
 
 def test_nutpie_backend_resolves_override_then_environment_then_numba(monkeypatch):
-    """``configured_nutpie_backend`` follows trace persistence's resolution (#289 4.1).
+    """Resolve the compiler backend from an override, the environment or the default.
 
-    The backend is nutpie's compiler, not a sampling parameter: it changes
-    nothing about the posterior and is recorded in the manifest's runtime
-    block. ``numba`` is the default every fit of record used; ``jax`` is the
-    escape hatch for a graph numba cannot compile on a platform.
+    Both backends target the same graph, but can differ in compilation, floating
+    point evaluation and sampling behaviour. The manifest records the choice.
     """
     from vocab_growth.fit_artifacts import (
         NUTPIE_BACKEND_ENV_VAR,

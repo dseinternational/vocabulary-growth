@@ -91,13 +91,7 @@ def _trace_with_large_observed_diagnostic():
 
 
 def test_the_parameter_a_model_was_added_for_survives_the_cap():
-    """VG20's `rho_uq` fell off the end of a grid built in model order.
-
-    The cap keeps `floor(sqrt(max_subplots))` variables from the front of the
-    list, and model order is build order — mean function, then GP, then the
-    scales. So the pair plot omitted the one parameter VG20's own caption sends
-    the reader there to inspect.
-    """
+    """Keep the defining correlation visible when the pair-plot grid is capped."""
     from vocab_growth.models.definitions import MODEL_REGISTRY
     from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
@@ -151,15 +145,7 @@ def test_ordering_never_drops_a_variable():
 
 
 def test_the_sign_lag_coefficient_survives_the_cap_on_the_joint_engine():
-    """VG25's `beta_sign_lag`, the same defect on the other engine (#339 review).
-
-    The joint engine led with `psi` and `conc` and then took model order, which
-    on VG25 puts the coefficient eighteenth -- so the six-slot grid showed the
-    two headline associations and four understood-GP hyperparameters, while the
-    report's diagnostics callout sends the reader there to inspect the
-    coefficient against the signing child block. The build order below is VG25's
-    own, read off the built graph.
-    """
+    """Prioritise the signing-lag coefficient over early graph-construction variables."""
     from vocab_growth.models.definitions import MODEL_REGISTRY
     from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
@@ -189,14 +175,7 @@ def test_the_sign_lag_coefficient_survives_the_cap_on_the_joint_engine():
 
 
 def test_the_plain_joint_model_keeps_the_order_it_had():
-    """VG15 has no distinguishing child structure, so its plot must not move.
-
-    The consolidation's trap: on the joint engine `psi` and `conc` lead
-    unconditionally, so a priority list built by appending to them is never
-    empty, and VG15 would have picked up the scale block that is supposed to
-    mark a model with a structure worth prioritising. The head is kept separate
-    from the definition-driven part for exactly this case.
-    """
+    """Retain the default order when a joint model has no prioritised child structure."""
     from vocab_growth.models.definitions import MODEL_REGISTRY
     from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
@@ -204,18 +183,7 @@ def test_the_plain_joint_model_keeps_the_order_it_had():
 
 
 def test_vg24s_correlations_survive_the_cap():
-    """The same #233 defect, live in a fitted model of record.
-
-    VG24's report sends the reader to the pair plot for the child block's
-    correlations — "a correlation near ±1 ... is the failure mode to watch for
-    in the energy and pair plots" — and the grid showed `psi`, `conc` and four
-    understood-GP hyperparameters, because build order puts the mean functions
-    first and the cap keeps six.
-
-    `rho_sign_q` leads the three: the naive consolidation would have applied the
-    bivariate rule and prioritised `rho_uq`, which is the understood–spoken
-    correlation and not what VG24 was registered to estimate.
-    """
+    """Prioritise signing correlations in VG24's limited pair-plot grid."""
     from vocab_growth.models.definitions import MODEL_REGISTRY
     from vocab_growth.models.diagnostics_utils import pair_plot_priority
 
@@ -244,14 +212,7 @@ def test_vg24s_correlations_survive_the_cap():
 
 
 def test_engines_that_do_not_order_have_nothing_to_order():
-    """The consolidation's fail-closed half.
-
-    Three engines install no reordering — univariate, univariate with random
-    effects, and trivariate. That is only safe while their models have an empty
-    priority; otherwise the function would declare an intent the engine silently
-    drops. Registering a model with a distinguishing structure on one of them
-    fails here, naming the engine that needs wiring.
-    """
+    """Require an ordering hook when an engine has model-specific priorities."""
     from vocab_growth.models.catalogue import get as catalogue_get
     from vocab_growth.models.definitions import MODEL_REGISTRY
     from vocab_growth.models.diagnostics_utils import pair_plot_priority

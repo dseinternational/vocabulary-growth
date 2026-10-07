@@ -1,21 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The Gompertz-mean experiment harness (#330): its mean, its graph and its output root.
+"""Check the Gompertz experiment's mean, graph structure and output destination.
 
-``scripts/experiments/gompertz_mean_arm.py`` swaps a registered engine's
-trend-plus-HSGP mean for a free-asymptote Gompertz and claims to hold everything
-else fixed. Three things have to be true for its comparison to mean anything:
-
-* the Gompertz it builds is the Gompertz -- right values, increasing, bounded by
-  its asymptote, and evaluated at ages in months rather than standardised ages;
-* the experiment graph differs from the registered one **only** in the
-  mean-function nodes, checked on the named free random variables, the
-  deterministics and the likelihood terms of each model it supports;
-* it cannot write into a canonical ``models/`` directory.
-
-The graphs are built on the small synthetic frame of ``tests/support`` (about a
-second each), so nothing here needs the prepared database.
+Synthetic frames check the formula and named variables without a fitted
+posterior. Graph checks preserve non-mean variable names, shapes and ordering;
+they do not by themselves prove equivalence of all non-mean expressions.
+Experiment output must stay outside canonical model directories.
 """
 
 from __future__ import annotations

@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Age by which a share of DS children reaches a word count -- VG20 vs VG19.
 
-Same estimand as ``age_at_word_count.py``, computed under both child-effect
+Same estimand as ``vg20_age_at_word_count.py``, computed under both child-effect
 structures so the tails can be compared:
 
 * **VG20** (model of record) gives each child one constant offset per outcome,
   ``z_u`` on the logit of understood and ``z_q`` on the logit of the production
-  ratio, correlated across outcomes by ``rho_uq``. The between-child band is the
-  same width at every age.
+  ratio, correlated across outcomes by ``rho_uq``. The effect distribution has constant width on
+  each latent logit scale; count-scale width can change with age.
 * **VG19** gives each child an intercept *and* a rate per outcome, drawn from a
   per-outcome 2x2 covariance: the effect at age ``a`` is ``b0 + b1 * D(a)`` with
   ``D(a) = (a - 36) / 12``. Within an outcome the two are correlated; across
@@ -21,7 +21,7 @@ a sensitivity comparison, not a refinement. VG19 is not the model of record.
 Both are run through the *same* simulator, which doubles as a check: VG20's
 understood column has an exact closed form (a constant logit offset makes
 crossing age monotone in a single index), so the simulated VG20 understood
-numbers must reproduce ``age_at_word_count.py``'s exact ones.
+numbers must reproduce ``vg20_age_at_word_count.py``'s exact ones.
 """
 
 from __future__ import annotations

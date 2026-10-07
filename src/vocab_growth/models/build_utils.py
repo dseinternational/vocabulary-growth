@@ -1,20 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Pure-NumPy build helpers shared across the model engines.
+"""NumPy helpers for model ages, grids and count validation.
 
-These functions factor out blocks that were previously copy-and-pasted, byte for
-byte, into the ``build`` step of every engine (``common.py`` and its
-copy-and-extend siblings): age standardisation, plot/query grid construction,
-length-scale validation, and slope-anchor z-scoring.
-
-They are deliberately free of any ``pymc`` import. Every function performs only
-deterministic NumPy arithmetic and returns plain Python scalars / NumPy arrays
-that are subsequently fed into ``pm.Data(...)`` and the model trend. Because the
-operations (and their order) are identical to the inlined code they replace, the
-values handed to the PyMC graph are bit-identical, so the graph and the sampling
-RNG are unaffected. Graph-building helpers that create PyMC random variables live
-separately in :mod:`vocab_growth.models.gp_utils`.
+These helpers return deterministic scalars and arrays without importing PyMC.
+Graph-building helpers live in vocab_growth.models.gp_utils.
 """
 
 from __future__ import annotations
@@ -23,25 +13,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-#: Sharpness of the soft clamp above the high slope anchor, in units of the anchor
-#: span (``beta = CLAMP_SOFTNESS / span``). Stating it relative to the span makes the
-#: rounding scale-free: whatever a model's age standardisation, the mean's largest
-#: departure from a hard ``min(age, hi_anchor)`` is ``slope * log(2) / beta`` =
-#: ``slope * span * log(2) / 50``, i.e. 1.4% of the anchor span, which for the Down
-#: syndrome 24-84 month anchors is about 0.8 months of age. Raising it sharpens the
-#: corner toward the hard clamp (and its elbow); lowering it rounds the corner
-#: further below the anchor, which eats into the region where ``p_slope_hi`` is meant
-#: to be interpretable.
-#:
-#: It lives here, in the pymc-free module, because two implementations need it and
-#: only one of them builds a graph: ``gp_utils._soft_clamp_z`` works in standardised
-#: age, and ``vocab_growth.report_illustrations`` works in months for the methods
-#: chapter's figures. Because the constant is expressed per unit of span, the two are
-#: *exactly* equal, not merely close -- ``beta_z * (hi_z - z)`` reduces to
-#: ``CLAMP_SOFTNESS * (hi - age) / span`` with the standard deviation cancelling.
-#: ``tests/test_build_utils.py`` pins that equality. Those figures back the methods
-#: chapter and are not covered by ``sync_report_figures.py``'s validation, so a
-#: second copy of this number drifting would not be caught by the fit pipeline.
+#: Soft-clamp sharpness relative to the anchor span: beta = CLAMP_SOFTNESS / span.
+#: Its largest age-coordinate difference from a hard clamp is span * log(2) / 50,
+#: about 1.4% of the span. The corresponding logit difference also includes slope.
+#: gp_utils uses standardised age and report_illustrations uses months; the shared
+#: constant makes the two clamps equivalent. test_build_utils.py checks that.
 CLAMP_SOFTNESS = 50.0
 
 
@@ -195,20 +171,10 @@ def construct_age_grids(
 
 
 def require_valid_counts(values: np.ndarray, name: str, n_trials: int) -> None:
-    """Fail loudly on a non-finite, fractional or out-of-range count column.
+    """Reject non-finite, fractional or out-of-range counts before an integer cast.
 
-    The nested spoken likelihood gets these three checks from
-    :func:`vocab_growth.models.likelihood_utils.nested_outcome_spec`; this is
-    the same contract for a count column an engine casts and bounds itself.
-    VG13 used to cast ``understood`` to ``int`` *before* any check, so a
-    fractional value would have been silently truncated and an out-of-range
-    one would have surfaced only as a likelihood failure (#240).
-
-    ``values`` must already be free of NaN (callers drop or mask missing
-    counts before casting).
-
-    The non-finite and integrality checks are :func:`require_integral_counts`'s,
-    which names the offending values; this adds the range check on top.
+    Callers must remove or mask missing counts first. The nested likelihood uses
+    the same checks through likelihood_utils.nested_outcome_spec.
     """
     values = np.asarray(values, dtype=float)
     require_integral_counts(values, name)
@@ -217,19 +183,10 @@ def require_valid_counts(values: np.ndarray, name: str, n_trials: int) -> None:
 
 
 def require_integral_counts(values: np.ndarray, name: str) -> None:
-    """Fail loudly if a count column carries non-finite or fractional values.
+    """Reject non-finite or fractional counts before an integer cast.
 
-    Every engine casts its outcome columns to ``int`` for the Beta-Binomial
-    likelihood, and NumPy's cast truncates toward zero silently — a fractional
-    count (an averaged or hand-edited source cell, a bad merge) would be floored
-    without a trace, and an infinity would cast to an arbitrary integer that a
-    later bounds check could only misdiagnose. All current source counts are
-    finite and integral, so this guard costs nothing until the day it fires
-    (#234, #236).
-
-    ``values`` must already be free of NaN (callers drop or mask missing counts
-    before casting); a NaN that does reach this guard is reported as non-finite
-    rather than truncated.
+    NumPy silently truncates fractional values. Callers must remove or mask
+    missing counts first; this guard reports any remaining NaN as non-finite.
     """
     values = np.asarray(values, dtype=float)
     non_finite = ~np.isfinite(values)
@@ -252,11 +209,7 @@ def require_integral_counts(values: np.ndarray, name: str) -> None:
 
 
 def validate_ell_bounds(ell_months_range) -> tuple[float, float]:
-    """Return ``(ell_low_months, ell_high_months)`` as floats after validation.
-
-    Raises ``ValueError`` if either bound is non-positive or if the range is not
-    strictly increasing — the two checks previously inlined in every engine.
-    """
+    """Return positive, strictly increasing length-scale bounds as floats."""
     ell_low_months = float(ell_months_range[0])
     ell_high_months = float(ell_months_range[1])
 
@@ -292,13 +245,9 @@ def standardize_ages_to_z(
     X_obs_mean: float,
     X_obs_std: float,
 ) -> tuple[float, ...]:
-    """Z-score any number of reference ages, in order.
+    """Convert reference ages to z-scores, preserving their order.
 
-    The n-ary form of :func:`standardize_anchor_ages`, for the three-anchor signed
-    hump (``gp_utils.tent_and_gp``'s ``z_low`` / ``z_mid`` / ``z_hi``), which two
-    engines previously spelled out as three copies of the same subtract-and-divide.
-    Same arithmetic, so it moves no value and changes no graph -- it exists so that
-    "how does an age in a definition become a z" has one answer however many ages
-    are involved.
+    This applies standardize_anchor_ages' arithmetic to any number of ages,
+    including the three signing anchors.
     """
     return tuple((float(age) - X_obs_mean) / X_obs_std for age in ages)

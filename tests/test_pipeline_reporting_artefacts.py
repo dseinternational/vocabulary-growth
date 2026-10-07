@@ -1,19 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The reporting output the rest of the suite silences is still produced.
+"""Check reporting outputs suppressed by the suite's default fixtures.
 
-``tests/conftest.py`` patches out :func:`plot_distribution` and
-:func:`describe_all` for every other test, because between them they were the
-largest single cost in the suite and nothing asserted on either. Silencing an
-untested side effect would leave it untested *and* unexercised, so these two
-tests opt back in via ``@pytest.mark.emits_reporting_artefacts`` and check the
-wiring on a real engine: that configuring a model's priors writes the prior
-figures a report embeds, and that preparing its data computes the descriptive
-table a report prints.
-
-Deliberately the cheapest engine and a synthetic frame -- what is under test is
-that the calls still happen and still land on disk, not what they contain.
+These tests opt in with emits_reporting_artefacts. A real engine on a small
+synthetic frame must write prior figures and call the descriptive summary.
+They check wiring and file presence, rather than figure contents.
 """
 
 import os

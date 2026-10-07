@@ -1,13 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Model VG14: Trivariate model of words understood, spoken and signed
-(A -> U, A -> S, A -> Sign; U -> S, U -> Sign) - children with Down syndrome.
+"""VG14 models understood, spoken and signed vocabulary in Down syndrome.
 
-Adds signing as a third production modality on top of the bivariate
-(understood + spoken) structure, via a signed ratio r(a) and the derived
-total-expressive quantity p_any(a). See ``common_trivariate`` for the engine.
+Spoken and signed vocabulary are shares of understood vocabulary. The derived
+total expressive proportion ``p_any`` assumes that speech and signing are
+independent within understood words. VG15 estimates their association instead.
 """
 
 from vocab_growth.models.common_trivariate import (

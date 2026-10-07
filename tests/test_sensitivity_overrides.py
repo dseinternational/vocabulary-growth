@@ -1,12 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Unit tests for the prior-sensitivity override + registry tooling (issue #89).
+"""Check sensitivity overrides, output names and definition isolation.
 
-These are pure/fast (no data, no sampling): they pin that a variant applies the
-requested overrides, isolates its output via a suffixed ``config_name``, and
-never mutates the committed model definitions (including the nested kappa
-priors, which must be fresh objects rather than aliases of the base's).
+Most tests construct definitions without sampling. Selected tests prepare data
+or build graphs to ensure that registered variants change the intended inputs
+and remain executable.
 """
 
 import dataclasses
@@ -98,193 +97,8 @@ def test_every_registered_variant_builds():
 
 
 def test_registry_counts_and_models():
-    # 27 §7 targets + 7 Target-8 young-age anchor variants (#146), two
-    # signing-source variants and three repeated-measures sensitivities.
-    #
-    # The two `us01-ceiling-excluded` variants were retired with the Edgin audit:
-    # the records they excluded are now masked by default, so the variants could
-    # only have excluded records already excluded. A registered check that cannot
-    # fail is worse than no check — see the note in registry.py. They are replaced
-    # by the inverse `us01-implausible-reinstated` pair, which asks what changes if
-    # that default exclusion is mistaken — the only remaining check on it, the
-    # source author no longer holding the original files.
-    #
-    # +3 on 2026-08-06: the three `sign-peak-age-*` variants. VG15's signed peak
-    # age became a sampled parameter that day, so for the first time there is
-    # something for a peak-age variant to vary — the existing `sign-peak-lo`/`-hi`
-    # pair varies the peak's HEIGHT, and could not have covered this.
-    #
-    # -1 on 2026-08-12: `sign-include-uk06` retired on the same principle as the
-    # ceiling variants. The source confirmed uk_06 used the standard DSE
-    # checklists, whose column 2 is "understands and signs" — a total sign count —
-    # so uk_06 is now included by default and the variant cannot vary anything.
-    #
-    # +6 on 2026-08-12, all closing gaps the uk_07/es_01 work opened or exposed:
-    # the `dse-native-only` pair (the 810 reference denominator, #190 — the first
-    # check on the harmonisation the sufficiency result proves no aggregate
-    # analysis can test), the `tau-psi-*` pair (a data-informed prior on a newly
-    # added, weakly identified parameter, the same condition that created
-    # Target 8), and the `psi-drop-*` pair (psi's source composition, which both
-    # inclusion flags advertise but nothing ran).
-    #
-    # +1 on 2026-08-14: `clamp-q-only`. `clamp_mean_above_hi_anchor` levels BOTH
-    # the understood mean and `q` off above the 84 mo anchor, and spoken is
-    # p_U * q, so the spoken trajectory inherits both — the corner at 84 months
-    # is the sharpest feature of its whole trajectory. Measurement says the
-    # saturation the flag was added for is `q`'s alone: extrapolating VG10's own
-    # fitted anchors gives q = 0.996 at 115 mo with P(mean > 0.99) = 0.999,
-    # while understood reaches 0.962 and never crosses 0.99 in any draw. This
-    # variant makes that a fit rather than an argument. See
-    # notes/202608141200-clamp-q-only.md.
-    #
-    # +1 on 2026-08-14: `a1-tau-age-varying`, Proposal A1 — the age variation
-    # moved off `kappa` and onto the between-child scale, on VG10 only. Unlike
-    # every variant above it this is a GRAPH change, carried on the existing
-    # `tau_subj_*_sigma` fields (as CLAMP_Q_ONLY is carried on
-    # `clamp_mean_above_hi_anchor`) so no definition gains a field and no
-    # fingerprint moves. It is registered as a diagnostic, not a candidate model
-    # of record: scaling one per-child deviate by tau(age) imposes perfect rank
-    # correlation across age, which is measured at 0.28 beyond two years. See
-    # notes/202607261540 §9 and notes/202608141600 §§8-10.
-    #
-    # +2 on 2026-08-17: the VG13 `window-*` pair (#228). Every variant above
-    # varies a prior; these two vary the observation *window*, and they are the
-    # first to do so. VG13's 18-month cap was justified in code by avoiding the
-    # WS production-proxy bias — work the form filter in `load_data` already does
-    # unconditionally — and in review by there being only one study above 18
-    # months, which the Romance extension of 2026-08-03 retired by admitting
-    # Italian Words & Gestures (registered 7-24). 694 admissible administrations
-    # sit above the cap. A window change drags its co-identified anchors, GP
-    # domain and query grid with it, so each is registered as one unit; see the
-    # registry comment for the measurements.
-    #
-    # +3 on 2026-08-19: VG20's kappa placement trio (#229), and the first
-    # variants registered against the model of record rather than against a
-    # development step. Two of them vary where the dispersion prior is placed
-    # rather than how wide it is; the third combines them. `anchor_ages` was
-    # already an overridable field, but treating anchor *placement* as a
-    # registered question is new, and it followed the measurement that
-    # kappa_min carries 42.5% of reported kappa_u at 84 months and 95.2% of
-    # kappa_s while recovery scores it at -40% to -60%.
-    #
-    # Restated the same day as `kappa-anchor-24-48`, `kappa-floor-generic` and
-    # `kappa-pre-promotion` when the combination was promoted into
-    # `_DS_JOINT_*_KAPPA_RE`: after promotion the originals perturbed toward the
-    # model of record rather than away from it, and one of them had become a
-    # literal no-op. The count is unchanged because each was inverted rather
-    # than dropped.
-    #
-    # +1 on 2026-08-21: `window-22-vague-anchors`, gating the promotion of
-    # `window-22` to a registered model. `window-22`'s 21-month anchors were
-    # recentred on in-sample medians because no CDI comprehension norm exists
-    # above 18 months, and the finding that rests on them -- the DS/TD gap
-    # closing by 300 words understood -- is exactly what a level-pinning prior
-    # could manufacture. The variant displaces the q high anchor upward and
-    # widens both, so a surviving closure is the data's and not the prior's.
-    # 58 with VG19's `max-age-84` (gate G5b): a leverage diagnostic that caps the
-    # data at 84 months and changes nothing else, so any movement in `tau1` is
-    # attributable to the discarded high-age rows rather than to a re-placed
-    # mean function. See notes/202608141900 SS G5b.
-    #
-    # +2 on 2026-08-23: VG22's rank family, `rank-1` / `rank-2` since the
-    # default moved to rank 3 on 2026-08-24. Every variant above
-    # varies a prior, a window or a data rule; these vary the **dimension** of
-    # the child covariance, which is a structural choice the data cannot make on
-    # its own. Gate 1 puts rank 2 within 2.60 on 2 df of rank 3 and rank 3 within
-    # 0.0000 of the free 4x4, so registering the family is how `k` gets settled
-    # rather than assumed -- and it is cheap, the three differing by one column
-    # of L. Rank 1 is not filler: it is the rank-one case Proposal A1 assumes,
-    # which Gate 1 rejects decisively on residuals (221 on 3 df), so fitting it
-    # tests that rejection under the real likelihood. See
-    # notes/202608221000-four-by-four-gate1.md SS5.
-    #
-    # +6 on 2026-08-24: the spoken-fallback family, three each on VG10 and VG20
-    # (#233, #236). 455 of 1,428 spoken observations cannot condition on an
-    # observed understood count and have always been given a substitute
-    # likelihood that is mean-correct and variance-wrong; `paired-only` bounds
-    # the effect by dropping them, `fallback-dispersion` measures it with one
-    # signed scalar, and `marginal-moments` removes it by matching the paired
-    # model's true first two moments. Registered on both models because the
-    # affected rows inform `q` and the spoken dispersion, which VG10 and VG20
-    # are compared on.
-    #
-    # +4 on 2026-08-25 (#242, #228, #229): VG16 gains `conditional-only` and
-    # `dse-native-only` -- it had none at all, which #242 records as a defect,
-    # since its coefficient is assumed constant across gaps, studies and form
-    # transitions with nothing registered to check it. VG21 gains
-    # `vague-anchors`, the double-dipping check its in-sample-recentred high
-    # anchors need. VG23 gains `eta-flat`, asking whether its correlation is
-    # evidenced or held up by the eta = 2 prior it shares with VG20.
-    #
-    # +3 on 2026-08-25, in the same change as the fields they need: VG16's
-    # `lag-gap-12`, `no-us01` and `lag-continuity`. A field with no variant
-    # using it is dead weight in the fingerprint of all twelve bivariate models,
-    # so the fields and their variants land together or not at all.
-    #
-    # +6 on 2026-08-31 (#266 finding 8): the three marginal-fallback arms for
-    # VG14 and VG15. Their engines hard-coded the default until then, so the
-    # exposure the finding names -- an approximation preserving the mean but not
-    # the variance, on rows that are older and clustered by study -- could not
-    # be measured on either signing model at all. VG14 had no variants before
-    # this and so no entry below.
-    #
-    # +2 on 2026-09-05 (#289 task 4.3): the combined-flag successor to
-    # `us01-implausible-reinstated` on VG10 and VG15, which lifts the same-day
-    # disagreement rule as well so the implausible rule's full catch comes back.
-    #
-    # +3 on 2026-09-07 (#242): VG16's `lag-same-form`, with the field it needs,
-    # and the `beta-tight`/`beta-wide` prior-scale pair, which needs none.
-    # `dse-native-only` was its only form-restricted arm and the available-case
-    # audit measured what that arm has to work with -- 80 supporting rows from
-    # 74 children in two studies, against 342 rows from 226 children in all
-    # eight contributing studies under the same-form restriction. The prior-scale
-    # pair is the last of this item's list to be registered; nothing had varied
-    # `beta_lag_sigma`, so the symmetric prior had never been checked.
-    #
-    # +7 on 2026-09-11 (#297): VG25's whole arm set, registered in the same
-    # change as the model and its fields, for the reason the +3 above gives --
-    # a field with no variant using it is dead weight in a fingerprint. Two of
-    # them could change the reported answer rather than check it.
-    # `sign-lag-clip` is the treatment VG16 registers and VG25 does not: 14.7%
-    # of this lag's support sits at a signed share of exactly 0 or 1, against
-    # VG16's 1.5%, and under the clip those rows carry 76.1% of the *source
-    # signed-share logit's* sum of squares -- the predictor's observed input,
-    # not the fitted predictor, which also subtracts a latent baseline
-    # (residualised on the source wave's age and study it is 66.1%). `sign-lag-marginal-only` confined the term to the spoken
-    # marginal, where VG15's child shifts are confined, and is what says whether
-    # the headline scope decision moved `psi`. The rest are checks:
-    # `sign-lag-population` (VG16's baseline, which here doubles as the arm in
-    # which no estimated per-child quantity reaches the cells),
-    # `sign-lag-uk07-marginal`, `sign-lag-gap-12`, the same-form restriction,
-    # and the prior-scale pair.
-    #
-    # +0 on 2026-09-15: the headline moved to the spoken marginal after its first
-    # rep fit was bimodal, so `sign-lag-marginal-only` became the headline and
-    # was replaced by `sign-lag-in-cells` (population baseline, in the cells).
-    #
-    # +2 on 2026-09-13 (#297 check 5): `no-uk07` and `no-ie02`, VG25's
-    # leave-one-study-out pair, once `JointModelDefinition` gained the
-    # `exclude_studies` field they need. The two studies the lag's support rests
-    # on most: 52 and 43 of its 191 supporting observations. On 2026-09-15, with
-    # the lag out of the cells and uk_07 no longer in its support, `no-uk07` was
-    # replaced by `no-uk05` (+0): ie_02 42 and uk_05 30 of 110.
-    #
-    # +19 on 2026-09-13 (#240): the typically developing variants its review
-    # asked for, on VG11, VG12, VG21, VG23 and VG26. `no-study-threshold` and
-    # `study-age-slopes` on all five (item 5), `a1-tau-age-varying` on the three
-    # without a correlated child block (item 1), `eta-q-wide` on the three joint
-    # ones (item 6), and VG13's never-fitted `single-admin` and `vague-anchors`
-    # carried to VG21 and VG26 (item 6).
-    #
-    # +3 on 2026-09-15: `ie02-comprehension-masked` on VG10, VG15 and VG20. The
-    # study owner kept ie_02's Checklists 1 + 2 administrations on the 810 scale
-    # as a short form rather than masking them as partial, as ie_01's baseline
-    # is; this arm masks their comprehension counts, where the omitted
-    # checklist's harder words matter, to show what that judgement carries.
-    #
-    # +1 on 2026-10-01 (#289 task 3.9): VG16's `corr`, the correlated child
-    # block added to the lag model, so `beta_lag` is estimated with the rival
-    # explanation for it in the graph.
+    # Pin the variant count so additions require an explicit review here.
+
     assert len(VARIANTS) == 118
     assert len(variants_for("vg25")) == 10
     assert len(variants_for("vg14")) == 3
@@ -385,13 +199,7 @@ def test_build_variant_all_and_named():
 
 
 def test_implausible_production_reinstatement_is_registered_and_bites():
-    """The inverse sensitivity must exist, flip the flag, and change the frame.
-
-    The 30 masked administrations cannot be confirmed defective at source — the
-    source author no longer holds the original files — so this variant is the only
-    published check on that exclusion. It has to move real observations, or it
-    repeats the fault of the variants it replaces.
-    """
+    """Require the reinstatement flag to change the prepared frame."""
     for model, model_id in (("vg10", "VG10"), ("vg15", "VG15")):
         (variant,) = build_variant(model, "us01-implausible-reinstated")
         assert variant.include_implausible_production is True
@@ -426,14 +234,7 @@ def test_ie02_comprehension_masked_arm_sets_its_flag_and_nothing_else():
 
 
 def test_masked_production_reinstatement_lifts_both_rules():
-    """The successor sets both flags; the one-factor variant leaves the second.
-
-    `us01-implausible-reinstated` reinstates 5 of the implausible rule's 11
-    counts, because the same-day disagreement rule re-masks the six that have an
-    observed same-day partner. The successor exists to lift both (#289 task 4.3),
-    and the one-factor variant has to keep its second flag off or the pair stops
-    separating the two judgements.
-    """
+    """Keep the combined reinstatement distinct from lifting only one masking rule."""
     for model, model_id in (("vg10", "VG10"), ("vg15", "VG15")):
         (variant,) = build_variant(model, "us01-masked-production-reinstated")
         assert variant.include_implausible_production is True
@@ -449,14 +250,7 @@ def test_masked_production_reinstatement_lifts_both_rules():
 
 
 def test_dse_native_variant_is_registered_and_bites():
-    """The 810-denominator check must exist, flip the flag, and move real rows.
-
-    This is the only check on the harmonisation that carries a 416-item Oxford
-    count onto an 810-item denominator, and the sufficiency result
-    (notes/202607261540) is the proof that no aggregate analysis of these data can
-    test that assumption instead. A variant that silently stopped removing rows
-    would read as robustness it has not demonstrated.
-    """
+    """Require native-checklist restriction to remove the intended real rows."""
     for model, model_id in (("vg10", "VG10"), ("vg15", "VG15")):
         (variant,) = build_variant(model, "dse-native-only")
         assert variant.dse_native_only is True
@@ -468,15 +262,7 @@ def test_dse_native_variant_is_registered_and_bites():
 
 
 def test_psi_variants_cover_the_scale_and_the_sources():
-    """psi's two untested degrees of freedom after the 2026-08-12 study term.
-
-    ``tau_psi_sigma`` was set from the measured between-study spread, which makes
-    it data-informed rather than externally justified — the condition Target 8
-    exists for — and with four informed studies it is weakly identified, so it
-    governs how far the per-study values shrink and therefore the headline itself.
-    Separately, both cross-tab inclusion flags document that setting them False
-    isolates a source's pull on psi, which nothing ran until these variants.
-    """
+    """Vary the study-scale prior and each composition-source gate separately."""
     (narrow,) = build_variant("vg15", "tau-psi-narrow")
     (wide,) = build_variant("vg15", "tau-psi-wide")
     assert narrow.tau_psi_sigma < VG15.tau_psi_sigma < wide.tau_psi_sigma
@@ -515,15 +301,7 @@ def test_variants_are_single_factor_or_documented_pairs():
 
 
 def test_variants_that_disable_subject_effects_also_clear_the_partition():
-    """A variant turning off subject effects must clear the variance partition.
-
-    The partition allocates one scatter budget *between* the subject scale and the
-    young kappa anchor, so without a subject scale there is nothing to allocate and
-    the engine raises. Adopting the partition on VG11/VG12 broke both `single-admin`
-    variants for two days without any test noticing, because `build_variant` only
-    constructs the definition — the failure appears when a model graph is built
-    from it, which nothing here does.
-    """
+    """Clear the variance partition when removing its child-scale component."""
     for model_key in ("vg11", "vg12"):
         (variant,) = build_variant(model_key, "single-admin")
         assert variant.use_subject_re is False, model_key
@@ -570,13 +348,7 @@ def test_window_variants_stay_inside_their_own_gp_domain_and_anchors():
 
 
 def test_window_variants_admit_the_rows_the_cap_discards():
-    """The point of the pair: more data, the same six studies, no WS.
-
-    Builds the real graphs, because the failure mode this guards against —
-    a variant whose definition is valid but whose engine rejects it — only
-    appears at build time. That gap is what let the ``single-admin`` variants
-    sit broken for two days.
-    """
+    """Build wider-window variants and check added rows without new studies or forms."""
     import contextlib
     import io
     import os
@@ -640,15 +412,7 @@ def test_window_variants_admit_the_rows_the_cap_discards():
 
 
 def test_vg12_free_scales_swaps_the_coordinates_and_nothing_else():
-    """#225 item 3: the pre-partition parameterisation, as a registered variant.
-
-    Recovery returns VG12's `tau_subject` below its truth in three replicates of
-    three while `v_total` recovers well, so the budget is estimated and the
-    *split* is not. Two diagnoses fit that and they call for different fixes --
-    the partition biases the split, or the split is unidentifiable however it is
-    parameterised. This variant is what separates them, so it has to be the
-    partition and nothing else that changes.
-    """
+    """Switch VG12's scale parameterisation without changing other definition fields."""
     (variant,) = build_variant("vg12", "free-scales")
 
     assert variant.subject_variance_partition is None
@@ -670,15 +434,7 @@ def test_vg12_free_scales_swaps_the_coordinates_and_nothing_else():
 
 
 def test_vg12_free_scales_builds_a_real_graph():
-    """A valid definition is not a valid graph, which is the `single-admin` lesson.
-
-    Adopting the partition broke both `single-admin` variants for two days with
-    no test noticing, because `build_variant` only constructs the definition.
-    This builds the model and checks the swap is exactly a change of coordinates
-    on the two scale parameters: `(v_total, subject_variance_share)` out,
-    `(tau_subject, kappa_excess_young)` in, the free-parameter count unchanged,
-    and a finite initial log-probability. Needs the prepared DuckDB.
-    """
+    """Check the free-scale variable set, parameter count and finite initial log probability."""
     import contextlib
     import io as _io
     import os
@@ -799,9 +555,7 @@ def test_vg16_scope_variants_build_and_actually_narrow_the_data():
 
 
 def test_vg21_vague_anchors_moves_two_priors_and_nothing_structural():
-    """VG21's high anchors were recentred on in-sample medians (#228), so the
-    double-dipping check has to be a pure prior change: same rows, same studies,
-    same graph. If it ever differs structurally it has stopped being one."""
+    """Change both high-anchor priors while retaining VG21's structural settings."""
     import os
     import tempfile
 
@@ -828,9 +582,7 @@ def test_vg21_vague_anchors_moves_two_priors_and_nothing_structural():
 
 
 def test_vg23_eta_flat_keeps_the_correlation_and_only_relaxes_its_prior():
-    """`eta = 1` is the flat LKJ. The variant must still estimate `rho_uq` —
-    the check is whether the correlation is evidenced, which needs the parameter
-    to still be there."""
+    """Set LKJ eta to 1 while retaining the fitted correlation parameter."""
     import os
     import tempfile
 

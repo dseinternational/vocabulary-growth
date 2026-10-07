@@ -2,35 +2,20 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Measure, in the fitted per-child deviations, the correlation between a
-child's comprehension effect and their production-ratio effect.
+"""Summarise correlation across fitted child effects, one value per draw.
 
-VG05-VG16 give each child those two deviations and draw them **independently**,
-and the DS spoken between-child scale reported in the DS-vs-TD ``tau`` contrast
-was derived on that independence. The TD comparator (VG11) places one intercept
-on the spoken logit and assumes nothing of the kind, so the assumption was an
-asymmetry in the contrast itself, not an internal modelling detail. That is what
-this script was written to measure, before any model estimated it.
+Read comprehension and production-ratio effects from a fitted model. On VG09,
+VG10 and VG16 the priors are independent, but fitted effects may correlate through
+the data. On VG20 compare their realised correlation with the population
+parameter ``rho_uq``. They need not agree because the realised children form a
+finite sample and their effects carry unequal information and shrinkage.
 
-Since 2026-08-19 the model of record does estimate it: VG20's ``rho_uq``, +0.368
-[0.287, 0.447]. The script therefore now serves two different purposes depending
-on the model it is pointed at.
-
-* On an **uncorrelated** model (vg09, vg10, vg16), the empirical correlation
-  describes the fitted deviations. Shrinkage can move a correlation in either
-  direction, so it is not a lower bound on the population correlation.
-* On a **correlated** model (vg20), compare the realised deviations with the
-  population parameter while allowing for finite-child variation and the
-  information in their observations. The two quantities need not be identical.
-
-Writes ``<comparisons>/ds_subject_effect_correlation.csv``::
-
-    model,n_children,n_draws,corr_median,corr_ci50_lo,corr_ci50_hi,
-    corr_ci_lo,corr_ci_hi,corr_p_gt0
+This is not a lower bound on the population correlation. Write the posterior
+summary to ``<comparisons>/ds_subject_effect_correlation.csv``.
 
 Usage::
 
-    python scripts/subject_effect_correlation.py            # vg20
+    python scripts/subject_effect_correlation.py
     python scripts/subject_effect_correlation.py vg20 vg10
 """
 

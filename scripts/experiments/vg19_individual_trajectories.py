@@ -4,7 +4,7 @@
 """What does VG19's child random slope say about individual trajectories?
 
 VG08-VG10 and VG20 give each child a single constant offset, so every child's
-curve is the population curve shifted vertically and the model cannot express a
+latent logit curve has a constant shift, so that component cannot express a
 child who changes standing. VG19 gives each child an offset *and* a rate, drawn
 from a per-outcome 2x2 covariance. This harness reads those three scalars per
 outcome out of the fitted trace and turns them into the quantities a reader
@@ -12,8 +12,9 @@ actually asks about: how stable a child's standing is, how much of later
 standing is predictable from earlier standing, and how wide the between-child
 band is on the natural scale.
 
-Everything here is a deterministic function of ``tau_subj_{u,q}_{0,1,rho}``
-propagated over posterior draws -- no refitting, no simulation. The child effect
+The latent-effect summaries are deterministic functions of
+``tau_subj_{u,q}_{0,1,rho}`` evaluated over posterior draws. ``spoken_spread``
+also simulates new child effects to summarise the nonlinear spoken outcome. The child effect
 at age ``a`` is ``b0 + b1 * D(a)`` with ``D(a) = (a - ref) / 12``, so
 
     Cov(a, b) = tau0^2 + rho * tau0 * tau1 * (D(a) + D(b)) + tau1^2 * D(a) * D(b)
@@ -117,15 +118,13 @@ def main():
 
 
 def spoken_spread():
-    """Between-child spread in the SPOKEN outcome, where the two models cross over.
+    """Simulate between-child spoken spread under VG19 and VG20.
 
-    Spoken is ``u * q``, so a child's spoken position depends on both random
-    effects together. VG20 correlates them (``rho_uq`` = +0.368) but holds each
-    constant in age; VG19 lets each grow with age but forces the correlation to
-    zero. Neither dominates: the compounding wins at young ages and the growth
-    wins at old ones. Simulated because ``log(expit(x) * expit(y))`` has no
-    closed-form variance -- 400 posterior draws x 4000 synthetic children, at
-    each model's own population median curve.
+    Spoken probability is ``u * q``. VG20 correlates age-constant effects; VG19
+    gives each outcome an age-dependent effect but keeps the two independent.
+    Compare 400 posterior scale draws with 4,000 new children per draw. The
+    population curve is fixed at each model's tabulated median, so this omits
+    its posterior uncertainty and dependence with the scale parameters.
     """
     g = posterior(VG19, [f"tau_subj_{k}_{s}" for k in "uq" for s in ("0", "1", "rho")])
     f = posterior(VG20, ["tau_subj_u", "tau_subj_q", "rho_uq"])

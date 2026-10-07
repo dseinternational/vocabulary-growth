@@ -42,8 +42,7 @@ _sources = {
     "vocab_us_01": "./data/vocab_data_us_01.csv",
     "vocab_us_03": "./data/vocab_data_us_03.csv",
 }
-# nz_01 (Foster-Cohen) is added with the real anonymisation key in a separate
-# data commit; tolerate its absence so the pipeline still builds without it.
+# Allow preparation without the optional nz_01 source file.
 _loaded = {
     name: pd.read_csv(path)
     for name, path in _sources.items()
@@ -60,29 +59,14 @@ key_value_table(
 vocab_ie_01_df = _loaded["vocab_ie_01"]
 vocab_ie_02_df = _loaded["vocab_ie_02"]
 
-# Exclude ie_02 subject ID_79C464EF367C4D5B: an evident data-entry error. Both of
-# its rows report near-ceiling counts implausible for the recorded ages (spoken/
-# understood 432/477 at 13 mo and 456/477 at 16 mo, versus 0-38 spoken for every
-# other ie_02 child under 24 mo), with the imitates/spoken/says_clearly columns
-# byte-identical at both visits and understood pinned at 477 across the 3-month
-# gap — the signature of one value propagated across the production columns. It is
-# the sole source of the anomalous >400-words-before-20-months points in the
-# spoken (VG01) and understood (VG02) trajectories. Dropped here at load so it is
-# absent from both the merged CSV and the DuckDB vocab_ie_02 table (and hence the
-# vocab_combined view the models read). Excluded pending source verification with
-# the ie_02 data provider.
+# Apply the documented ie_02 subject exclusion before creating any outputs.
+# See IE02_EXCLUDED_SUBJECT_IDS for the source evidence and reinstatement rule.
 vocab_ie_02_df = vocab_ie_02_df[
     vocab_ie_02_df["subject_id"] != "ID_79C464EF367C4D5B"
 ].copy()
 
-# Withhold the ie_02 t2 administration whose counts are internally
-# contradictory — a 331-word comprehension surge, a 237-word signing surge and
-# a 96% speech collapse asserted for the same three months, the pattern of a
-# checklist completed differently between waves. Dropped here at load so it is
-# absent from the merged CSV, the DuckDB vocab_ie_02 table and the
-# vocab_combined view alike; the child's t1 administration is retained. See
-# data_utils.IE02_WITHHELD_ADMINISTRATIONS for the evidence and how to
-# reinstate.
+# Withhold the specified ie_02 administration while retaining the earlier visit.
+# See IE02_WITHHELD_ADMINISTRATIONS for the source-specific screening decision.
 vocab_ie_02_df, _ie02_withheld = drop_ie02_withheld_administrations(vocab_ie_02_df)
 console.print(
     f"[yellow]ie_02 administrations withheld as internally contradictory:[/yellow] "
@@ -90,14 +74,8 @@ console.print(
 )
 vocab_it_01_df = _loaded["vocab_it_01"]
 
-# Exclude the uk_01 subjects withheld as probable homonym fusions. The source
-# keys children by name alone, and ID_E33ADE657109EBB8's four rows interleave
-# two contradictory modality profiles (a signer who barely speaks, a speaker
-# who never signs) — the signature of two same-named children fused under one
-# id, and the origin of the −424-word "collapse" at 76–78 months. Dropped here
-# at load so the rows are absent from the merged CSV, the DuckDB vocab_uk_01
-# table and the vocab_combined view alike. See
-# data_utils.UK01_WITHHELD_SUBJECTS for the evidence and how to reinstate.
+# Apply UK01_WITHHELD_SUBJECTS before merging to keep probable identifier
+# collisions out of both the CSV and database. The constant records the evidence.
 vocab_uk_01_df, _uk01_withheld = drop_uk01_withheld_subjects(_loaded["vocab_uk_01"])
 console.print(
     f"[yellow]uk_01 rows withheld as probable homonym fusions:[/yellow] "
@@ -111,13 +89,8 @@ vocab_us_02_df = _loaded["vocab_us_02"]
 vocab_uk_06_df = _loaded["vocab_uk_06"]
 vocab_es_01_df = _loaded["vocab_es_01"]
 
-# Exclude the uk_07 administrations withheld pending clarification with the source
-# team — one row at 58 months recording 191 words understood against 489 produced,
-# the only row in the source where production exceeds comprehension, at the end of
-# a reported comprehension decline. Dropped here at load so it is absent from the
-# merged CSV, the DuckDB vocab_uk_07 table and the vocab_combined view alike; the
-# same helper guards VG15's cross-tab path, which reads this CSV directly. See
-# data_utils.UK07_WITHHELD_ADMINISTRATIONS for the reasoning and how to reinstate.
+# Apply UK07_WITHHELD_ADMINISTRATIONS here and in the direct cross-tab loader.
+# Keep those paths consistent while source clarification remains pending.
 vocab_uk_07_df, _uk07_withheld = drop_uk07_withheld_administrations(
     _loaded["vocab_uk_07"]
 )
@@ -210,7 +183,7 @@ ireland_2_to_merge["study"] = 10
 # spoken marginal is word-only + both (spoken + spoken_signed); understood is
 # unavailable. (VG15 instead consumes nz_01's produced cross-tab directly — see
 # common_joint_modality — so this marginal feeds the other DS models.) The
-# real-key CSV lands in a separate data commit; until then nz_01 is skipped.
+# If its source CSV is absent, nz_01 contributes no rows.
 if have_nz01:
     vocab_nz_01_df = _loaded["vocab_nz_01"]
     nz_01_to_merge = vocab_nz_01_df[["subject_id", "age"]].copy()
@@ -374,7 +347,7 @@ if have_nz01:
     )
 else:
     # Empty table with the nz_01 schema so the vocab_combined UNION still
-    # resolves (contributes zero rows until the real-key CSV is committed).
+    # resolves even when the nz_01 source file is absent.
     con.execute(
         """
         CREATE TABLE vocab_nz_01 (

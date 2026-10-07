@@ -67,14 +67,10 @@ def test_uv_lock_pins_the_shared_library_to_an_exact_revision():
 
 
 def _instruction_copy(relative_path: str) -> str:
-    """One agent-instruction file, with its line endings normalised.
+    """Read an instruction file with line endings normalised.
 
-    Compared as text rather than bytes. ``.gitattributes`` marks ``*.md`` as
-    ``eol=lf``, so all three are LF in the index, but an editor or an assistant
-    that rewrites one on Windows can leave CRLF in the working tree -- and
-    because git normalises on read, ``git status`` still reports the tree clean.
-    A byte comparison then fails for a reason that reads as content drift and
-    is not, which is exactly the failure this test exists to rule out.
+    Git treats LF and CRLF as equivalent under the Markdown attributes. Compare
+    content so local line-ending differences do not imply instruction drift.
     """
     return (ROOT / relative_path).read_text(encoding="utf-8").replace("\r\n", "\n")
 

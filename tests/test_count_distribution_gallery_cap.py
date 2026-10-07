@@ -1,14 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""A figure past its outcome's reporting cap must not reach the report.
+"""Keep count-distribution figures within the outcome's reporting cap.
 
-``tests/test_reporting_age_policy.py`` checks the written tables, so it cannot
-see a figure that has no table row behind it. That is exactly the gap VG02 fell
-through: an earlier run wrote a 90-month comprehension figure, the cap was
-tightened to 84, the next run wrote a capped table and a capped set of figures
-but left the older 90-month file in place, and the gallery -- which globs the
-directory -- kept publishing it. It reached ``docs/report/figures/`` too.
+The gallery finds files on disk, so older figures can survive a tighter cap
+even when the current summary table excludes those ages. Tests check both
+stale-file removal and gallery filtering.
 """
 
 import numpy as np
@@ -77,13 +74,7 @@ def test_writer_does_not_remove_unrelated_figures(tmp_path):
 
 
 def test_smoothed_sidecars_carry_the_smoothed_series(tmp_path):
-    """A table labelled "smoothed" must not contain the unsmoothed numbers.
-
-    Both writers saved the pre-smoothing arrays, so every `*_smoothed.csv` was
-    byte-identical to its unsmoothed original. The figures differed; a reader
-    who downloaded the table to check the figure was silently given the other
-    series.
-    """
+    """Store the smoothed values in a table labelled as smoothed."""
     from vocab_growth.plotting import plot_expected_learning_rate
 
     rng = np.random.default_rng(7)

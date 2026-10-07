@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # ---
 # jupyter:
 #   jupytext:
@@ -14,6 +17,8 @@
 
 # %% [markdown]
 # # Vocabulary data variables
+#
+# > Revised with assistance from OpenAI Codex/GPT-6.
 
 # %% [markdown]
 # ## Preparation
@@ -75,9 +80,7 @@ def plot_histogram(data : pd.DataFrame, x_name: str, x_label: str, output_filena
     std = data[x_name].std()
     plt.axvline(median, color="red", label=f"Median: {median:.1f}")
     plt.axvline(mean, color="#0F447A", linestyle="--", label=f"Mean: {mean:.1f}")
-    # shade mean +/- 1 std
     plt.fill_betweenx(y=[0, plt.gca().get_ylim()[1]], x1=mean - std, x2=mean + std, color="#0F447A", alpha=0.05, label=f"Mean ± 1 Std Dev: [{mean - std:.1f}, {mean + std:.1f}]")
-    # show legend to right of the plot
     plt.legend()
 
     plt.xlabel(x_label)
@@ -132,7 +135,7 @@ survey_max_df = vocab_df.groupby("survey_vocab_max")[["age", "understood", "spok
 survey_max_df.describe().T
 
 # %% [markdown]
-# One observation is at the maximum score of the instrument used:
+# Administrations where a count reaches the checklist's maximum score:
 
 # %%
 vocab_df[vocab_df[["understood", "spoken", "signed"]].max(axis=1) == vocab_df["survey_vocab_max"]]
@@ -352,16 +355,6 @@ plot_histogram(
     x_name="understood",
     x_label="Words Understood (under 2 years)",
     output_filename="histogram-words-understood-under-2y",
-)
-
-plt.show()
-
-# %%
-plot_histogram(
-    data=from_4_to_6y_df,
-    x_name="spoken",
-    x_label="Words Spoken (4 to 6 years)",
-    output_filename="histogram-words-spoken-4-to-6y",
 )
 
 plt.show()

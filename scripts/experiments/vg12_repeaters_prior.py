@@ -1,66 +1,30 @@
 #!/usr/bin/env python
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Does a repeaters-calibrated share prior repair VG12's tau-kappa geometry?
+"""Test VG12 priors calibrated from a repeaters-only fit.
 
 Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+Revised with assistance from OpenAI Codex/GPT-6.
 
-The question
-------------
-``notes/202609072200-vg08-replication-thinning.md`` showed that the typically
-developing models' low energy BFMI and their tau-kappa ridge are what a child
-effect looks like when most children are observed once: thinning VG08's
-replication to VG12's profile reproduces both on Down syndrome data. No
-coordinate change supplies the information a second visit carries, so the
-remedy has to supply information. The cheapest candidate (#229 option 2,
-generalised) is to let the children who *can* identify the split -- VG12's
-1,000 children with two or more visits -- set the prior on
-``subject_variance_share`` for the full fit, so the 4,800 singletons contribute
-to the trajectory and the dispersion under a split the repeaters have already
-determined, rather than prising it apart by functional form.
+``baseline`` fits the full frame. ``repeaters`` retains children with at least
+two visits. The three calibrated arms fit the full frame with a Beta prior on
+``subject_variance_share`` moment-matched to the repeaters' posterior, using
+concentration multipliers of 1, 0.5 and 1000. The last nearly fixes the share.
+Compare BFMI, child-scale/concentration correlation and divergences with the
+baseline at the same tier.
 
-This is the pre-refit test of that idea, at ``test`` tier, on VG12 -- the model
-with the worst BFMI (0.208) and the strongest ridge (+0.76), where a fix that
-does nothing here does nothing anywhere. Arms:
-
-    baseline     VG12 as registered, on its full frame
-    repeaters    VG12 as registered, on the children with >= 2 visits only
-    calibrated   VG12 on its full frame, with the share prior's Beta moment-
-                 matched to the repeaters arm's posterior on
-                 ``subject_variance_share``
-    calibrated-half  as `calibrated` with the Beta concentration halved (same
-                 mean, wider), to see how much of the effect is the prior's
-                 tightness rather than its location
-    calibrated-fixed  as `calibrated` with the concentration multiplied by a
-                 thousand (sd about 0.001): the split is effectively pinned at
-                 the repeaters' value, a cut rather than a prior. Added after
-                 the first three arms ran: the full frame's own posterior on the
-                 share (sd 0.028) is *tighter* than the repeaters' (sd 0.035),
-                 so a prior at the repeaters' strength cannot dominate the split
-                 the singletons impose through the likelihood's shape, and the
-                 question becomes whether pinning it repairs the geometry at all
-
-Read: min BFMI, corr(tau_subject, kappa_young), the energy correlates and the
-divergence count, each arm against the baseline fitted at the same tier on the
-same machine. If the calibrated arm clears 0.3 and the ridge falls, option 2 is
-a candidate graph change for the TD refit. If it does not, the prior is not the
-lever.
-
-What this is not
-----------------
-Not a fit of record and not a registered variant. The calibrated arm uses the
-repeaters' posterior as a prior and then fits the repeaters again inside the
-full frame, so their information on the split is counted twice; that is a
-geometry test, not the final design, and the note says so. Writes to its own
-output root, never a publication root.
+The calibrated arms use the repeaters both to set the prior and in the full
+likelihood. They count that information twice and serve as exploratory geometry
+checks. They do not establish a reporting prior, propagate calibration
+uncertainty, or identify the sole cause of poor sampling.
 
 Usage::
 
     uv run python scripts/experiments/vg12_repeaters_prior.py baseline repeaters --output-dir output/experiments/vg12-repeaters-prior
     uv run python scripts/experiments/vg12_repeaters_prior.py calibrated calibrated-half --output-dir output/experiments/vg12-repeaters-prior
 
-The calibrated arms need ``repeaters.json`` in the output root; ``all`` runs the
-four in order. ``--config`` defaults to ``test``.
+The calibrated arms need ``repeaters.json``. ``all`` runs all five arms in order.
+``--config`` defaults to ``test``. These are exploratory fits, not fits of record.
 """
 
 from __future__ import annotations

@@ -1,55 +1,27 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Shared dataclasses and pipeline functions for the joint sign/speech modality
-model (VG15): issue #49 Option 3.
+"""Joint signing and speech with study effects and optional child effects.
 
-VG15 extends the trivariate VG14 with two things VG14 assumed away:
+The catalogue records models using this engine. The marginal proportions are
+p_U = sigmoid(f_U), r = P(sign | understood), and q = P(speak | understood).
+A Plackett odds ratio psi gives pi_both = P(sign and speak | understood),
+so total expressive proportion is p_U * (r + q - pi_both).
 
-1.  A within-understood sign-speech ASSOCIATION (a Plackett odds ratio ``psi``
-    with a study-level random intercept ``delta_psi``), identified from four
-    cross-tabulation sources: the uk_02, uk_07 and es_01 four-cell
-    within-understood cross-tabs (sign-only / sign+speech / speech-only /
-    understood-only) and nz_01's three-cell within-produced cross-tab. This
-    replaces VG14's ``p_any`` calculated under independence with a
-    *data-identified* total expressive vocabulary. The reported population
-    ``psi`` is a shrunk centre over sources that disagree; the per-study values
-    are the primary read.
-2.  STUDY random intercepts on each latent trajectory (the VG07-VG10 pattern),
-    so the age curve is separated from study composition (which made VG14's
-    signed peak unidentifiable).
+Four-cell counts from uk_02, uk_07 and es_01 condition on comprehension.
+nz_01's three-cell counts condition on production. Its likelihood retains the
+three corresponding Dirichlet parameters, whose sum is below the full
+four-cell concentration. nz_01 supplies no comprehension information.
 
-Latent scale (all out of N = 810 checklist words, the DSE reference inventory):
+Where usable comprehension is observed, spoken and signed counts condition
+on that count. Otherwise they use the configured marginal fallback. Cell
+rows replace separate spoken and signed marginal contributions.
 
-    p_U(a)  = sigmoid(f_U(a))                 # proportion understood
-    r(a)    = sigmoid(g(a))                   # P(sign  | understood)
-    q(a)    = sigmoid(h(a))                   # P(speak | understood)
-
-    pi_both     = Plackett(r, q; psi)         # P(sign & speak | understood)
-    pi_signonly = r - pi_both
-    pi_speakonly= q - pi_both
-    pi_neither  = 1 - r - q + pi_both
-    p_any(a)    = p_U(a) * (r + q - pi_both)   # total expressive (data-identified)
-
-Likelihoods use the observed understood count as the denominator for spoken
-and signed outcomes when the counts are jointly available and logically
-nested. Rows without a usable understood count retain a marginal likelihood.
-The rows with a four-cell cross-tabulation use that joint composition term
-instead of duplicate spoken and signed likelihood contributions:
-    - understood ~ BetaBinomial(810, p_U)              (all DS studies)
-    - spoken | understood ~ BetaBinomial(understood, q)
-    - signed | understood ~ BetaBinomial(understood, r)
-    - uk_02 / uk_07 / es_01 four cells ~ DirichletMultinomial(total, conc * [pi_*])
-      (the within-understood joint term; identifies psi)
-    - nz_01 three produced cells ~ DirichletMultinomial(produced, conc * [pi_*])
-      (the within-produced term; also identifies psi, with no comprehension
-      denominator — p_U cancels, so nz_01 carries no understood information)
-
-This is a self-contained module (like common_trivariate.py); it does not import
-from or modify the bivariate / trivariate engines. The full-grid intermediates
-are kept as plain tensors (only obs/plot/query slices are stored), following the
-VG14 memory discipline.
+Study effects describe differences between sources. They do not establish
+measurement equivalence or separate age from study when age ranges do not
+overlap. Child effects enter marginal counts, not cell likelihoods.
+Population reports set study and child effects to zero; study-specific
+associations are reported separately.
 """
 
 import os
@@ -740,16 +712,13 @@ def prepare_joint_data(
     context: JointContext,
     definition: JointModelDefinition,
 ):
-    """Load and prepare data for the joint model.
+    """Prepare joint marginal and cell observations from the configured sources.
 
-    Studies without a cross-tab contribute understood/spoken/signed marginals
-    (from the merged view). uk_02, uk_07 and es_01 are taken from their raw CSVs and
-    each split into four-cell rows (Dirichlet-Multinomial) and marginal-only rows
-    (marginal likelihoods); nz_01 contributes a within-produced three-cell DM.
-
-    es_01's non-vocal modality is called gestural by its source but is scored per
-    lexical item on an adapted CDI, so it is the same construct as the other
-    sources' signed counts -- see ``JointModelDefinition.include_es01_cells``.
+    Cell rows replace expressive marginals. uk_02, uk_07 and es_01 supply cells
+    within understood words; nz_01 supplies cells within produced words.
+    es_01's non-vocal counts include symbolic gestures scored per lexical item.
+    Their inclusion does not establish equivalence with other signing measures.
+    See JointModelDefinition.include_es01_cells for the source assessment.
     """
     analysis_df, info = build_joint_analysis_frame(definition)
     native_only = info["native_only"]
@@ -1433,22 +1402,9 @@ def build_model_graph(
             h_obs = h_obs + beta_sex_q * x_sex_data
             g_obs = g_obs + beta_sex_sign * x_sex_data
 
-        # Sign -> speech cross-lag (VG25, issue #297). The child's prior-wave
-        # signed share of comprehension, as a residual from the signed-ratio
-        # trajectory at that wave, shifts their current production ratio q.
-        # `beta_sign_lag > 0` means a child who signed a larger share of what
-        # they understood then says a larger share of it now; x is 0 with no
-        # prior wave, which is most rows.
-        #
-        # The baseline is a residual from `g`, not from `f_u`, because the
-        # predictor is a signed RATIO. `within` leaves the child's own
-        # persistent signing standing in the baseline and so subtracts it from
-        # the predictor -- the prospective, net-of-standing quantity, and the one
-        # VG24's `rho_sign_q` does not already carry. `population` removes the
-        # subject shift from the baseline and so retains that standing in the
-        # predictor, which with `rho_sign_q` in the model makes it a second,
-        # noisier reading of the same thing; it is the registered sensitivity for
-        # exactly that reason.
+        # The previous signed-ratio residual shifts the current production
+        # ratio. The within baseline subtracts the child's modelled standing;
+        # the population baseline retains it. Neither isolates a causal effect.
         if use_sign_cross_lag:
             beta_sign_lag = pm.Normal(
                 "beta_sign_lag",
@@ -1470,52 +1426,22 @@ def build_model_graph(
         q_obs = pm.math.sigmoid(h_obs)
         r_obs = pm.math.sigmoid(g_obs)
 
-        # --- population+study marginals (NO subject shift) for the cell DMs ---
-        # psi is identified from the cross-tab rows (uk_02/uk_07/es_01 four-cell
-        # and nz_01 three-cell). The per-child sign offset is co-identified with
-        # psi from those same rows, so letting it into the composition makes psi
-        # pivot on a thinly-identified RE (measured when uk_02 was the only
-        # source: psi 1.78 -> ~2.8, driven almost entirely by the sign subject
-        # RE — see notes/202606171200-vg15-subject-re-stabilisation). We
-        # therefore keep psi a *population-conditioned* within-understood
-        # association by feeding the DMs the study-level marginals only; subject
-        # REs still enter every marginal likelihood. When subject REs are off
-        # these equal r_obs/q_obs exactly.
+        # Cell likelihoods use age and study marginals without child offsets.
+        # This limits direct competition between psi and child heterogeneity;
+        # shared parameters can still couple their posteriors. Child effects
+        # remain in the marginal likelihoods. The rationale and sensitivities
+        # are in notes/202606171200-vg15-subject-re-stabilisation.md and #238.
         #
-        # Two honest consequences, not incidental details (#238). First, this
-        # DECOUPLES psi from the child effects rather than empirically
-        # separating the two: the cell likelihood is built so they cannot
-        # compete, so a sharp child-sign scale posterior is evidence from the
-        # marginal rows, not evidence that the cells distinguish association
-        # from child heterogeneity. Second, repeated cross-tab visits by one
-        # child are conditionally independent in the cell likelihood — no term
-        # here carries within-child dependence — so psi's uncertainty may be
-        # understated and children with more visits weigh more. The
-        # repeated-child sensitivity is tracked in #238.
+        # Repeated cell rows from a child are conditionally independent here.
+        # Unequal visit counts can therefore affect psi and its uncertainty.
         #
-        # The sign cross-lag crosses this line only when `sign_lag_in_cells` is
-        # set, and VG25 no longer sets it (2026-09-15). It was registered in the
-        # cells on the argument that `beta_sign_lag` is one scalar on a covariate
-        # fixed by the data, unlike the free per-child offsets kept out above.
-        # That holds for the `population` baseline only. Under `within` the
-        # predictor contains `subject_shift_sign` at the PRIOR wave, so the term
-        # carried an estimated per-child quantity into the composition -- and
-        # the first rep fit was bimodal, `beta_sign_lag` +0.69 in four chains
-        # and -0.50 in two, with the child signing block reshaped in both.
-        # Twelve-chain probes found one mode once the lag stayed out of the
-        # cells, and one for the population baseline in them; the
-        # `sign-lag-in-cells` arm is that second combination.
+        # Sex coefficients enter the cells. The sign lag enters only under its
+        # flag; a within baseline then includes the prior-wave child effect.
+        # VG25 keeps that lag outside the cells by default. See
         # notes/202609151930-vg25-lag-out-of-the-cells.md.
         #
-        # Added under the flag rather than as `+ (term or 0.0)`, so a model
-        # without the lag emits the ops it always did rather than gaining an
-        # addition of zero -- which `tests/test_graph_equivalence.py` would see
-        # for every other joint model.
-        #
-        # The sex coefficients cross it too, for the reason the lag does: each is
-        # one scalar multiplying a covariate the data fix, not a free per-child
-        # offset, and leaving them out would model a girl's composition with the
-        # sex-midpoint marginals. See `JointModelDefinition.sex_effect_sigma`.
+        # Keep optional additions inside their flags to preserve the graph
+        # operation sequence when the corresponding term is absent.
         h_obs_pop = h_all[i_obs0:i_obs1] + delta_q[study_obs]
         if x_sex is not None:
             h_obs_pop = h_obs_pop + beta_sex_q * x_sex_data
@@ -1878,13 +1804,7 @@ def _extract_produced_cell_observations(
     df: pd.DataFrame,
     has_prod: np.ndarray,
 ) -> np.ndarray:
-    """Observed nz_01 produced-cell counts for the rows flagged by ``has_prod``.
-
-    Counts only. It returned the matching ages as well until 2026-09-01, and no
-    caller ever read them -- the tuple target hid that from ruff's unused-variable
-    rule, which is why they outlived the ``prod_cell_ages`` *field* they were the
-    source of.
-    """
+    """Return observed nz_01 three-cell counts for rows flagged by has_prod."""
     if not has_prod.any():
         return np.zeros((0, len(PROD_CELL_NAMES)), dtype=int)
 
@@ -1901,12 +1821,9 @@ def _extract_produced_cell_observations(
 def sample_posterior_predictive(
     context: JointContext, definition: JointModelDefinition
 ):
-    """Posterior predictive for the observed cell-count likelihoods.
+    """Draw posterior predictions for observed count and cell likelihoods.
 
-    ``definition`` is required but unread. Every engine's predictive stage is called
-    with the same two arguments so the catalogue can describe them uniformly, and a
-    default of ``None`` here only hid that no caller ever omitted it. Keeping the
-    parameter is the contract; defaulting it was the defect.
+    definition is retained for the catalogue's common predictive-stage signature.
     """
     with context.model:
         # Include the three marginal word-count likelihoods alongside the
@@ -2742,5 +2659,5 @@ def fit_joint_model(
     config: str,
     definition: JointModelDefinition,
 ) -> JointContext:
-    """Shared fit pipeline for the joint sign/speech model (VG15)."""
+    """Run the fit pipeline for a joint signing and speech model."""
     return run_fit_pipeline(config, definition, stages=joint_stages(definition))

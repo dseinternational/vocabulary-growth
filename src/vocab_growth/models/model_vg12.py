@@ -1,14 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Model VG12: Words understood (TD) with dataset-level study random intercepts
+"""VG12 models understood vocabulary in typically developing children.
 
-Extends VG04 with dataset-level study random intercepts (sampled in centred,
-sum-to-zero form since 2026-08-05), a child random intercept whose scale is set
-by the shared variance partition, and a GP anchor constraint at 19 months to
-remove the GP–intercept ridge. See the VG12 definition in ``definitions.py``
-for the registered graph; this docstring must track it (#240).
+Study intercepts sum to zero. Child intercepts use the registered variance
+partition. The Gaussian process correction is anchored at 19 months.
+See ``definitions.py`` for the priors and language scope.
 """
 
 from vocab_growth.models.common_univariate_re import (

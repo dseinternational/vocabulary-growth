@@ -1,50 +1,20 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Leave-one-**administration**-out, as the reports have always claimed.
+"""Combine likelihood factors for leave-one-administration-out scoring.
 
-Issue #266 finding 4. The multi-outcome engines compute a separate PSIS-LOO for
-each outcome, while the report describes the predictive unit as a complete
-checklist administration. Those are not the same score, and the difference is
-not presentational:
+Each analysis-frame row is one held-out case. Its score sums all available
+outcome and composition factors, for example ``log p(U_i) + log p(S_i | U_i)``.
+Separate outcome scores would still condition on part of the administration:
+the spoken likelihood uses that row's observed comprehension as its trial count.
 
-* the spoken likelihood's trial count **is the same row's observed
-  comprehension**, so holding out a spoken term scores prediction *conditional
-  on* that comprehension rather than prediction of a withheld administration;
-* holding out an understood term leaves its own observed value in the spoken
-  term's denominator, so the held-out value has not really been withheld;
-* a paired administration becomes two held-out cases with two importance
-  weights, which is not what "one observation" means anywhere in the reports.
+The engines' ``obs_*_mask`` arrays map likelihood rows to administrations. These
+masks must mark rows used by the likelihood, not every row with a recorded
+outcome. Missing factors prevent construction of the combined score.
 
-The coherent unit is the administration: **sum** every likelihood factor
-belonging to one row of the analysis frame into one pointwise entry, so a
-held-out case is ``log p(U_i) + log p(S_i | U_i)`` where both exist, and the
-single factor where only one does. For VG15 that includes the two composition
-terms -- the four-cell cross-tabulation and the ``nz_01`` produced cells --
-which identify its headline association ``psi`` and which the per-outcome scores
-omit entirely, so its LOO never scored the thing the model exists to estimate.
-
-The mapping from each factor's likelihood rows back to administration rows is
-the ``obs_*_mask`` constant data every engine already stores. That is why the
-mask defect (finding 3) had to be fixed first: a mask that marked recorded rows
-rather than likelihood rows would sum the wrong factors onto the wrong
-administrations, silently.
-
-The mechanics are ``scripts/loo_compare.py``'s ``_attach_joint_log_likelihood``,
-which has computed this correctly for the bivariate case since #236 -- generalised
-to any number of factors, including matrix-valued ones, and moved where the fit
-pipeline itself can use it. Since the shared library's 0.14.0 release the
-summation itself is
-:func:`dse_research_utils.statistics.log_likelihood.aggregate_log_likelihood`,
-which takes the output units *explicitly* rather than inferring them from a
-mask. What stays here is everything that decides which unit a row belongs to:
-the factor/mask pairs each engine declares, the refusal to score a partial set
-of factors, and the finding-3 check below.
-
-**Repeated administrations of the same child remain separate cases.** This
-scores prediction of another administration like those in the frame, not
-generalisation to a new child; ``scripts/kfold_loso.py`` is what answers the
-latter. Said here because "leave one out" invites the other reading.
+Repeated administrations of one child remain separate cases. This score assesses
+another administration like those in the frame. ``scripts/kfold_loso.py`` instead
+assesses prediction for a new child.
 """
 
 from __future__ import annotations
@@ -60,15 +30,11 @@ from dse_research_utils.statistics.log_likelihood import (
     aggregate_log_likelihood,
 )
 
-#: Name of the combined pointwise likelihood attached to the trace, and the
-#: dimension it is indexed by. ``obs_joint`` is the name
-#: ``scripts/loo_compare.py`` has used since #236; kept so the two agree.
+#: Combined pointwise likelihood and its administration-row dimension.
 ADMINISTRATION_VAR = "y_administration"
 ADMINISTRATION_DIM = "obs_joint"
 
-#: How the combined score is labelled in `loo_summary.csv` and the reports.
-#: Spelled out rather than abbreviated: the whole finding is that "LOO" alone
-#: was read as this when it was not.
+#: Label in ``loo_summary.csv`` and the reports.
 ADMINISTRATION_LABEL = "administration (all outcomes)"
 
 
@@ -81,7 +47,7 @@ class LikelihoodFactor:
 
     mask: str
     """The ``constant_data`` mask, over all ``n`` administration rows, marking
-    the rows this factor covers -- in the same order the factor's own rows are
+    the rows this factor covers, in the same order the factor's own rows are
     stored."""
 
 
@@ -106,34 +72,20 @@ def administration_log_likelihood(
 ) -> xr.DataArray | None:
     """Sum ``factors`` onto administration rows, or ``None`` if not derivable.
 
-    Returns ``None`` -- rather than raising -- when a factor or its mask is
-    absent, because a caller may legitimately be looking at a trace written
-    before this existed or by an engine that stores only one factor. A factor
-    present with a mask that does not match its rows **does** raise: that is the
-    finding-3 defect, and silently summing the wrong rows onto the wrong
-    administrations is exactly what must not happen.
+    Missing factors or masks return ``None``, including for older traces. A mask
+    whose marked-row count differs from its factor raises, because that factor
+    cannot be mapped to administrations safely.
 
-    The shared aggregator adds two refusals this had none of. A likelihood
-    containing ``NaN`` or ``+inf`` raises instead of propagating into a
-    plausible-looking score, while ``-inf`` is retained because an impossible
-    observation genuinely has that log likelihood. Values are summed in
-    float64, which every engine here already stores. Declaring one trace
-    variable as two factors is refused here rather than by the shared helper --
-    see the comment on the check.
+    Repeated variable names, ``NaN`` and ``+inf`` raise. The shared aggregator
+    retains ``-inf`` for impossible observations and sums values in float64.
     """
     log_likelihood = getattr(trace, "log_likelihood", None)
     constant_data = getattr(trace, "constant_data", None)
     if log_likelihood is None or constant_data is None:
         return None
 
-    # Selecting non-overlapping factors is the caller's responsibility, and the
-    # shared aggregator cannot check it for us: indexing a Dataset twice yields
-    # two distinct objects, so its own duplicate-array guard does not see a
-    # variable named twice. One repeated name is the whole of the overlap this
-    # repository can have -- the factor tuples are engine-declared constants
-    # over disjoint trace variables -- and it would double the term rather than
-    # fail, producing a total that is simply wrong with nothing in the result
-    # to show it.
+    # Dataset indexing creates distinct array objects, so the shared helper's
+    # duplicate-object check cannot detect one variable declared twice.
     names = [factor.variable for factor in factors]
     if len(set(names)) != len(names):
         raise ValueError(
@@ -170,19 +122,13 @@ def administration_log_likelihood(
     if not any_mask.any():
         return None
 
-    # The unit is the administration row of the analysis frame, named by its
-    # own position in that frame. Handing the shared helper the frame positions
-    # -- rather than a mask, or a rank among the kept rows -- is what makes the
-    # mapping legible: `obs_joint` then *is* `np.flatnonzero(any_mask)`, the
-    # same coordinate the combined score has carried since #266, and a factor
-    # whose mask disagrees with its rows can no longer land on a neighbour.
+    # Use positions in the full analysis frame as administration identifiers.
+    # Factor-specific ranks would map different factors to different rows.
     combined = aggregate_log_likelihood(
         [
             SharedLikelihoodFactor(
                 values=array,
                 row_dim=_factor_dim(array),
-                # Rows of this factor, in the order it stores them, named by
-                # the administration each covers.
                 row_unit_ids=np.flatnonzero(mask),
                 # A composition factor is stored per row *and* per cell; the
                 # cells are summed within the row, exactly as ArviZ folds a
@@ -198,9 +144,7 @@ def administration_log_likelihood(
         unit_ids=np.flatnonzero(any_mask),
         unit_dim=ADMINISTRATION_DIM,
     )
-    # The shared helper names its result `log_likelihood`; this one is stored
-    # under `ADMINISTRATION_VAR`, and a name that says otherwise would be read
-    # back from the trace.
+    # Store the same variable name in both the DataArray and the trace Dataset.
     return combined.rename(ADMINISTRATION_VAR)
 
 

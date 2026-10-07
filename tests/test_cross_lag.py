@@ -56,17 +56,7 @@ def _synthetic_df():
 
 
 def test_vg16_is_the_definition_these_tests_assume():
-    """VG16 leaves all three lag settings at the primitive's defaults.
-
-    Every frame-level call below passes VG16, because
-    :func:`prev_wave_lag_for_frame` requires a definition -- the point of which is
-    that a caller cannot silently get the defaults for a variant that moved them.
-    The counts and logits asserted throughout this module were written against
-    those defaults, so this pins the one fact that makes them still apply. If a
-    future VG16 sets a gap ceiling, the continuity correction or the same-form
-    restriction, this fails here rather than as a wrong number in twenty other
-    tests.
-    """
+    """Check the default lag settings assumed by the expected counts and logits."""
     assert VG16.lag_max_gap_months is None
     assert VG16.lag_zero_handling == LAG_ZERO_CLIP
     assert VG16.lag_same_form_only is False
@@ -122,13 +112,10 @@ def test_compute_prev_wave_lag_ignores_same_age_duplicates():
 def test_compute_prev_wave_lag_parallel_form_rows_share_the_wave_source(
     understood_first,
 ):
-    """The ``[12, 24, 24]`` pattern that broke the row-by-row walk (issue #242).
+    """Give both same-age form rows the prior distinct-age source.
 
-    A child measured at 12 months, then given two checklist forms at 24 months
-    — one carrying understood, one spoken-only. Both age-24 rows form one wave
-    and must receive the age-12 source, whichever of them appears first: the
-    old walk advanced its state after the understood row, so the parallel
-    spoken-only row received a lag only under one of the two tie orders.
+    Updating the source after each row would make a spoken-only parallel form
+    depend on whether the understood form was processed first.
     """
     if understood_first:
         understood = [130.0, 260.0, np.nan]
@@ -150,13 +137,7 @@ def test_compute_prev_wave_lag_parallel_form_rows_share_the_wave_source(
 
 
 def test_compute_prev_wave_lag_selects_largest_count_at_the_source_wave():
-    """Multiple source-form rows: the largest understood count is the source.
-
-    Two forms at the source wave carry different understood counts (a shorter
-    form right-truncates the shared inventory), so the selection rule — the
-    largest count, the least-truncated measurement — must pick 300 whichever
-    row order the frame arrives in.
-    """
+    """Select the largest understood count at the source wave, in any row order."""
     df = pd.DataFrame(
         {
             "subject_code": [0, 0, 0],
@@ -410,13 +391,10 @@ def test_same_form_restriction_drops_the_lag_but_keeps_the_row():
 
 
 def test_same_form_restriction_never_changes_which_wave_is_the_source():
-    """It gates whether a source is used, not which one is chosen.
+    """Select the source wave before checking whether forms match.
 
-    The child's waves are 680, 396, 680. The third wave's source is the second,
-    on a different form, so the restriction drops the lag. Applied while walking
-    the waves it would instead fall back to the *first* wave — same form, but 24
-    months earlier — which would answer the measurement question by silently
-    changing the interval one.
+    With ceilings 680, 396, 680, the third wave must lose its lag rather than
+    fall back to the first wave and change the interval from 12 to 24 months.
     """
     df = pd.DataFrame({
         "subject_code": [0, 0, 0],
@@ -467,14 +445,10 @@ def test_an_unknown_form_ceiling_cannot_certify_a_same_form_lag():
 
 
 def test_a_count_tie_is_broken_by_the_form_ceiling_not_the_row_order():
-    """Under ``same_form_only`` the ceiling is read off the source, so it keys too.
+    """Break equal-count ties with the larger known form ceiling.
 
-    Review of #339 found that the walk ranked candidate sources on the understood
-    count alone. That is enough when the count is the only thing read off the
-    chosen row -- but ``same_form_only`` also reads its form ceiling, so two
-    same-age forms tied on the count and differing in length would have had the
-    lag decided by whichever the frame listed first. The larger ceiling wins, on
-    the same least-truncated ground as the count rule itself.
+    The same-form restriction reads that ceiling from the selected source.
+    Without a tie-break rule, row order could decide whether a lag survives.
     """
     subject = [0, 0, 0]
     age = [12.0, 12.0, 24.0]
@@ -532,8 +506,9 @@ def test_same_form_restriction_says_so_when_the_frame_has_no_form_column():
 
 
 def test_continuity_correction_moves_a_zero_source_off_the_clip():
-    """A zero source sits at logit(1e-4) under the clip, a value set by the floor
-    rather than by the data — identical whether the form had 810 items or 396."""
+    """At zero, clipping fixes the logit at the floor while continuity correction
+    uses ``0.5 / (n_trials + 1)``.
+    """
     df = pd.DataFrame({
         "subject_code": [0, 0],
         "age": [12, 24],

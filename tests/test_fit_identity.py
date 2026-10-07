@@ -1,22 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""What makes a fit the same fit (issue #273).
+"""Check versioned fit-definition fields and explicit compatibility backfills.
 
-Fitted output is validated by comparing the definition recorded in its manifest
-against the one registered today, and that comparison was raw dictionary
-equality. One consequence has shaped the model API more than any statistical
-consideration: **adding a field with a default invalidates every historical fit
-of that dataclass**, even when the default reproduces exactly what those fits
-did. VG19's child slope and Proposal A1's age-varying scale arrive through a
-scalar field holding an object because of it; VG20's correlation and VG22's
-factor live on sibling subclasses because of it.
-
-The comparison is now field by field through a classified, versioned payload.
-These tests pin the two properties that make that safe to rely on: the
-classification is **complete** over the registry, and the comparison **fails
-closed** — every difference is still an error, and the only excuse is an
-explicit, justified backfill entry.
+Every registered field must have a role. Differences remain errors unless a
+reviewed backfill records the exact behaviour implied by the missing field.
+Backfill tests compare those values with the loader or reader defaults.
 """
 
 from __future__ import annotations
@@ -200,15 +189,7 @@ def test_a_backfill_entry_excuses_exactly_the_stated_value(monkeypatch):
 
 
 def test_the_same_day_backfill_entry_is_the_loaders_own_default():
-    """The third entry's claim, checked rather than asserted (#289 task 4.3).
-
-    Every fit made before `include_same_day_disagreements` existed called the
-    loader without that argument, so it ran at the loader's declared default.
-    The entry is only true while it equals that default -- read off the
-    signature, not restated here -- and only for the classes whose engines
-    forward the field. A record without the field must validate against the
-    registered definition, and a variant that sets the field must not.
-    """
+    """Match the same-day disagreement backfill to the loader default."""
     import inspect
 
     from vocab_growth.data_utils import load_combined_data, load_data
@@ -229,14 +210,7 @@ def test_the_same_day_backfill_entry_is_the_loaders_own_default():
 
 
 def test_the_short_form_backfill_entry_is_the_loaders_own_default():
-    """The short-form sensitivity's entry, checked the third entry's way.
-
-    ``mask_dse_short_form_comprehension`` is a loader switch the three engines
-    forward, and no fit before 2026-09-15 passed it, so absence means the
-    loader's declared default. Read off both signatures, then checked on each
-    class that carries the field: a record without it validates, and the arm's
-    value does not.
-    """
+    """Match the short-form backfill to both loader defaults."""
     import inspect
 
     from vocab_growth.data_utils import load_combined_data, load_data
@@ -258,15 +232,7 @@ def test_the_short_form_backfill_entry_is_the_loaders_own_default():
 
 
 def test_the_same_form_backfill_entry_is_the_call_sites_own_default():
-    """The fourth entry's claim, checked rather than asserted (#242).
-
-    ``lag_same_form_only`` reaches the lag construction through one ``getattr``
-    with a default, so a definition that predates the field resolves to exactly
-    that value -- which is the whole of the claim the entry makes about every
-    VG16 fit before 2026-09-07. Read the default off the source rather than
-    restating it here, so moving it fails this test instead of quietly widening
-    what the entry excuses.
-    """
+    """Match the same-form lag backfill to the source call-site default."""
     import inspect
 
     from vocab_growth.models import cross_lag
@@ -286,17 +252,7 @@ def test_the_same_form_backfill_entry_is_the_call_sites_own_default():
 
 
 def test_the_exclude_studies_backfill_entry_is_the_call_sites_own_default():
-    """The fifth entry's claim, checked rather than asserted (#297 check 5).
-
-    ``exclude_studies`` reaches the joint frame builder through one ``getattr``
-    with an empty default, and the filter is skipped when it is empty -- so a
-    joint definition that predates the field builds the frame every earlier joint
-    fit was built from. Read the default off the source, not restated here.
-
-    The entry is keyed by bare name and so also covers the bivariate class's own
-    field; a bivariate record without it must validate too, and on both classes
-    a definition that *sets* the field is a data difference.
-    """
+    """Match the study-exclusion backfill to the empty call-site default."""
     import inspect
 
     from vocab_growth.models import common_joint_modality
@@ -318,14 +274,7 @@ def test_the_exclude_studies_backfill_entry_is_the_call_sites_own_default():
 
 
 def test_the_sex_backfill_entries_are_the_readers_own_defaults():
-    """The last two entries' claim, checked rather than asserted (#324).
-
-    Both fields reach every engine and frame builder through the two readers in
-    ``sex_covariate``, so a definition that predates them resolves to exactly the
-    readers' defaults -- no sex term, no restriction -- and the entries must equal
-    those. A development step keeping the defaults must validate against a record
-    that lacks both fields; a reporting model setting one must not.
-    """
+    """Match the sex-effect and sex-restriction backfills to the shared readers."""
     import inspect
     from types import SimpleNamespace
 

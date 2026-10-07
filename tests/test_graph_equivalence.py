@@ -115,11 +115,10 @@ def test_the_baseline_covers_exactly_the_registered_models(baseline, reference_p
 
 @pytest.mark.parametrize("model_key", _MODEL_KEYS)
 def test_free_random_variables_keep_their_names_and_order(model_key, built, baseline):
-    """Order matters as much as membership: it fixes the sampler's RNG stream.
+    """Preserve free-variable creation order as well as membership.
 
-    Two models with the same free variables created in a different order draw
-    different values from the same seed, so a reordering is a change to every
-    fit even though nothing about the distribution moved.
+    Changing the order can change seeded sampling even when the statistical
+    distribution is unchanged.
     """
     actual = [rv.name for rv in built[model_key].model.free_RVs]
     assert actual == baseline[model_key]["free_RVs"]

@@ -1,85 +1,55 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Model VG18: study-adjusted contrast of DS *total expressive production* by sign-group.
+"""Exploratory VG18: total production by recorded signing group.
 
-**EXPLORATORY. Its output is not validatable and must not be published.** See
-:mod:`vocab_growth.models.exploratory` for what a `fit()` here does not produce.
+Output from this custom fit path must not be published.
+See vocab_growth.models.exploratory for its missing validation artefacts.
 
-CAUTION — THE SIGN-GROUP CONTRAST IS PARTLY MECHANICAL. Sign group is derived from
-``signed``, and ``signed`` is a *component* of this model's ``produced`` outcome for
-every union study (uk_01, uk_02, nz_01, es_01, uk_07, where ``produced`` counts words
-a child can express by speech OR sign). A child is therefore classified a signer
-*because* of the very words that raise its outcome: a signer with any signed-only
-word has a ``produced`` count that mechanically exceeds their ``spoken`` count, and
-the non-signer group is by construction the ``signed == 0`` group whose ``produced``
-equals ``spoken``. Part of any positive signer-vs-non-signer estimate here is that
-identity, not an effect of signing. VG18 is DESCRIPTIVE: read it as "how much larger
-is total expressive production in the signing group", never as "how much does signing
-increase vocabulary". VG17's spoken outcome does not contain signed words, but
-that observational comparison also does not identify a causal effect. For modelled sign/speech overlap
-use VG15's ``psi``.
+The structure follows VG17 but uses produced rather than spoken counts.
+CAUTION: where produced is a speech-or-sign union, signing contributes to the outcome
+used to compare signing groups. The contrast is therefore partly mechanical
+and does not estimate an effect of signing.
 
-Identical structure to VG17 (trend + HSGP + study REs + child REs + a 3-level
-sign-group covariate, Beta-Binomial(810), 12-66 mo, VG01 priors), but the outcome is the
-recorded ``produced`` count — the union of words a child can express by speech
-OR sign (it de-duplicates words known in both modalities; where all of
-spoken/signed/produced are present, ``produced`` always lies between ``spoken``
-and ``spoken + signed``).
+Produced has different definitions across sources. Some record the union;
+others record spoken words only. uk_01's signed field counts signed-only words,
+so adding it to spoken gives a valid union without duplication. The shared
+preparation masks that field for total-signing group classification, leaving
+uk_01 in the unknown group. Unknown signing status therefore does not imply
+a spoken-only produced outcome.
 
-CAUTION — ``produced`` is NOT a uniform total-expressive measure across studies:
-  * uk_01, uk_02, nz_01, es_01, uk_07: ``produced`` is a de-duplicated UNION (each
-    word once).
-    - uk_01: ``produced`` is the study's own total-production column, defined in the
-      write-up as "vocalised and signed-only words" (spoken PLUS words signed-but-not-
-      spoken); so uk_01's ``signed`` column is the *signed-only* count and
-      ``produced == spoken + signed`` is the correct union (NOT a double-count).
-    - uk_02, nz_01, uk_07: built from mutually-exclusive says-only / signs-only /
-      both cells.
-    - es_01: the source records the spoken-or-gestured union outright, so it is taken
-      as given rather than reconstructed. Its non-vocal modality is a *symbolic*
-      (referential) gesture lexicon scored per word, read here as ``signed``.
-  * ie_02, uk_04, uk_05, uk_06: ``produced`` := ``spoken`` — signs EXCLUDED.
-  * unknown group (no sign data): ``produced`` reflects spoken-only production.
-
-NB the ``signed`` column is itself inconsistent across studies (uk_01 = signed-ONLY;
-uk_02/nz_01/es_01/uk_07 = total signed incl. both) — relevant to the VG14/VG15
-signed-ratio models.
-
-So the family-wide ``produced`` mixes true-union and spoken-only definitions; the VG18
-signer-vs-non-signer estimate is heterogeneous. For a clean de-duplicated total-
-expressive contrast, restrict to the union studies uk_01 + uk_02 + nz_01 + es_01 +
-uk_07 (fit(..., studies=("uk_01","uk_02","nz_01","es_01","uk_07"))), or use VG15's
-modelled ``p_any`` (estimates the sign/speech overlap ``psi``). Note that uk_07's
-34-95 month span sits largely outside VG17/VG18's 12-66 month window, so it
-contributes only its younger assessments. Not in MODEL_REGISTRY.
+es_01 records item-specific symbolic gestures, including spontaneous gestures
+and taught signs. The grouping does not establish construct equivalence with
+other sources. Restricting studies changes the sample as well as the outcome
+definition. All comparisons remain descriptive. VG15 models overlap through
+psi rather than a signing-group contrast.
 """
 
 from vocab_growth.models.exploratory import vg17
 
 CAUTION = (
-    "CAUTION: the sign-group contrast is PARTLY MECHANICAL. Sign group is derived from "
-    "`signed`, which is a COMPONENT of the `produced` outcome for the union studies "
-    "(uk_01, uk_02, nz_01, es_01, uk_07): a child is classified a signer because of the "
-    "very words that raise their outcome, and the non-signer group is by construction the "
-    "`signed == 0` group whose `produced` equals `spoken`. Part of any positive "
-    "signer-vs-non-signer estimate below is that identity, not an effect of signing. "
-    "VG18 is DESCRIPTIVE - read it as 'how much larger is total expressive production in "
-    "the signing group', NEVER as 'how much does signing increase vocabulary'. Use VG17 "
-    "(spoken outcome, does not contain `signed`) for a separate descriptive contrast, "
-    "or VG15's modelled overlap `psi`."
+    "CAUTION: the sign-group contrast is partly mechanical. In the union studies "
+    "uk_02, nz_01, es_01 and uk_07, the group comes from `signed`, while `produced` "
+    "also includes signed words. The grouping and outcome share item counts. The "
+    "recorded non-signer group has `signed == 0`, so its `produced` equals `spoken`. "
+    "uk_01 is in the unknown group because it records signed-only words; its "
+    "`produced` still includes those words. Unknown status does not imply a "
+    "spoken-only outcome. VG18 is descriptive and does not estimate an effect of "
+    "signing. VG17's spoken outcome gives a separate descriptive contrast; "
+    "VG15 models speech-sign overlap through `psi`."
 )
 
 
 def fit(config: str = "test", studies=None):
-    """Fit VG18. Pass studies=("uk_02", "nz_01", "es_01", "uk_07") for the clean
-    de-duplicated-union total-expressive analysis (excludes uk_01, whose produced
-    double-counts, and the signs-excluded studies).
+    """Fit the exploratory total-production contrast with an optional study subset.
 
-    Read :data:`CAUTION` (also printed by every fit): the sign-group contrast is
-    partly an identity, because sign group is derived from a component of the
-    outcome. The contrast is retained deliberately, as a description.
+    For a union-only contrast with recorded total signing, pass studies containing
+    uk_02, nz_01, es_01 and uk_07. uk_01 also has a valid union: its signed-only
+    count can be added to spoken without duplication. Its total signing status
+    cannot be recovered, so the shared preparation assigns it to the unknown group.
+
+    Read CAUTION, which each fit prints. Group membership is derived from a
+    component of the outcome, so the contrast is partly mechanical.
     """
     subdir = "VG18-age-produced-ds-signgroup"
     if studies is not None:

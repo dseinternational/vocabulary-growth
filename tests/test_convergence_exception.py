@@ -1,12 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The registered hard-tier convergence exception, and what must still close it.
+"""Check the narrow scope of the registered convergence exception.
 
-The R-hat/ESS gate is the project's only fail-closed convergence check, so an
-escape hatch in it is exactly the kind of mechanism that rots into a blanket
-override. These tests pin the four ways it must refuse to widen, and the one
-way it is allowed to apply.
+The exception must apply only to its named model, parameters and diagnostic
+limits. Other failures must still fail the hard convergence gate.
 """
 
 from __future__ import annotations
@@ -53,10 +51,9 @@ def test_the_exception_applies_to_the_failure_it_was_written_for():
 
 
 def test_the_exception_covers_the_length_scale_the_refit_failed_on():
-    """`ell`/`ell_unit` are the 2026-09-16 decision, and both must be covered.
+    """Cover both names for the length scale.
 
-    They are one quantity — `ell` is `ell_unit` mapped onto the z scale — so an
-    entry naming only one of them would close the gate on the other.
+    ``ell`` rescales ``ell_unit``. Both may appear in the diagnostic summary.
     """
     assert accepted_rhat_exception("VG11", VG11_LENGTH_SCALE_SUMMARY) is not None
     for parameter in ("ell", "ell_unit"):
@@ -102,12 +99,7 @@ def test_it_does_not_leak_to_other_models():
 
 
 def test_an_accepted_exception_surfaces_as_a_caveat():
-    """It must reach Appendix B by the same route as a divergence.
-
-    `convergence_caveats` recomputes from the payload on disk rather than
-    trusting a marker file, so the acceptance has to live in the payload — this
-    is what makes the exception impossible to apply silently.
-    """
+    """Report the accepted exception from the stored diagnostic payload."""
     caveats = convergence_caveats(
         {
             "checks": {},

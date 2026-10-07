@@ -1,17 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The shared cross-validation fold fit, and the bug that made it shared.
+"""Check shared fold fitting and diagnostic-gate reading.
 
-``kfold_loso.py`` and ``wave_forward_score.py`` hold different things out and
-score different units, but the fit between those two decisions is identical.
-The second script had it copied by hand, and the copy read the energy verdict
-from ``gate["bfmi_ok"]`` where the payload carries it under
-``gate["checks"]["bfmi"]`` -- so every fold reported a passing BFMI whatever the
-sampler found, and nothing in the output would have shown it.
-
-So the two claims pinned here are the reading itself, and that there is only one
-of it.
+Cross-validation scripts hold out different units but share the fit runner.
+The energy check lives under ``gate["checks"]["bfmi"]``; absent evidence must
+remain unknown rather than default to a passing verdict.
 """
 
 from __future__ import annotations
@@ -126,12 +120,7 @@ _ROW_QUANTITIES = {
 
 
 def test_a_fold_is_built_by_its_own_models_engine():
-    """It was hard-wired to the bivariate random-effect builder.
-
-    Nothing said so, and nothing would have: a joint definition passed in would
-    have been built by `build_model_re` and produced a graph that is not the
-    model, then fitted and scored without complaint.
-    """
+    """Dispatch each fold definition to its own catalogue engine."""
     from vocab_growth.models.catalogue import engine_for_definition
     from vocab_growth.models.definitions import MODEL_REGISTRY
 
@@ -175,19 +164,10 @@ def test_an_unregistered_definition_has_no_engine_rather_than_a_default():
 def test_the_quantities_a_forward_score_reads_are_named_and_never_stored(
     model_key, tmp_path, monkeypatch
 ):
-    """Two halves, and both matter.
+    """Name the latent quantities required for forward scoring.
 
-    **Named**, or the forward score cannot evaluate a held-out row's density at
-    all -- which is where the joint engine was: it named only `kappa_sign_obs`
-    and `z_obs`, so VG25's report could point the reader at a script that could
-    not run.
-
-    **Never stored**, or naming them would put an ``n_obs x draws`` array per
-    quantity into every trace, which is exactly what
-    `fit_artifacts.sampled_variable_names` exists to keep out. They carry
-    ``obs_id``, so the sampler skips them and only a caller that asks --
-    `fit_holdout_fold`, with ``store_observation_deterministics`` -- pays for
-    them.
+    Routine traces omit observation-sized deterministics. A fold scorer must
+    request them explicitly so unrelated fits do not store these large arrays.
     """
     from _pytest.monkeypatch import MonkeyPatch
     from support.synthetic_graphs import build_registered_model

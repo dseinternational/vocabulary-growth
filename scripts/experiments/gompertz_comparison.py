@@ -11,7 +11,7 @@ parameters:
 
     W(t) = A * exp(-exp(-k_g * (t - Ti)))
 
-``Ti`` is the age of maximum growth and ``k_g`` the dimensionless growth rate;
+``Ti`` is the age of maximum growth and ``k_g`` the growth rate per month;
 the maximum rate in words per month is ``k_U = k_g * A / e``, reached exactly
 when the child is at ``A / e`` = 36.79% of the asymptote. The study owner asked
 on 2026-09-10 whether our fits can be evaluated against that form. Recorded in
@@ -321,10 +321,9 @@ def shape_diagnostics(spec, curve):
         "n_trials": n_trials, "observed_max": observed_max,
         "peak_at_grid_edge_share": float(at_edge.mean()),
     }
-    # our own mean function against the same rows, for the like-for-like
-    # comparison the deduplicated data-fit table cannot carry per model. It is
-    # the median-child curve at zero study and child effects, so it sits below
-    # the row mean by construction; see the note.
+    # Evaluate the reference curve on these rows for a comparison by model.
+    # Zero effects do not reproduce the observed mix of children and studies;
+    # the reference curve need not equal, or lie below, the row mean.
     ours = np.interp(curve["x_obs"], ages, np.median(prop, axis=0) * n_trials)
     out["our_curve_rmse_vs_rows_words"] = float(
         np.sqrt(np.mean((ours - curve["y_obs"]) ** 2))
@@ -403,11 +402,9 @@ def data_fits(spec, curve, args, rng):
     """The paper's method: nonlinear least squares on the observed rows."""
     x, y = curve["x_obs"], curve["y_obs"]
     n_trials, observed_max = curve["n_trials"], float(y.max())
-    # Our own mean function evaluated at the same row ages, for a like-for-like
-    # RMSE. It is the *median*-child curve at zero study and child effects, so it
-    # sits below the row mean by construction and this comparison is not fair to
-    # it; see the note. Reported so the Gompertz's two parameters can be scored
-    # against a flexible mean on the same rows at all.
+    # Compare errors on the same rows. The reference curve has zero study and
+    # child effects, whereas the pooled Gompertz fit reflects the observed mix.
+    # This difference limits how the RMSE contrast can be interpreted.
     ours = np.interp(x, curve["ages"], np.median(curve["prop"], axis=0) * n_trials)
     our_rmse = float(np.sqrt(np.mean((ours - y) ** 2)))
     rows = []

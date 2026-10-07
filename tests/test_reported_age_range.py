@@ -1,25 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Comprehension reporting stops where the comprehension evidence stops.
+"""Check outcome-specific reporting caps on a shared query grid.
 
-The query grid is shared by every outcome a model reports, but the outcomes are
-not observed over the same ages: in the Down syndrome pool understood has 38
-rows at or above 72 months against spoken's 127, and above 84 only 13 against
-59. ``report_max_age_understood`` trims understood and ``q`` without touching
-spoken.
-
-Since 2026-08-22 "where the evidence stops" means something stricter than
-"where the rows stop" — see the cap test below, and ``reporting_ages`` for the
-policy it enforces.
-
-Two failure modes are specific to this design and neither shows up in a unit
-test of the helper alone, so they are tested directly:
-
-* the value reaches the engines through the *configuration* object, not the
-  definition, so a missing pass-through raises only when a fit runs;
-* trimming must not move a number that is still reported, because it is
-  presented as post-processing of an unchanged fit.
+Outcomes have different age coverage. Pass caps from definitions into engine
+configurations, and trim summaries without changing surviving values. The
+registered reporting policy can be stricter than the last observed age.
 """
 
 import dataclasses
@@ -67,8 +53,7 @@ def test_trim_drops_only_ages_above_the_cap():
 
 
 def test_trim_keeps_the_cap_age_itself():
-    """72 is reported, not dropped — it is the last age with evidence, not the
-    first without."""
+    """Include the reporting cap itself in the retained ages."""
     df = pd.DataFrame({"age_months": [66.0, 72.0, 78.0]})
     assert 72.0 in set(trim_reported_ages(df, 72)["age_months"])
 
@@ -123,22 +108,11 @@ def test_every_engine_passes_the_cap_from_definition_to_configuration(module):
 
 @pytest.mark.parametrize("model_id", TRIMMED_MODELS)
 def test_comprehension_reporting_stops_at_72_months(model_id):
-    """Returned to 72 on 2026-08-22, reversing the 2026-08-13 raise to 84.
+    """Keep the registered Down syndrome comprehension cap at 72 months.
 
-    The raise was not wrong on its own terms: it asked whether the 72-84 band is
-    observed rather than extrapolated, and 25 rows from 20 children across five
-    studies says it is. The cap comes back down on a stricter test the raise did
-    not apply — is the number in that band fixed by the data, or by the model?
-
-    It is not fixed by the data. VG19 and VG20 differ only in the child-effect
-    structure and are indistinguishable out of sample (k-fold LOSO, +0.93 SE over
-    767 children), yet they put ``q`` at 0.75 against 0.85 at 72 months and 0.83
-    against 0.94 at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width.
-    Below 60 months the same comparison never exceeds 0.15.
-
-    Raise it again when the band can *distinguish* the child structures, not when
-    it is merely populated. See notes/202608221200-reporting-source-by-quantity.md
-    and scripts/experiments/model_dependence_of_reported_quantities.py."""
+    The policy follows the model-dependence review in
+    notes/202608221200-reporting-source-by-quantity.md.
+    """
     definition = getattr(D, model_id)
     assert definition.report_max_age_understood == 72
 
@@ -160,27 +134,12 @@ def test_the_cap_actually_removes_query_ages():
 
 
 def test_spoken_only_models_are_left_alone():
-    """VG01 is production-only and its data run to 115 months, so trimming it to
-    the comprehension range would discard exactly the evidence that argues
-    against applying a comprehension cap to production at all."""
+    """Do not apply a comprehension cap to a model that reports only production."""
     assert D.VG01.report_max_age_understood is None
 
 
 def test_typically_developing_comprehension_models_carry_a_cap_too():
-    """The typically-developing models are NOT exempt, and used not to be tested.
-
-    This test asserted the opposite until 2026-08-17 (#228), on the reasoning
-    that "the typically-developing query grids stop at 30 months, well inside
-    their data". That is true of *spoken*, which keeps Words & Sentences and does
-    reach 30, and false of *understood* by five months: comprehension rides only
-    on ``WORDBANK_BIVARIATE_FORMS``, which stop at 25. VG04 and VG12 published a
-    27- and a 30-month comprehension median on zero observations for as long as
-    the exemption stood.
-
-    Pinning the two current values would only re-pin a premise; the invariant is
-    tested against the data in
-    ``test_no_model_reports_an_outcome_past_its_last_observation``.
-    """
+    """Require comprehension caps for typically developing reference models too."""
     # Spoken models have no comprehension quantity to trim, and the guard makes
     # setting one an error rather than a silent no-op.
     for model_id in ("VG03", "VG11"):
@@ -197,14 +156,7 @@ def test_typically_developing_comprehension_models_carry_a_cap_too():
 
 
 def test_no_model_reports_an_outcome_past_its_last_observation():
-    """The policy itself, measured — for every model and every outcome it carries.
-
-    The three defects behind #228 were each a scope rule justified by a property
-    of the *pool* that did not hold for one of the outcomes the pool carries.
-    Pinned values cannot catch the next one; this sweeps the whole registry and
-    compares each outcome's top reported age against the last age at which that
-    outcome is actually observed, on the loader's own code path.
-    """
+    """Compare each outcome's highest reporting age with its own observed age range."""
     import os
 
     import vocab_growth.data_utils as vocab_data_utils

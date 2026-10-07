@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Post-processing: posterior summaries, learning rate, kappa summaries.
+"""Post-processing for posterior count, proportion and signing-milestone summaries.
 
 Interval columns follow the project convention (see :mod:`vocab_growth.intervals`
 and ``docs/models/README.md``): the posterior median with an inner 50%
@@ -56,14 +56,8 @@ def expand_observed_to_obs_id(trace, observed_name: str, mask_name: str):
     count, not as long as the frame. Plots and summaries index by obs_id, so the
     vector is scattered back through the stored mask and left NaN elsewhere.
 
-    The length comparison is issue #67: if the mask stored in ``constant_data`` and
-    the rows the likelihood actually saw disagree, the scatter silently misaligns
-    every observation, and the figures look plausible. It was five verbatim copies
-    across the bivariate and trivariate engines before it lived here.
-
-    Not for the joint engine's two similarly-worded checks: those compare a
-    *posterior-predictive* array's leading dimension against a mask count, which is
-    a different pairing and a different failure.
+    The marked-row count must match the observed array length before scattering.
+    This checks observed counts; predictive-array alignment is checked separately.
     """
     mask = np.array(trace.constant_data[mask_name].values, dtype=bool)
     observed = np.array(trace.observed_data[observed_name].values, dtype=float)
@@ -156,19 +150,13 @@ def add_rate_estimand_columns(
 ) -> pd.DataFrame:
     """Add explicit population and new-child columns for a bounded rate.
 
-    The counterpart of :func:`add_probability_estimand_columns` for a quantity
-    that is a rate rather than a probability of a count. It deliberately emits
-    no ``Ey_*`` block: ``q`` is the probability that a word a child understands
-    is one they also say, so ``q * n_trials`` would be a word count only for a
-    child who understood the whole inventory. Reporting one would invite exactly
-    the reading the production-ratio figures already warn against.
+    ``q`` is the spoken share of understood words. This helper emits no ``Ey_*``
+    block because ``q * n_trials`` represents a spoken count only for a child
+    who understands the whole inventory.
 
-    The historical ``{name}_*`` columns are the population trajectory -- every
-    random effect at zero -- while the reports read ``q`` as what a child
-    converts. Until 2026-09-07 the subject-marginal rate was built inside the
-    posterior-predictive pass and then discarded (issue #233), and it cannot be
-    recovered from the stored tables afterwards: the ratio of the ``p_s`` and
-    ``p_u`` medians is not the median of the ratio.
+    The existing ``{name}_*`` columns describe the trajectory with random effects
+    set to zero. The subject-marginal share needs its own draws: a ratio of
+    marginal medians is not the median of the ratio.
     """
     out = summary.copy()
     for prefix, draws in (
@@ -192,33 +180,13 @@ def trim_reported_ages(
     *,
     age_column: str = "age_months",
 ) -> pd.DataFrame:
-    """Drop summary rows above the age at which a quantity's evidence stops.
+    """Drop summary rows above a quantity's reporting cap.
 
-    A model's ``ages_query`` grid is shared by every outcome it reports, but the
-    outcomes are not observed over the same age range. In the Down syndrome pool
-    the two diverge sharply: comprehension is observed on 905 rows with a 95th
-    percentile of 64 months and only 15 rows at or above 72, whereas production
-    is observed on 1346 rows with a 95th percentile of 78 and 51 rows at or above
-    84. Reporting understood and ``q`` on the same grid as spoken therefore
-    quotes a median and an interval at ages where almost nothing was measured,
-    and — above the high slope anchor — where the mean is a levelled-off
-    extrapolation rather than an estimate (see
-    :func:`vocab_growth.models.gp_utils.trend_and_gp`).
-
-    This is post-processing of a fitted trace, deliberately not a change to the
-    query grid: the model graph and the ``query_id`` dimension are untouched, so
-    trimming what is reported cannot move a posterior. That was checked directly
-    — refitting VG10 across the change at a fixed seed reproduced its diagnostics
-    bit-for-bit. The dropped ages remain in the trace for anyone who wants them.
-
-    It does not follow that changing the cap is free. These tables are written
-    during the fit pipeline and ``--render-only`` re-renders Quarto against the
-    CSVs already on disk rather than rebuilding them, so a new cap only takes
-    effect on a refit — and the cap is part of the recorded model definition, so
-    output produced under a different one is correctly reported as stale.
-
-    ``max_age_months`` of ``None`` returns the frame unchanged, which is the
-    default for every model whose outcomes share one evidential range.
+    Trimming changes neither the model graph nor the posterior. Caps can differ
+    between outcomes and do not guarantee adequate evidence at all retained ages.
+    ``--render-only`` reads saved CSVs, so it cannot apply a new cap to them.
+    Definition compatibility and regeneration of summaries must be handled by
+    the caller. ``None`` returns the frame unchanged.
     """
     if max_age_months is None:
         return df
@@ -300,26 +268,20 @@ def summary_row(
 ) -> dict:
     """Summarise one age's posterior draws into the standard summary columns.
 
-    Three distinct estimands, deliberately kept in separate column families
-    because they answer different questions and behave oppositely as data
-    accumulate:
+    The input draws determine the prediction target. Column families distinguish
+    latent proportions, expected counts and predictive counts:
 
     ``p_*``
-        the latent population proportion;
+        the latent proportion supplied in ``p``;
     ``Ey_*``
-        the **expected** count, ``p * n_trials`` — a credible interval on the
-        mean trajectory, carrying parameter uncertainty only, which narrows
-        toward zero width as more children are observed;
+        the expected count, ``p * n_trials``. Its interval excludes the count
+        variation introduced by the likelihood;
     ``Y_*`` and ``P(Y<=k)``
-        the posterior **predictive** count for a child — parameter uncertainty
-        plus between-child and occasion-level dispersion, which converges on the
-        real population spread rather than on zero.
-
-    Quoting an ``Ey_*`` interval where a ``Y_*`` interval belongs understates the
-    range of individual children substantially, so the naming is load-bearing.
+        the predictive count supplied in ``y``, including the random effects
+        and count variation used by the caller.
 
     ``y`` may be ``None`` for a model that carries no predictive count draws at
-    this grid — the joint sign/speech engine is the case in this project. The
+    this grid, as in the joint sign/speech engine. The
     ``Y_*`` and ``P(Y<=k)`` columns are then absent rather than zero-filled, so a
     reader cannot mistake a missing estimand for a computed one.
     """
@@ -387,10 +349,9 @@ def monthly_summary_table(
 ) -> pd.DataFrame:
     """Build the summary table at every whole month, from the plot grid.
 
-    The canonical reporting ages (:func:`posterior_summary_table` at the model
-    definition's ``ages_query``) stay 6-monthly for the report; this is the
-    finer-grained companion, one row per whole month of age, with the same
-    columns and the same bucket thresholds.
+    The companion uses the canonical table's columns and count thresholds.
+    Canonical ``ages_query`` steps are generally six months for DS models and
+    three months for TD models.
 
     It reads the *plot* grid rather than adding query ages to the model, so it is
     pure post-processing of a fitted trace: no change to the model graph, the
@@ -404,25 +365,13 @@ def monthly_summary_table(
         ``grid_age_months - age_months``, bounded by
         :data:`MAX_MONTH_SNAP_OFFSET`.
 
-    Coverage is every whole month lying **inside** the plot grid's span, which is
-    the observed age range. In practice that is wider than the canonical query
-    ages, not narrower: the Down syndrome pool spans 8-115 months and the
-    typically-developing pool 8-25, so every canonical age has a monthly
-    counterpart and the extra months run out to the tails of the data. Many of
-    those tail months hold no observation at all, which is what ``n_obs`` is for.
+    Coverage is every whole month inside the supplied plot grid. Months outside
+    that span are excluded even if their nearest point would meet the offset
+    limit. These companions can extend beyond canonical reporting caps and
+    include months with no observations; they do not extend the published range.
 
-    A month **outside** the span is excluded even where it would snap within
-    :data:`MAX_MONTH_SNAP_OFFSET` — with a grid starting at 8.1, month 8 is
-    dropped rather than reported from the 8.1 point. Both halves of that matter:
-    the month lies below every observed age, so reporting it would extrapolate,
-    and its value would be the trajectory at 8.1 wearing an "8" label. Recorded
-    ages are whole months throughout this project, so no month is currently lost
-    this way; the rule is what keeps a future fractional-age source from
-    acquiring a silently extrapolated boundary row.
-
-    ``X_obs``, when given, adds an ``n_obs`` column counting the observed
-    administrations falling in each whole month — the check on whether a row is
-    data-supported or interpolated between sparse ages.
+    ``X_obs`` adds ``n_obs`` counts by rounding recorded ages to the nearest
+    whole month. Read these counts alongside the two grid-provenance columns.
 
     Raises
     ------
@@ -445,11 +394,8 @@ def monthly_summary_table(
             f"(X_plot {X_plot.shape[0]}, y_plot {y_plot.shape[0]})."
         )
 
-    # Whole months strictly inside the grid span. ceil/floor deliberately exclude
-    # a boundary month that would snap from outside — a month below X_plot.min()
-    # is below every observed age, so reporting it would extrapolate and would
-    # label the trajectory at (say) 8.1 months as month 8. Widening this to
-    # "nearest point within MAX_MONTH_SNAP_OFFSET" would reintroduce both.
+    # Include grid endpoints when they are whole months; exclude months outside
+    # the span even if a nearest-point snap would meet the offset limit.
     months = np.arange(
         int(np.ceil(X_plot.min())), int(np.floor(X_plot.max())) + 1, dtype=int
     )
@@ -506,51 +452,23 @@ def signing_milestone_table(
     ci_prob: float = intervals.DEFAULT_CI_PROB,
     min_words: float = 1.0,
 ) -> pd.DataFrame:
-    """Per-draw ages for the sign-to-speech hand-over, with honest censoring.
+    """Summarise per-draw signing peaks and sign-speech crossings.
 
-    Arrays are ``(n_age, n_draw)`` word counts. Each milestone is found **in
-    every draw and then summarised**, never read off the median curve: the
-    median of crossings is not the crossing of the median, and for a peak the
-    difference is not subtle — averaging curves whose peaks sit at different
-    ages flattens the peak and drags it towards the middle of the grid.
+    Arrays contain counts with shape ``(n_age, n_draw)``. Find each milestone
+    within each draw before summarising; a median curve's crossing or peak need
+    not equal the median of the draw-specific ages. These are features of the
+    supplied trajectories, not observed developmental events for a child.
 
-    This is the single implementation the fit pipeline
-    (:mod:`vocab_growth.models.common_joint_modality`) and the DS/TD comparison
-    script (``scripts/compare_ds_td_expressive.py``) both use. They previously
-    carried duplicate copies with two defects the VG14/VG15 statistical review
-    (#238) confirmed:
+    Crossings require a false-to-true transition whose endpoints both have at
+    least ``min_words`` of total expressive vocabulary. A condition already
+    true at the first eligible age is censored unless it later becomes false
+    and crosses again. Peak calculations use the full grid; a maximum at either
+    edge is censored because its age is not resolved within the grid.
 
-    * **Crossings must be transitions.** The old rule reported the *first age at
-      which a condition held*, so a draw in which speech-only exceeded sign-only
-      from the first eligible age was labelled an "overtake", and a draw that
-      was never majority sign-only was labelled as "falling below half". A
-      crossing here now requires a genuine false-to-true transition inside the
-      established region; a state already true at the youngest established age
-      is counted in ``draws_censored`` instead (left-censored: the transition,
-      if there was one, happened before the grid or before the child had a
-      vocabulary to divide up).
-    * **A grid-boundary maximum is censored, not reached.** The old rule
-      reported the grid ``argmax`` as a peak even when it sat on the last
-      reported age, where the true peak may lie beyond the grid. A draw whose
-      maximum falls on either end of the grid now counts toward
-      ``draws_censored`` and contributes no age.
-
-    A milestone is only read once the draw's child has at least ``min_words``
-    of expressive vocabulary: below that the three cells are fractions of a
-    word and their ordering is arithmetic noise. The gate is on a word count
-    rather than a grid-point count so it cannot silently depend on the grid
-    step.
-
-    Intervals are highest-density (:data:`vocab_growth.intervals.HDI_ESTIMANDS`
-    lists ``milestone_age``/``peak_age``): milestone ages are typically skewed,
-    and this is the same policy the DS/TD peak-growth ages already follow.
-
-    Columns: ``quantity``, ``median``, ``ci_lo``, ``ci_hi`` (over the draws
-    that genuinely reach the milestone), ``draws_reaching`` (fraction reaching
-    it), and ``draws_censored`` (fraction where it is censored rather than
-    absent — already true at the youngest established age for a crossing, or a
-    maximum on a grid edge for a peak). The remainder to 1 never satisfies the
-    condition at all.
+    Medians and highest-density intervals use only finite milestone values.
+    ``draws_reaching`` and ``draws_censored`` report their respective fractions
+    among all draws. The remainder has no qualifying transition. The same
+    finite-peak rule applies to the peak word-count row.
     """
     ages = np.asarray(ages, dtype=float)
     sign_only = np.asarray(sign_only, dtype=float)

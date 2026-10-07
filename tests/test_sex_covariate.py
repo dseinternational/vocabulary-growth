@@ -1,21 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Sex as a covariate in the reporting models (issue #324).
+"""Check sex coding, graph coefficients and paired by-sex reporting.
 
-The design pinned here, in the order a reader of the change needs it:
-
-- **Which models carry it.** The reporting models -- the Down syndrome models of
-  record and the typically developing references, plus VG21's registered
-  successor and VG24's -- and no development step.
-- **How a row is coded.** Girls ``+1/2``, boys ``-1/2``, a child of unrecorded sex
-  ``0``, resolved per child, with a child carrying two values refused.
-- **What a graph gains.** Exactly the coefficients, entering the logits they
-  name, and nothing for a model without the field. On the joint engine the
-  coefficients also reach the cross-tab compositions, unlike the child effects.
-- **What the frames do.** No row is dropped by the covariate; a frame without it
-  is unchanged; the cross-tab rows find their child's sex in the merged view.
-- **What the fit writes.** By-sex tables from paired draws.
+Code girls as +1/2, boys as -1/2 and unrecorded sex as 0. Resolve coding per
+child and reject conflicting records. Enabling the covariate must preserve
+rows, reach the intended logits and pair predictions through shared draws.
 """
 
 from __future__ import annotations
@@ -68,7 +58,7 @@ def test_exactly_the_reporting_models_carry_the_covariate():
 
 
 def test_the_readers_default_to_no_sex_term():
-    """A definition with neither field -- every one before #324 -- has no sex term."""
+    """Keep definitions without sex fields free of sex coefficients."""
     from types import SimpleNamespace
 
     bare = SimpleNamespace()

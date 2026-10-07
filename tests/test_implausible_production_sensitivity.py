@@ -1,22 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The `us01-*-reinstated` sensitivities must run and must bite.
+"""Check that reinstatement sensitivities reach the prepared model frames.
 
-``mask_implausible_production_administrations`` excludes 30 us_01 administrations
-by default. The source author no longer holds the original data files, so that
-exclusion can never be confirmed at source, and these two variants are the only
-published check on it — what the headline joint trajectories would have been had
-the judgement been wrong.
-
-That makes two failure modes worth pinning. The variant must actually reach the
-frame (a flag that stops at ``load_data`` would leave a registered check that
-cannot fail — the exact fault that retired ``us01-ceiling-excluded``), and each
-engine's data preparation must survive being handed the variant definition. The
-second is not hypothetical: the first implementation read
-``definition.max_age_months`` in the reinstated-count line, which
-``JointModelDefinition`` does not define, so VG15 raised ``AttributeError`` only
-once the engine was actually run.
+Both the bivariate and joint engines must accept the variant definitions.
+The prepared-frame gain must match the net counts reported by the fit log.
 """
 
 import os

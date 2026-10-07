@@ -163,13 +163,10 @@ def test_holdout_masks_round_trip_through_extract_model_samples(tmp_path, monkey
 
 
 def test_paired_only_masks_mark_the_likelihood_rows(tmp_path, monkeypatch):
-    """Under paired-only the marginal spoken rows leave the likelihood, so the
-    stored ``obs_s_mask`` must shrink with them (issue #266 finding 3).
+    """Under paired-only treatment, masks must exclude marginal spoken rows.
 
-    Calibration and extraction both read ``obs_s_mask`` as "the rows
-    ``y_s_obs`` covers"; storing the unfiltered mask made every paired-only
-    fit fail inside ``sample_posterior_predictive`` — after sampling, before
-    the trace was saved. This runs the same real pipeline step the fits do.
+    Calibration and extraction use ``obs_s_mask`` to locate ``y_s_obs`` in the
+    full frame. The stored mask must follow the selected likelihood rows.
     """
     from vocab_growth.models.likelihood_utils import SPOKEN_FALLBACK_PAIRED_ONLY
 
@@ -214,12 +211,10 @@ def test_subject_marginal_predictive_uses_one_new_subject_per_draw(tmp_path, mon
 
 
 def test_child_slope_predictive_draws_an_intercept_and_a_slope(tmp_path, monkeypatch):
-    """VG19's unseen child is a (b0, b1) pair, not one deviate scaled by a curve.
+    """Draw two child deviates per outcome for an intercept and a slope.
 
-    The distinction is the whole point of the structure. A1 scales a single
-    deviate by tau(age), which makes children's ranks identical at every age --
-    they never cross. Two deviates per outcome let the trajectory fan and let one
-    child overtake another, which is what a random slope means.
+    Unlike a positive age-varying scale applied to one deviate, this structure
+    can change the rank of child offsets across ages.
     """
     values = {f.name: getattr(VG07, f.name) for f in dc_fields(VG07)}
     values.update(
@@ -279,20 +274,11 @@ def _q_re_definition():
 def test_the_subject_marginal_conversion_rate_is_the_same_child_as_the_spoken_one(
     tmp_path, monkeypatch
 ):
-    """``q_*_subject_marginal`` must be the rate inside the stored ``p_s``.
+    """Use one child's understood proportion, speech rate and spoken proportion.
 
-    The engine already stored a subject-marginal ``p_u`` and ``p_s`` and threw
-    the rate between them away, so the reports had a population ``q`` and no way
-    to say what share of their own comprehension a freshly drawn child converts
-    (issue #233). Storing a *recomputed* rate would be worse than storing none:
-    the unseen child differs by model -- correlated under ``rho_uq``, a (b0, b1)
-    pair for VG19, a factor block for VG22 -- and rebuilding it outside this
-    function is how the correlation came to be silently dropped once before
-    (#224).
-
-    So the claim to pin is identity, not similarity: ``p_s = p_u * q`` must hold
-    draw by draw on both grids, which it can only do if all three come from one
-    child.
+    The identity ``p_s = p_u * q`` must hold on both grids for every draw.
+    Drawing a separate child effect for ``q`` would lose that identity and
+    could also lose correlations between the child effects.
     """
     definition = _q_re_definition()
     context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
@@ -363,12 +349,7 @@ def test_the_rate_columns_appear_only_for_a_model_with_a_child_effect_on_q(
 
 
 def test_a_trace_written_before_the_rate_existed_still_loads(tmp_path, monkeypatch):
-    """Every fit of record predates these nodes (issue #233).
-
-    Requiring them would make the whole extractor fail on those traces rather
-    than leave one estimand unavailable, which would stop `regenerate_plots.py`,
-    the sensitivity comparisons and `loso_compare.py` reading any of them.
-    """
+    """Keep older traces readable when new-child rate nodes are absent."""
     definition = _q_re_definition()
     context, *_ = _build_holdout_model(tmp_path, monkeypatch, definition)
     context.set_trace(_prior_as_posterior_trace(context))

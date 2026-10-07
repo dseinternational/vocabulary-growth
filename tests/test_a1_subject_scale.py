@@ -1,13 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Proposal A1: the age-varying subject scale, and what it must not disturb.
+"""Check the A1 age-varying child scale and preserve the scalar-scale path.
 
-A1 is a *graph* change carried on an existing definition field, exactly as
-``CLAMP_Q_ONLY`` is. That buys the fifteen models of record their fingerprints,
-and costs a standing obligation: the scalar path must stay untouched. These
-tests pin both halves — that the variant does what it claims, and that nothing
-else in the family can see it.
+The sensitivity variant changes the graph through an existing definition
+field. Registered models must retain their scalar scales and serialised
+definitions.
 """
 
 from __future__ import annotations
@@ -31,13 +29,7 @@ SUBJECT_SCALE_FIELDS = ("tau_subject_sigma", "tau_subj_u_sigma", "tau_subj_q_sig
 
 
 def test_a1_is_registered_where_a_decision_put_it():
-    """A1 is a diagnostic, and every registration beyond VG10 is a decision.
-
-    The second was #240 item 1 (2026-09-13): the review measured the age-varying
-    child loading on VG11, VG12 and VG13's understood outcome, so the arm went on
-    VG11, VG12 and VG21, VG13's successor. Not VG23 or VG26, whose correlated
-    child blocks the resolver refuses to combine with it.
-    """
+    """Register A1 only for models with a supported child-effect structure."""
     registered = [key for key in VARIANTS if key[1] == "a1-tau-age-varying"]
     assert registered == [
         A1_VARIANT,
@@ -48,22 +40,11 @@ def test_a1_is_registered_where_a_decision_put_it():
 
 
 def test_no_model_of_record_carries_an_age_varying_scale():
-    """The guard that keeps A1 out of the published models.
+    """Keep A1 as a sensitivity structure rather than a registered default.
 
-    If a subject-scale field in the registry ever becomes an
-    ``AgeVaryingSubjectScale``, a model of record has silently adopted a
-    structure with a measured-false rank-correlation assumption behind it: A1
-    scales ONE per-child deviate by ``tau(age)``, which forces children never to
-    cross, and the disattenuated rank correlation is about 0.75-0.83 out to two
-    years and 0.28 beyond.
-
-    A :class:`SubjectSlopePriorParams` is admissible where A1 is not, and the
-    reason is exactly that assumption. A child slope draws ``(b0, b1)`` from a
-    2x2 joint with ``rho01`` **estimated**, so A1 is its special case at
-    ``rho01 = 1`` -- the slope frees the constraint rather than imposing it.
-    Freeing it costs 6.28 on 1 df on the repeats-only production fit, which is
-    the measurement that made VG19 a slope rather than a scaled deviate.
-    Registered 2026-08-21; see notes/202608141900-child-slope-implementation-plan.md.
+    A1 multiplies one child deviate by a positive age-varying scale, so ranks
+    of child offsets cannot change with age. A random intercept and slope can
+    allow crossing. These are different structures, not interchangeable priors.
     """
     offenders = []
     for key, definition in MODEL_REGISTRY.items():
@@ -81,11 +62,10 @@ def test_no_model_of_record_carries_an_age_varying_scale():
 
 
 def test_variant_keeps_the_record_prior_at_the_young_anchor():
-    """One factor: only the *constancy* of the scale changes, not its prior.
+    """Keep the scale prior unchanged at the young anchor.
 
-    ``young_sigma`` must equal the scalar it replaces. If it drifts, the variant
-    conflates "the scale varies with age" with "the scale has a different prior",
-    and its result attributes to A1 something A1 did not do.
+    Changing ``young_sigma`` would alter both the age dependence and the
+    starting scale prior.
     """
     base = MODEL_REGISTRY["vg10"]
     variant = build_variant(*A1_VARIANT)[0]
@@ -96,11 +76,9 @@ def test_variant_keeps_the_record_prior_at_the_young_anchor():
 
 
 def test_variant_anchors_match_the_paired_kappa_blocks():
-    """`tau` and `kappa` must contest the same span, or neither answers the other.
+    """Use the same reference ages for child scale and count concentration.
 
-    The whole diagnostic is "how much of kappa's decline is misattributed
-    widening". That is only a well-posed question if the two parameters vary over
-    identical reference ages.
+    This makes their age dependence comparable in the sensitivity analysis.
     """
     variant = build_variant(*A1_VARIANT)[0]
     pairs = (("tau_subj_u_sigma", "kappa_u"), ("tau_subj_q_sigma", "kappa_s"))
@@ -110,14 +88,14 @@ def test_variant_anchors_match_the_paired_kappa_blocks():
 
 
 def test_variant_holds_both_kappa_blocks_flat():
-    """A1 *moves* the age variation; it does not add a second copy of it."""
+    """Move age variation from concentration to the child-effect scale."""
     variant = build_variant(*A1_VARIANT)[0]
     for field in ("tau_subj_u_sigma", "tau_subj_q_sigma"):
         assert subject_scale_spec(getattr(variant, field)).hold_kappa_constant
 
 
 def test_subject_scale_spec_ignores_scalars():
-    """The overloaded field's single interpreter, pinned against the float path."""
+    """Recognise the structured scale and leave scalar scales unchanged."""
     assert subject_scale_spec(1.5) is None
     assert subject_scale_spec(0.0) is None
     spec = AgeVaryingSubjectScale(
@@ -127,12 +105,7 @@ def test_subject_scale_spec_ignores_scalars():
 
 
 def test_scale_closure_is_the_record_at_ratio_zero():
-    """``log_ratio = 0`` must reproduce a constant scale exactly.
-
-    Nesting is what makes the posterior for one parameter an answer rather than a
-    model comparison, so it is worth checking arithmetically rather than trusting
-    the algebra in the docstring.
-    """
+    """``log_ratio = 0`` must reproduce a constant scale exactly."""
     z_young, z_old = -1.0, 0.5
     tau_young = 1.3
 
@@ -141,17 +114,12 @@ def test_scale_closure_is_the_record_at_ratio_zero():
 
     grid = np.linspace(-2.0, 2.0, 9)
     assert np.allclose(tau_of_z(grid, 0.0), tau_young)
-    # And at the old anchor the ratio is exactly exp(log_ratio), by construction.
+    # The ratio at the old anchor is exp(log_ratio).
     assert np.isclose(tau_of_z(z_old, 0.4) / tau_young, np.exp(0.4))
 
 
 def test_flat_kappa_needs_the_two_anchor_form():
-    """A legacy-kappa model must refuse A1 rather than silently ignore it.
-
-    Silently ignoring would produce a variant that believes it has switched off
-    the dispersion trajectory while still fitting one — a failure that looks
-    exactly like a pass.
-    """
+    """Reject a constant-concentration request for the legacy parameterisation."""
     from vocab_growth.models.common import build_kappa_for_config
 
     legacy = dataclasses.replace(

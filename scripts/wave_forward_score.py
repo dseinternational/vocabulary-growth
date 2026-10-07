@@ -245,12 +245,12 @@ def holdout_mask(
     *,
     unit: str,
 ) -> np.ndarray:
-    """Which rows leave the likelihood for this fold.
+    """Mark rows removed from this fold's likelihood.
 
-    ``later-waves`` keeps each fold child's first wave in training, so the lag
-    source for every scored row is data the model saw. ``child`` removes the
-    whole child, which makes the lag source a row the model never saw and the
-    child's random effect a prior draw.
+    ``later-waves`` retains each fold child's first wave. Only lag sources in
+    that retained history remain training observations; third and later waves
+    can use held-out sources. ``child`` removes all their rows, so the child's
+    effect is drawn from its prior and lag values are supplied observations.
     """
     in_fold = analysis_df["subject_code"].isin(fold_subjects).to_numpy()
     if unit == "child":
@@ -261,31 +261,23 @@ def holdout_mask(
 
 
 def scored_rows(analysis_df: pd.DataFrame, fold_subjects: np.ndarray) -> np.ndarray:
-    """The rows this fold contributes to the comparison, as positional indices.
+    """Return positional indices of fold children's later waves.
 
-    A fold child's later waves, and only those. First waves are excluded under
-    both holdout units because ``x_lag`` is zero there, so the two arms assign
-    them the identical density and scoring them adds noise without signal.
+    Exclude first waves under both holdout units because this comparison targets
+    later visits. Their direct lag term is zero, but refitting can still change
+    their predictive density through shared parameters.
     """
     in_fold = analysis_df["subject_code"].isin(fold_subjects).to_numpy()
     return np.flatnonzero(in_fold & (wave_index(analysis_df) > 0))
 
 
 def lag_source(analysis_df: pd.DataFrame, definition) -> tuple[np.ndarray, np.ndarray]:
-    """``(has_lag, source_row)`` from the model's own lag rule.
+    """Return lag availability and source-row indices under the model's lag rule.
 
-    A later wave is not automatically a lagged wave: if every earlier wave of
-    that child lacks a comprehension count -- and 391 of the pool's 448
-    comprehension-less rows sit on three forms that never record one -- then
-    ``has_lag`` is 0 and the cross-lag term drops out of that row's likelihood.
-    The two arms then assign the row the identical density, so it contributes
-    exactly nothing to the elpd difference while still changing the paired
-    standard error.
-
-    Read from ``prev_wave_lag_for_frame`` rather than reconstructed, so a variant
-    that moves the gap ceiling, the zero handling or the same-form restriction
-    moves this too -- and so ``source_row`` is the row the model actually reads,
-    which is what decides whether the predictor stands on training data.
+    Earlier missing counts, gap limits and form restrictions can leave a later
+    row without a lag. Its direct lag term is then zero; the arm predictions can
+    still differ after refitting. Use the shared lag builder so the scoring
+    restrictions refer to the source row the graph actually uses.
     """
     if lag_field(definition) == "use_sign_cross_lag":
         # The ratio lag takes no `n_trials`: it divides one count by another
@@ -418,16 +410,11 @@ def row_elpds(
     *,
     engine: str,
 ) -> pd.DataFrame:
-    """Marginal predictive log-density of each scored row, by outcome.
+    """Score each held-out row separately for each outcome.
 
-    One row at a time rather than one child at a time (``kfold_loso``'s unit),
-    because the scored set here is a subset of a child's rows and the paired
-    comparison needs the two arms aligned on the same rows.
-
-    The outcomes are kept apart rather than summed, because on both engines some
-    of them are controls the coefficient cannot reach and summing would bury the
-    signal in them. Which outcomes there are is the engine's business, and
-    :data:`OUTCOME_COLUMNS` is the same table the driver reports on.
+    Row scores align the two arms on the same observations. Keep outcomes
+    separate because their direct lag terms and prediction targets differ.
+    Refitting can also change outcomes without a direct lag term.
     """
     if engine == "joint":
         return _joint_row_elpds(frame, trace, rows, definition, lagged, clean)
@@ -520,7 +507,7 @@ def _joint_row_elpds(
     lagged: np.ndarray,
     clean: np.ndarray,
 ) -> pd.DataFrame:
-    """VG25: spoken carries the coefficient, and so does the composition.
+    """Score VG25 speech and compositions under their own lag eligibility.
 
     Understood and signed are controls -- the sign lag enters neither. The cell
     compositions are a control when ``sign_lag_in_cells`` is off, as it is on the
@@ -763,9 +750,9 @@ def paired_difference(wide: pd.DataFrame, column: str, *, restriction: str) -> d
     """The cross-lag arm minus the control, paired on the scored rows.
 
     Paired because both arms score the identical rows: differencing two
-    independent totals throws away the correlation between them and inflates the
-    standard error, which is the defect #289 task 3.2 records for the VG20/VG22
-    comparison. Rows either arm could not score are dropped from both.
+    independent totals discards their covariance. That increases the standard
+    error when covariance is positive, but need not always do so. Drop rows
+    either arm could not score, and aggregate differences by child for the SE.
 
     See :data:`RESTRICTIONS` for what each row set contains and why the strictest
     is the one to quote.

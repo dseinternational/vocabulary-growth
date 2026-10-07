@@ -1,27 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Every `vocab_growth` name a report template reaches for must exist.
+"""Resolve static package references in report-template Python cells.
 
-Report templates are Quarto documents whose Python cells import from the package
-and read names off the modules they import. Nothing renders them in CI, so a
-rename in `src/` that a template still refers to breaks nothing the suite runs
--- and a template cell guarded by a broad `except` turns the break into a
-message that looks like a data condition.
-
-That happened. `f492e5e` (2026-09-01) moved the four cross-tab loaders out of
-the joint engine and made them public, `_load_uk02_four_cell` becoming
-`load_uk02_four_cell`, and VG15's template went on calling the old names. Its
-`except Exception` caught the `AttributeError` and printed "it needs the
-repository's prepared data" on a page whose prepared data were present, so the
-association-support table was missing from VG15's published report until a
-smoke render of 2026-09-13 showed the exception's name.
-
-This reads the cells rather than running them, so it needs no fit and no data:
-it parses each `{python}` cell, resolves every `from vocab_growth... import`
-and `import vocab_growth...`, and checks each attribute read off a module so
-imported. It cannot see a name built at run time, and it is not meant to -- it
-catches the static case, which is the one a rename produces.
+Check package imports and attributes read from imported modules without fitting
+or rendering. Dynamically constructed names are outside this check.
 """
 
 from __future__ import annotations
@@ -126,11 +109,7 @@ def test_every_package_name_a_template_uses_exists(template):
 
 
 def test_the_check_sees_the_defect_it_was_written_for(tmp_path, monkeypatch):
-    """A check never seen to fail is not evidence.
-
-    Reproduces VG15's cell as it stood before the fix: a module imported under
-    an alias, private names read off it that a rename made public.
-    """
+    """Detect a renamed loader reached through an aliased module import."""
     stale = tmp_path / "stale.qmd"
     stale.write_text(
         "```{python}\n"

@@ -15,14 +15,11 @@ requires_real_db = pytest.mark.skipif(
     not os.path.exists(data_utils.VOCABULARY_DATA_PATH),
     reason="prepared vocabulary DuckDB not available (run scripts/prepare_data.py)",
 )
-"""Skip a test that asserts against the real database rather than a fixture.
+"""Skip source-count checks when the generated DuckDB is absent.
 
-``data/vocabulary.duckdb`` is a build artefact, gitignored and rebuilt by
-``scripts/prepare_data.py`` in ~300 ms. CI now builds it *before* pytest, so these
-tests run there; the marker is for a local checkout where it has not been built
-yet. The counts they pin — 8 understood values masked by the duplicated-outcome
-rule, 19 spoken by the production rules, every exclusion inside ``us_01`` — are
-what the notes and the report quote, and no miniature fixture can check them."""
+CI prepares the database before pytest. Local checkouts must run
+``scripts/prepare_data.py`` before these tests can check the committed sources.
+"""
 
 
 def test_mask_incomparable_signed_outcomes_preserves_other_outcomes():
@@ -37,9 +34,7 @@ def test_mask_incomparable_signed_outcomes_preserves_other_outcomes():
 
     masked, dropped = data_utils.mask_incomparable_signed_outcomes(frame)
 
-    # uk_01 alone: its `signed` is a sign-ONLY count. uk_06 was masked here until
-    # 2026-08-12, when the source confirmed the standard DSE checklists — column 2
-    # is "understands and signs", a total — so it is no longer masked.
+    # uk_01 records sign-only words; uk_06 records the total signed vocabulary.
     assert dropped == {"uk_01": 1}
     assert masked["understood"].tolist() == frame["understood"].tolist()
     assert masked["spoken"].tolist() == frame["spoken"].tolist()
@@ -50,12 +45,7 @@ def test_mask_incomparable_signed_outcomes_preserves_other_outcomes():
 
 
 def test_uncertain_sign_studies_is_empty_but_the_mechanism_survives():
-    """uk_06 left the list on evidence; the guard stays for the next source.
-
-    Emptying the tuple rather than deleting it keeps the route open for a future
-    source whose signing construct is unverified, and records that this one was
-    resolved rather than quietly dropped (issue #211).
-    """
+    """Retain the uncertainty filter while no studies currently require it."""
     assert data_utils.UNCERTAIN_SIGN_STUDIES == ()
 
     # The report lists every *excluded* study, so an empty tuple means no study is
@@ -144,12 +134,10 @@ def test_us01_ceiling_sensitivity_excludes_only_ws_ceiling_rows():
 
 
 def test_dse_native_restriction_keeps_only_the_810_reference_form():
-    """Native means the form's own ceiling IS the reference, not merely close.
+    """Keep rows whose recorded form ceiling equals the 810-word reference.
 
-    uk_02 ran both instruments, so the filter has to work per row rather than per
-    study, and a row whose ceiling was never recorded has to go: an unknown form
-    cannot be shown to need no harmonisation, which is the only thing the variant
-    admits rows on.
+    Apply the filter per row because a study can use more than one form.
+    An unrecorded ceiling cannot establish eligibility.
     """
     frame = pd.DataFrame(
         {
@@ -167,13 +155,7 @@ def test_dse_native_restriction_keeps_only_the_810_reference_form():
 
 @requires_real_db
 def test_dse_native_restriction_on_the_real_pool():
-    """The real sources: which studies survive, and how much of each outcome.
-
-    Pinned because the variant's whole value is the size of what it removes — if a
-    later source arrives on the 810 reference, or an existing one is re-coded, the
-    check silently becomes a different check and the numbers quoted in the flag
-    docstring stop being true.
-    """
+    """Check the retained sources and outcome counts in the committed pool."""
     pool = data_utils.load_data(
         population=Population.DOWN_SYNDROME,
         columns=[
@@ -308,17 +290,10 @@ def test_td_load_data_can_widen_languages(tmp_path, monkeypatch):
 
 
 def test_td_loader_deduplicates_on_complete_source_identity(tmp_path, monkeypatch):
-    """Exact full-row copies collapse; rows that collide only after the outcome
-    projection survive (#240).
+    """Deduplicate full source rows before projecting the requested columns.
 
-    The Wordbank export records some administrations twice, identically; a
-    repeated row double-weights that administration in every likelihood and, in
-    the random-effect models, makes a single-visit child look like a
-    repeated-measures one. Deduplication must run on the complete source row,
-    before the loader's projection: two genuinely distinct same-child, same-age
-    administrations can agree on every projected column and differ only in one
-    the loader drops (``sex`` here; ``caregiver_education`` and others in the
-    real export), and collapsing those would delete a real observation.
+    Distinct source rows can agree on all requested fields. Exact duplicates
+    would double-weight an administration and create false repeated visits.
     """
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
@@ -347,14 +322,7 @@ def test_td_loader_deduplicates_on_complete_source_identity(tmp_path, monkeypatc
 
 @requires_real_db
 def test_td_frames_of_record_are_free_of_source_duplicates():
-    """Pin the registered VG11-VG13 frame sizes after source-level dedup (#240).
-
-    Before the loader deduplicated, 22 excess exact source copies entered
-    VG11's frame (18,522 rows), 3 VG12's (7,052) and 2 VG13's (6,358); the
-    removal counts of record are the differences pinned here. These pins move
-    only when the export is refreshed — re-run the audit in
-    notes/202608231830-vg11-vg13-immediate-remediation.md when they do.
-    """
+    """Check prepared-frame sizes after full-source-row deduplication."""
     from vocab_growth.models.definitions import VG11, VG12, VG13
 
     def univariate_frame_len(definition):
@@ -386,14 +354,7 @@ def test_td_frames_of_record_are_free_of_source_duplicates():
 
 
 def test_td_romance_scope_admits_italian_and_spanish_only(tmp_path, monkeypatch):
-    """ENGLISH_AND_ROMANCE_LANGUAGES widens the pool to exactly two more languages.
-
-    The point of the widening is DS-TD language symmetry: the DS pool is already a
-    quarter non-English (es_01 Spanish, it_01 Italian) while this reference was
-    English-only. Norwegian stands in for every language that is *not* admitted --
-    widening must not become "all languages", which would change what the reference
-    trajectory means and admit forms whose comprehension is a production proxy.
-    """
+    """Admit Italian and European Spanish alongside English, but not Norwegian."""
     db_path = _create_vocab_db(tmp_path)
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
@@ -416,15 +377,7 @@ def test_td_romance_scope_admits_italian_and_spanish_only(tmp_path, monkeypatch)
 
 
 def test_td_pool_stays_inside_the_gp_domain_when_languages_widen(tmp_path, monkeypatch):
-    """The reference pool must not reach below the typically-developing GP domain.
-
-    Italian Words & Gestures is registered from 7 months where every English form
-    starts at 8, so widening the language scope pushed five administrations below the
-    floor of ``_TD_GP_DOMAIN_MONTHS`` and ``build_utils`` refused to build. Bounding
-    the pool is the fix rather than widening that domain, which is shared with
-    VG03/VG04 and would have made those models stale for five observations at the
-    least informative end of the range.
-    """
+    """Keep the widened reference pool inside the shared TD GP age domain."""
     from vocab_growth.models import definitions
 
     db_path = _create_vocab_db(tmp_path)
@@ -452,13 +405,9 @@ def test_td_pool_stays_inside_the_gp_domain_when_languages_widen(tmp_path, monke
 
 
 def test_romance_scope_is_a_superset_of_english_and_excludes_french():
-    """French is excluded on measurement grounds, not by oversight.
+    """Keep the configured scope to English, Italian and European Spanish.
 
-    Its Words & Gestures form carries 713 word items where every other Words &
-    Gestures adaptation has 309-457, and 20.9% of its rows with comprehension >= 20
-    record comprehension exactly equal to production -- the proxy-defect signature
-    that retired VG06. A future widening that reaches for "the Romance languages"
-    should have to notice this.
+    French remains excluded under the documented measurement policy.
     """
     assert set(data_utils.ENGLISH_LANGUAGES) < set(
         data_utils.ENGLISH_AND_ROMANCE_LANGUAGES
@@ -470,11 +419,10 @@ def test_romance_scope_is_a_superset_of_english_and_excludes_french():
 
 
 def test_only_hierarchical_td_models_go_beyond_english():
-    """VG03/VG04 must stay English-only; VG11/VG12/VG13 carry the widened scope.
+    """Use the wider language scope only in hierarchical TD models.
 
-    VG03 and VG04 have no random effects, so between-language variation would be
-    absorbed by the Beta-Binomial dispersion and reported as child-level dispersion.
-    The widened scope belongs only where a study random intercept can hold it.
+    Study intercepts can account for systematic differences between sources;
+    they do not guarantee that language and study effects are separable.
     """
     from vocab_growth.models import definitions
 
@@ -489,7 +437,7 @@ def test_only_hierarchical_td_models_go_beyond_english():
 
 
 def test_ds_models_ignore_the_td_language_scope(tmp_path, monkeypatch):
-    """The DS subset is English by construction, so a language scope cannot alter it."""
+    """The TD language filter must not change the Down syndrome pool."""
     db_path = _create_vocab_db(tmp_path)
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
@@ -505,15 +453,7 @@ def test_ds_models_ignore_the_td_language_scope(tmp_path, monkeypatch):
 
 
 def test_td_pool_excludes_the_edgin_clinical_cohort(tmp_path, monkeypatch):
-    """The reference pool must not contain rows from the audited DS source.
-
-    Two Edgin rows satisfy the typically-developing filter, and one is a Words &
-    Sentences record at exactly the 680-word ceiling inside the run that
-    ``mask_implausible_production_administrations`` excludes on the DS side. The
-    source team no longer holds the original files, so the defect cannot be
-    resolved at source — which makes it the more important that the benchmark and
-    the benchmarked are disjoint.
-    """
+    """Keep the audited Edgin source out of the TD reference pool."""
     db_path = _create_vocab_db(tmp_path)
     monkeypatch.setattr(data_utils, "VOCABULARY_DATA_PATH", str(db_path))
 
@@ -646,14 +586,10 @@ def test_ds_us01_keeps_valid_rows_above_legacy_100_cap(tmp_path, monkeypatch):
 
 
 def test_ds_us01_admits_only_the_down_syndrome_group(tmp_path, monkeypatch):
-    """The Edgin cohort has four developmental-status groups; only one is us_01.
+    """Use developmental-status codes to select the Down syndrome source group.
 
-    The comparison group (source ``DevStatus``/``DevelopmentalDiagnosis`` = 0) reaches
-    the export as ``typically_developing = false`` with a *blank* condition label,
-    because Wordbank's importer links a HealthCondition whose name is the empty string.
-    That makes it look, in the export, like Down syndrome children with a missing code.
-    It is not: no child carries both codes. Keying on ``dev_status`` keeps it out of the
-    DS relation while leaving it available in ``vocab_us_01`` for a matched analysis.
+    A blank health-condition label in the export does not establish group
+    membership. The fixture includes a comparison child with distinct counts.
     """
     us01 = _load_us01(tmp_path, monkeypatch)
 
@@ -665,14 +601,10 @@ def test_ds_us01_admits_only_the_down_syndrome_group(tmp_path, monkeypatch):
 
 
 def test_above_window_administrations_are_admitted(tmp_path, monkeypatch):
-    """An early-vocabulary form given to an older child is admissible.
+    """Admit Down syndrome administrations above the form's norming age window.
 
-    For a Down syndrome cohort that is developmentally appropriate, not an error, and
-    the registered age window governs whether Wordbank's *percentile norms* apply --
-    which this project does not use. Excluding them was also the more biased choice: a
-    child still on Words & Gestures at 25 months is plausibly lower-ability than one who
-    moved to Words & Sentences, and in the real data these are ``us_01``'s **only**
-    comprehension observations between 19 and 27 months.
+    The project does not apply Wordbank percentile norms. An early-vocabulary
+    form may still be appropriate for an older child.
     """
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
@@ -697,12 +629,10 @@ def test_above_window_administrations_are_admitted(tmp_path, monkeypatch):
 
 
 def test_below_form_floor_administrations_are_dropped(tmp_path, monkeypatch):
-    """Administrations below a form's lowest registered age are held back.
+    """Exclude the source-specific below-floor rows by default.
 
-    Unlike the above-window case this block is unreliable: in the real data three of
-    the 16 rows report 236-368 words *spoken* at 6 months, which no 6-month-old in any
-    population produces, and two of the same children show comprehension collapsing
-    from 247-371 words at 6 months to 5-19 by 11-12. See FORM_AGE_FLOORS.
+    The fixture tests this rule below the near-ceiling exclusion threshold.
+    The reinstatement flag retains those rows for sensitivity analysis.
     """
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
@@ -748,11 +678,10 @@ def test_form_floor_rule_leaves_other_studies_alone():
 
 
 def test_ceiling_only_children_are_dropped_whole(tmp_path, monkeypatch):
-    """A child recorded only at the form ceiling is a preparation artefact.
+    """Exclude children whose source records all meet the ceiling-only rule.
 
-    This is a provenance criterion, not selection on the outcome: age and count together
-    cannot separate the Edgin ceiling batch from a legitimately able older child, so what
-    separates them is that the batch children have no non-ceiling record of their own.
+    The rule selects on recorded counts within named sources. A child with a
+    non-ceiling record is retained for the separate administration-level rules.
     """
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
@@ -870,9 +799,8 @@ def test_filter_studies_dropped_list_is_sorted():
     assert dropped == ["m", "z"]  # both singletons, sorted
 
 
-# Minimal schemas for the per-study source tables referenced by the
-# vocab_combined view. The DS regression tests populate wordbank_child only,
-# so these stay empty; they exist so the view binds.
+# Minimal schemas for source tables referenced by the vocab_combined view.
+# Each fixture populates the sources it needs; the remaining tables stay empty.
 _SOURCE_TABLE_SCHEMAS = {
     "vocab_uk_01": "subject_id VARCHAR, sex INTEGER, age DOUBLE, understood INTEGER, spoken INTEGER, signed INTEGER, produced INTEGER, survey_vocab_max INTEGER",
     "vocab_uk_02": "subject_id VARCHAR, sex INTEGER, age DOUBLE, comprehension INTEGER, spoken INTEGER, signed INTEGER, production INTEGER, form VARCHAR",
@@ -978,7 +906,7 @@ def _create_vocab_db(tmp_path):
 # reference scale. These pin both.
 
 def _ie01_db(tmp_path, rows):
-    """A vocabulary DB whose only DS source rows are the supplied ie_01 records."""
+    """Add the supplied ie_01 records to the fixture database."""
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
         con.executemany(
@@ -1051,8 +979,8 @@ def test_ie01_baseline_counts_are_masked_by_default(tmp_path, monkeypatch):
 
 # ---- es_01: the Down syndrome filter, and the symbolic-gesture lexicon ----
 #
-# es_01 (Galeote) is the only source carrying a typically developing comparison
-# group in the same CSV, so the view must admit its Down syndrome children only.
+# es_01 (Galeote) carries a typically developing comparison group in the same
+# CSV, so the view must admit its Down syndrome children only.
 # Its `gestured` column counts *symbolic* gestures representing specific lexical
 # items — a gestural lexicon scored per word — so it is the repository's `signed`
 # construct, and a total one (words gestured whether or not also spoken), like
@@ -1066,7 +994,7 @@ _ES01_COLUMNS = (
 
 
 def _es01_db(tmp_path, rows):
-    """A vocabulary DB whose only DS source rows are the supplied es_01 records."""
+    """Add the supplied es_01 records to the fixture database."""
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
         con.executemany(
@@ -1181,7 +1109,7 @@ _UK07_COLUMNS = (
 
 
 def _uk07_db(tmp_path, rows):
-    """A vocabulary DB whose only DS source rows are the supplied uk_07 records."""
+    """Add the supplied uk_07 records to the fixture database."""
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
         con.executemany(
@@ -1345,11 +1273,8 @@ def test_uk01_withheld_subjects_are_dropped_at_csv_load():
 
 
 def test_uk01_withheld_subject_interleaves_two_modality_profiles():
-    # Pins why the id is withheld, against the committed source: sorted by age,
-    # its four administrations alternate between a signer who barely speaks
-    # (ages 66 and 78) and a speaker who never signs (76 and 88) — the
-    # homonym-fusion signature, not a trajectory. If a data update changes
-    # this, the constant has gone stale and this test says so.
+    # Check the alternating recorded modality profiles behind the unresolved
+    # identifier. The counts alone cannot establish how many children it names.
     raw = pd.read_csv(
         os.path.join(data_utils.local_env.DATA_DIR, "vocab_data_uk_01.csv")
     )
@@ -1389,10 +1314,7 @@ def test_ie02_withheld_administrations_are_dropped_at_csv_load():
 
 
 def test_ie02_withheld_administration_is_the_contradictory_t2():
-    # Pins why the administration is withheld, against the committed source:
-    # its t2 asserts a 331-word comprehension surge, a 237-word signing surge
-    # and a 96% speech collapse in three months. If a data update changes
-    # these counts, the constant has gone stale and this test says so.
+    # Check the recorded wave counts behind the source-specific withholding rule.
     raw = pd.read_csv(
         os.path.join(data_utils.local_env.DATA_DIR, "vocab_data_ie_02.csv")
     )
@@ -1422,7 +1344,7 @@ def test_mask_same_day_production_disagreements_masks_larger_side_only():
     # a: the contradicted larger count is masked, the smaller kept, row retained.
     assert pd.isna(out.loc[1, "spoken"]) and pd.isna(out.loc[1, "produced"])
     assert out.loc[0, "spoken"] == 11
-    # b: below the magnitude floor — 10 vs 71 is small-count noise, untouched.
+    # b: below the magnitude floor, so the rule leaves 10 versus 71 untouched.
     assert out.loc[3, "spoken"] == 71
     # c: tiny counts, untouched even at an infinite ratio.
     assert out.loc[5, "spoken"] == 19
@@ -1459,15 +1381,10 @@ def test_us01_same_day_disagreement_rule_masks_exactly_two_counts():
 
 
 def test_reinstatement_counters_hold_the_other_rule_fixed():
-    """The two fit-log figures are each flag's net reinstatement given the other.
+    """Count each flag's net effect while holding the other rule fixed.
 
-    On the default pool the implausible rule's catch is 11 and the same-day
-    rule's own catch is 2, but the same-day rule also re-masks 6 of the 11 when
-    they are reinstated. So the one-factor variant nets 5, and the combined
-    variant (`us01-masked-production-reinstated`, #289 task 4.3) reports 11 for
-    the implausible rule with the same-day rule lifted and 8 for the same-day
-    rule with the implausible rule lifted: 13 in total, which is what the
-    combined frame gains over the default one.
+    The rules overlap, so their separate default reinstatement counts do not
+    sum to the combined reinstatement count.
     """
     assert data_utils.count_reinstated_implausible_production() == 5
     assert data_utils.count_reinstated_same_day_disagreements() == 2
@@ -1517,12 +1434,7 @@ def test_mask_incomplete_administrations_reports_counts_and_needs_columns():
 
 
 def test_mask_short_form_comprehension_is_off_by_default_and_masks_understood_only():
-    """The short-form sensitivity: nothing by default, then comprehension alone.
-
-    ie_02 omitted Checklist 3, whose harder words matter for comprehension, so
-    the arm masks those counts and must leave its speech and signing, every
-    other study, and every row in place.
-    """
+    """Mask ie_02 comprehension only when the short-form sensitivity is requested."""
     frame = pd.DataFrame({
         "study": ["ie_02", "ie_02", "ie_01", "uk_03"],
         "survey_vocab_max": [476, 476, 810, 416],
@@ -1546,14 +1458,7 @@ def test_mask_short_form_comprehension_is_off_by_default_and_masks_understood_on
 
 
 def test_ie02_is_a_476_item_short_form_on_the_real_pool():
-    """ie_02 carries its own Checklists 1 + 2 ceiling, and the arm bites on it.
-
-    Pinned against the real sources because the decision of 2026-09-15 has two
-    consequences a later change could undo silently: the form-ceiling guard now
-    drops the retained administration whose comprehension count of 477 exceeds
-    476 (110 rows, not 111), and the sensitivity must mask every one of ie_02's
-    comprehension counts and nothing else.
-    """
+    """Check ie_02's 476-item ceiling and comprehension sensitivity on the real pool."""
     pool = data_utils.load_combined_data()
     ie = pool[pool["study"] == "ie_02"]
     assert set(ie["survey_vocab_max"]) == {476}
@@ -1577,10 +1482,8 @@ def test_ie02_is_a_476_item_short_form_on_the_real_pool():
 
 # ---- duplicated-outcome administrations (the us_01/Edgin infant records) ----
 #
-# An infant recorded as saying nearly every word they understand has an internally
-# inconsistent administration: comprehension leading production is the premise of
-# the joint models. The rule is age-conditioned rather than study-scoped, because
-# the same ratio at older ages is ordinary.
+# The duplicated-outcome rule flags large, nearly equal counts at young ages.
+# It is a source-audit screening rule; the nested likelihood allows equality.
 
 def _dup_frame(rows):
     import pandas as pd
@@ -1594,8 +1497,7 @@ def test_duplicated_outcome_masks_both_counts_and_keeps_the_row():
     frame = _dup_frame([("us_01", 12.0, 386.0, 385.0, 396)])
     out, dropped = data_utils.mask_duplicated_outcome_administrations(frame)
 
-    # Both counts go: which column was overwritten is unrecoverable from totals,
-    # and the production figure is impossible against the independent DS cohort.
+    # The rule masks both counts. Totals alone do not identify which is erroneous.
     assert pd.isna(out.loc[0, "understood"])
     assert pd.isna(out.loc[0, "spoken"])
     assert len(out) == 1                     # row retained for provenance
@@ -1609,9 +1511,7 @@ def test_duplicated_outcome_masks_both_counts_and_keeps_the_row():
 
 
 def test_duplicated_outcome_rule_is_age_conditioned():
-    # The identical ratio and count at 40 months is a child who says most of what
-    # they understand — ordinary, and must not be masked. 21 of the 27 rows in the
-    # real pool matching the ratio/count conditions are of this kind.
+    # The same ratio and count at 40 months are outside the rule's age window.
     frame = _dup_frame([
         ("us_01", 14.0, 350.0, 348.0, 396),   # infancy: masked
         ("uk_02", 40.0, 350.0, 348.0, 810),   # older: kept
@@ -1633,8 +1533,7 @@ def test_duplicated_outcome_rule_respects_the_understood_floor():
 
 
 def test_duplicated_outcome_rule_keeps_a_normal_production_gap():
-    # "Group 2": high comprehension for an infant, but an ordinary comprehension-
-    # production gap. Retained by decision — clinically unusual, not a defect.
+    # High comprehension alone does not meet the duplicated-outcome signature.
     frame = _dup_frame([("us_01", 18.0, 217.0, 22.0, 396)])
     out, dropped = data_utils.mask_duplicated_outcome_administrations(frame)
     assert out.loc[0, "understood"] == 217.0
@@ -1715,7 +1614,7 @@ def test_implausible_production_is_scoped_to_the_young_window():
 
 
 def test_implausible_production_masks_a_longitudinal_collapse():
-    # 454 words at 18 months against 35 at 24 months: vocabulary does not shrink.
+    # This large recorded fall meets the rule's ratio and magnitude conditions.
     frame = _prod_frame([
         ("us_01", "c1", 18.0, None, 454.0, 680),
         ("us_01", "c1", 24.0, None, 35.0, 680),
@@ -1727,8 +1626,8 @@ def test_implausible_production_masks_a_longitudinal_collapse():
 
 
 def test_longitudinal_collapse_has_a_floor_so_tiny_counts_do_not_fire():
-    # 5 understood words falling to 1 is noise, not a defect; without the floor the
-    # 5x rule would flag it.
+    # A fall from five spoken words to one meets the ratio condition but remains
+    # below the magnitude floor.
     frame = _prod_frame([
         ("us_01", "c1", 11.0, 12.0, 5.0, 396),
         ("us_01", "c1", 17.0, 20.0, 1.0, 396),
@@ -1863,13 +1762,10 @@ def test_subsample_subjects_does_not_depend_on_input_row_order():
 
 @requires_real_db
 def test_td_sample_fraction_preserves_within_child_replication():
-    """A subsample must not flatten the pool to one administration per child.
+    """Preserve the mean number of visits per child when subsampling children.
 
-    Drawing rows rather than children cut the typically-developing pool from 1.32
-    administrations per child to 1.04, which made the subject random intercept
-    and the observation-level Beta-Binomial dispersion indistinguishable and gave
-    VG11 a bimodal posterior at R-hat 1.72. See
-    notes/202608020829-kappa-and-eta-q-prior-recalibration.md §§11-12.
+    A row-wise subsample can discard repeat visits and weaken the distinction
+    between child effects and within-child count variation.
     """
     columns = ["age", "spoken", "study", "subject_id"]
 
@@ -1907,9 +1803,7 @@ def test_comprehension_below_production_masks_only_the_comprehension_count():
     frame = _cbp_frame([("ie_01", 61.0, 13.0, 366.0, 0.0, 366.0)])
     out, masked = data_utils.mask_comprehension_below_production(frame)
 
-    # Only `understood` goes. The production figure is corroborated by two
-    # columns that agree, and in both diagnosed studies the fault is localised
-    # to comprehension.
+    # The policy masks comprehension and retains the recorded production counts.
     assert pd.isna(out.loc[0, "understood"])
     assert out.loc[0, "spoken"] == 366.0
     assert out.loc[0, "produced"] == 366.0
@@ -1938,8 +1832,7 @@ def test_comprehension_equal_to_production_is_kept():
 def test_comprehension_rule_uses_produced_not_the_modality_sum():
     # A bimodal child who says and signs many of the same words: `spoken +
     # signed` overstates distinct production and would flag this row, but the
-    # recorded union does not. uk_07 has produced < spoken + signed on 77 of 82
-    # rows, so the sum is the wrong denominator, not a conservative one.
+    # recorded union does not.
     frame = _cbp_frame([("uk_07", 40.0, 300.0, 200.0, 180.0, 290.0)])
     out, masked = data_utils.mask_comprehension_below_production(frame)
     assert out.loc[0, "understood"] == 300.0
@@ -1958,9 +1851,8 @@ def test_comprehension_rule_tests_a_row_whose_union_was_not_recorded():
 
 
 def test_comprehension_rule_does_not_bound_by_the_signed_count():
-    # Four sources record `produced` as the spoken count alone, so `signed`
-    # exceeds it on 132 rows and is not a lower bound on that column. A row
-    # whose only excess is signed is left alone.
+    # Some sources record spoken counts as `produced`. The rule therefore uses
+    # max(produced, spoken), and does not use signed as another bound.
     frame = _cbp_frame([
         ("ie_02", 30.0, 60.0, 13.0, 66.0, 13.0),
         ("uk_02", 40.0, 60.0, 13.0, 66.0, float("nan")),
@@ -2007,8 +1899,7 @@ def test_load_combined_data_masks_the_nine_impossible_comprehension_counts():
     assert reinstated.loc[newly, "study"].value_counts().to_dict() == {
         "ie_01": 7, "it_01": 1, "uk_02": 1,
     }
-    # The flag reinstates comprehension only; nothing else moves, and `produced`
-    # never reaches a caller.
+    # The flag reinstates comprehension only. Default frames omit `produced`.
     assert "produced" not in masked.columns
     assert len(masked) == len(reinstated)
     assert masked["spoken"].notna().sum() == reinstated["spoken"].notna().sum()
@@ -2062,12 +1953,7 @@ def test_the_joint_frame_masks_the_uk02_record_its_own_loader_reads():
 
 
 def test_the_comprehension_reinstatement_reaches_the_supported_fit_interface():
-    """Every documented reinstatement flag must be reachable through `load_data`.
-
-    This one was implemented on `load_combined_data` alone, so the interface
-    every model and sensitivity variant actually uses could not request it —
-    a documented sensitivity that could not be run (issue #266).
-    """
+    """Expose the comprehension reinstatement flag through load_data."""
     columns = ["age", "understood", "spoken"]
     masked = data_utils.load_data(
         population=data_utils.Population.DOWN_SYNDROME, columns=columns
@@ -2093,11 +1979,10 @@ def test_the_comprehension_reinstatement_reaches_the_supported_fit_interface():
 
 
 def test_produced_is_returned_only_on_request():
-    """`produced` is the modality union; no registered model consumes it.
+    """Keep produced counts out of default frames and return them on request.
 
-    It is kept out of the default column set so every existing caller sees the
-    historical frame, and offered on request so the exploratory produced-outcome
-    models can use the canonical loader instead of bypassing it (issue #266).
+    Source definitions of production differ. The loader's canonical column
+    supports exploratory analyses without changing default model inputs.
     """
     default = data_utils.load_combined_data()
     with_produced = data_utils.load_combined_data(include_produced=True)
@@ -2111,13 +1996,7 @@ def test_produced_is_returned_only_on_request():
 
 
 def test_the_prepared_frame_has_a_deterministic_row_order():
-    """The loader queries carry no ORDER BY, so the order was the scan order.
-
-    Everything statistical is order-invariant, but the fit manifest records an
-    exact hash of the prepared frame precisely so a stale posterior can be told
-    from a current one — and a hash over a nondeterministic order cannot be
-    recomputed for validation (issue #266 finding 1).
-    """
+    """Use a canonical row order so the prepared-frame hash can be recomputed."""
     first = data_utils.load_combined_data()
     second = data_utils.load_combined_data()
     pd.testing.assert_frame_equal(first, second)
@@ -2148,18 +2027,10 @@ def _insert_us03(con, rows):
 def test_us03_expressive_cell_is_a_produced_union_not_a_spoken_count(
     tmp_path, monkeypatch
 ):
-    """`under_say_tot` counts words the child understands and says **or signs**.
+    """Map under_say_tot to words spoken or signed, rather than spoken alone.
 
-    Confirmed by the data providers, against a source document that described it
-    as speech-only and an upstream column still named `spoken`. The two
-    modalities are not separable -- one number, unlike the exclusive cells nz_01
-    and uk_07 carry -- so no spoken marginal exists to recover.
-
-    This is the test that stops the union being read as speech. Doing so would
-    put a produced count into `q = S/U`, the headline estimand of VG10, VG16,
-    VG19, VG20 and VG22, for 254 of about 1,400 Down syndrome spoken
-    observations -- and it would read as an ordinary number, because a produced
-    union is exactly the shape a spoken count is.
+    The source records a union without separate modality counts. Spoken and
+    signed marginals therefore remain missing, rather than being guessed.
     """
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
@@ -2187,10 +2058,9 @@ def test_us03_expressive_cell_is_a_produced_union_not_a_spoken_count(
 def test_us03_older_subsample_is_dropped_by_default_and_reinstatable(
     tmp_path, monkeypatch
 ):
-    """The 62-80 month children come out; the flag puts them back.
+    """Exclude the named older subsample because its form provenance is unresolved.
 
-    They are excluded because `survey_vocab_max` is not established for them, not
-    because they are old -- see `STRUCTURALLY_DISTINCT_SUBSAMPLES`.
+    The rule can be lifted for sensitivity analysis.
     """
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
@@ -2219,12 +2089,10 @@ def test_us03_older_subsample_is_dropped_by_default_and_reinstatable(
 def test_the_subsample_rule_does_not_drop_older_children_from_other_studies(
     tmp_path, monkeypatch
 ):
-    """The criterion is provenance, not age, and this is what keeps it honest.
+    """Apply the subsample exclusion only to its named source.
 
-    The Down syndrome pool deliberately admits an early-vocabulary form given to
-    an older child. A rule keyed on age alone would take `us_01`'s only
-    comprehension observations between 19 and 27 months with it, and would keep
-    taking more as older cohorts arrive.
+    Other Down syndrome sources can retain early-vocabulary forms used with
+    older children.
     """
     db_path = _create_vocab_db(tmp_path)
     with duckdb.connect(str(db_path)) as con:
@@ -2241,5 +2109,5 @@ def test_the_subsample_rule_does_not_drop_older_children_from_other_studies(
 
 
 def test_the_subsample_bound_sits_in_the_gap_the_source_documents():
-    """35 months separates us_03's two groups; nothing legitimate is near it."""
+    """Keep the source-specific boundary at the documented gap between groups."""
     assert data_utils.STRUCTURALLY_DISTINCT_SUBSAMPLES["us_03"] == 35.0

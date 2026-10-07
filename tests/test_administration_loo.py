@@ -1,26 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Leave-one-administration-out, as the reports have always claimed.
+"""Combine likelihood factors into one score per administration.
 
-Issue #266 finding 4. The multi-outcome engines computed a PSIS-LOO per
-*outcome* while the reports described the predictive unit as a complete
-administration, and the two differ in a way that flatters the model: the spoken
-likelihood's trial count is the same row's observed comprehension, so holding
-out a spoken term scores prediction conditional on that comprehension, and
-holding out a comprehension term leaves its own value in the spoken term's
-denominator. A paired administration also became two held-out cases with two
-importance weights.
+Outcome-level scores and administration-level scores answer different
+prediction questions. For a paired row, the spoken likelihood conditions on
+the observed understood count. Holding out one outcome term therefore does
+not hold out the whole administration.
 
-The combined score sums every factor belonging to one row of the frame. The
-arithmetic is small; what it depends on is the ``obs_*_mask`` constant data
-mapping each factor's likelihood rows back to administration rows, which is why
-finding 3's mask defect had to be fixed first -- a mask marking recorded rows
-rather than likelihood rows would sum the wrong factors onto the wrong
-administrations, silently and plausibly.
-
-These tests are on synthetic traces, so the arithmetic is checked against values
-computed by hand rather than against a fit nobody can reproduce.
+The combined score sums all factors for each frame row. Stored masks must map
+likelihood rows, rather than all recorded rows, back to those administrations.
+Synthetic traces make the expected sums explicit.
 """
 
 from __future__ import annotations
@@ -77,7 +67,6 @@ def _trace(masks: dict[str, np.ndarray], factors: dict[str, xr.DataArray]) -> _T
 
 
 def test_a_paired_administration_becomes_one_case_not_two():
-    """The defect, stated as the property that was violated."""
     # Four administrations: rows 0 and 2 paired, row 1 understood-only, row 3
     # spoken-only.
     u_mask = np.array([True, True, True, False])
@@ -169,12 +158,7 @@ def test_every_chain_and_draw_is_combined_independently():
 
 
 def test_a_mask_that_does_not_match_its_factor_raises():
-    """Finding 3's defect, in the place it would do the most damage.
-
-    A mask marking recorded rows rather than likelihood rows would map factors
-    onto the wrong administrations. That must fail loudly, not produce a
-    plausible number.
-    """
+    """Reject a mask whose selected rows do not match the likelihood length."""
     u_mask = np.array([True, True, True])
     s_mask = np.array([True, True, True])  # claims 3 rows
     with pytest.raises(ValueError, match="finding 3"):
@@ -192,7 +176,7 @@ def test_a_mask_that_does_not_match_its_factor_raises():
 
 @pytest.mark.parametrize("missing", ["y_s_obs", "obs_s_mask"])
 def test_a_missing_factor_or_mask_yields_nothing_rather_than_a_partial_score(missing):
-    """A partial sum would be a different estimand wearing the same label."""
+    """Do not report an administration score with a missing declared factor."""
     masks = {"obs_u_mask": np.array([True]), "obs_s_mask": np.array([True])}
     factors = {
         "y_u_obs": _factor([[[-1.0]]], "obs_u_id"),
@@ -288,7 +272,7 @@ def test_every_multi_outcome_engine_declares_its_factors():
 
 
 def test_the_single_outcome_engine_needs_no_combination():
-    """One likelihood term over administration rows already IS the unit."""
+    """A single outcome already has one likelihood term per administration."""
     import inspect
 
     from vocab_growth.models import common
@@ -298,14 +282,7 @@ def test_the_single_outcome_engine_needs_no_combination():
 
 
 def test_the_total_log_likelihood_is_conserved():
-    """The sharpest invariant: regrouping terms must not change their sum.
-
-    Verified on a real 2-chain VG10 fit while this was written -- 96 per-outcome
-    terms collapsing to 48 administration cases with a maximum absolute
-    difference of 0.0 -- and pinned here on synthetic values so it runs
-    everywhere. A combination that dropped, duplicated or misplaced a factor
-    would break it.
-    """
+    """Regrouping factors must preserve total log likelihood for every draw."""
     rng = np.random.default_rng(3)
     n = 12
     u_mask = rng.random(n) < 0.8
@@ -325,15 +302,10 @@ def test_the_total_log_likelihood_is_conserved():
 
 
 def test_an_impossible_observation_survives_but_a_missing_one_does_not():
-    """``-inf`` is a value; ``NaN`` is an absence wearing one.
+    """Preserve zero-probability observations and reject undefined scores.
 
-    An administration the model gives zero probability has log likelihood
-    ``-inf``, and its case score must stay ``-inf`` rather than being dropped
-    or clipped -- PSIS-LOO reads that as the pointwise term it is. A ``NaN``
-    among the draws means something upstream failed, and summing it produces a
-    score that is quietly missing for that case while still being tabulated.
-    Both come from the shared aggregator; both are checked here because both
-    reach `loo_summary.csv`.
+    A log likelihood of ``-inf`` records zero probability under the model.
+    ``NaN`` is undefined and must raise rather than enter a reported score.
     """
     masks = {"obs_u_mask": np.array([True, True]), "obs_s_mask": np.array([True, True])}
 
@@ -363,12 +335,7 @@ def test_an_impossible_observation_survives_but_a_missing_one_does_not():
 
 
 def test_one_array_declared_as_two_factors_is_refused():
-    """Double counting looks exactly like a well-behaved score.
-
-    Two `LikelihoodFactor` entries naming the same trace variable would sum it
-    onto the same administrations twice and produce a total that is simply
-    wrong, with nothing in the result to show it.
-    """
+    """Reject duplicate trace variables to prevent double counting."""
     masks = {"obs_u_mask": np.array([True, True]), "obs_s_mask": np.array([True, True])}
     factors = {"y_u_obs": _factor([[[-1.0, -2.0]]], "obs_u_id")}
     with pytest.raises(ValueError, match="more than once"):

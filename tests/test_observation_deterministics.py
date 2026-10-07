@@ -1,20 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The sampler does not store the observation-sized deterministics.
+"""Check omission and reconstruction of observation-sized deterministics.
 
-Since 2026-08-23 the engines' ``sample`` stage passes ``var_names`` from
-``fit_artifacts.sampled_variable_names`` to ``pm.sample``, so nutpie never
-evaluates or stores ``f_obs``/``p_obs``/``kappa_obs``, their per-outcome
-counterparts or the concatenated ``*_all`` grids — the variables that made fit
-memory scale as ``n_obs x draws``. These tests pin what that must and must not
-change: which names are excluded (a pure rule on dimensions), that the graph and
-therefore the draws are untouched, that the trace and the manifest record what
-was left out, and that ``posterior_recompute.with_deterministics`` rebuilds an
-excluded variable exactly from the stored free parameters.
-
-The end-to-end tests build the real VG07 model on synthetic data and sample it
-with nutpie for a handful of draws; the point is exactness, not convergence.
+The sampling variable list reduces stored outputs without changing the log
+probability graph. Check excluded names, trace metadata and exact reconstruction
+from stored parameters. Two small VG07 fits compare free-parameter draws; their
+purpose is equivalence, not convergence.
 """
 
 import ast
@@ -58,17 +50,9 @@ from vocab_growth.posterior_recompute import (
     with_deterministics,
 )
 
-# The `two_fits` fixture is two real nutpie fits of the same model, which is the
-# only way to show the draws are unchanged. Minutes, not seconds, so every test
-# that draws it is marked `slow` and deselected unless `-m "slow or not slow"`
-# asks for it.
-#
-# The rule tests above it are pure -- a toy graph, the sample structs' declared
-# fields, and an AST walk over the engine sources -- and are deliberately *not*
-# marked, so they run in the fast job. Until issue #273 a module-level
-# `pytestmark` made the whole file slow, which is why the struct contract that
-# should have caught VG14's `g_sign_obs` and `r_obs` was not running on any
-# pull request even after it was extended.
+# Only tests that use the two-fit fixture are slow. The source and rule checks
+# remain in the fast set.
+
 _slow = pytest.mark.slow
 
 #: Not a selection mark -- the per-test `_slow` above is still what decides which
@@ -126,17 +110,9 @@ def test_sampled_names_keep_every_free_rv_and_the_other_deterministics():
     [ModelSamples, BivariateModelSamples, TrivariateModelSamples, JointModelSamples],
 )
 def test_sample_structs_carry_no_observation_level_posterior(struct):
-    # Nothing read these fields; the extractors no longer populate them, so the
-    # structs must not declare them either (a declared field would make the
-    # extractor's omission a construction error).
-    #
-    # `g_sign_obs` and `r_obs` were the two that survived the 2026-08-23 sweep:
-    # VG14 alone carries them, they were not in this list, and a fresh default
-    # VG14 fit therefore raised KeyError in `extract_model_samples` after
-    # posterior-predictive sampling -- hours into a fit, on a model no CI job
-    # samples (issue #273). The general rule is pinned by
-    # `test_no_extractor_reads_an_observation_dimensioned_posterior` below;
-    # this list is the readable statement of it.
+    # These observation-sized fields are omitted by the sampler and must not be
+# required by the sample containers.
+
     names = {f.name for f in dc_fields(struct)}
     forbidden = {
         "X_obs_z", "f_obs", "p_obs", "f_u_obs", "p_u_obs", "h_obs", "q_obs",
@@ -150,16 +126,8 @@ def test_sample_structs_carry_no_observation_level_posterior(struct):
         assert "X_obs" in names
 
 
-#: Fields that were declared, populated from the trace and then read by nothing --
-#: removed in the readability sweep of 2026-08-31. Listed rather than left to a
-#: reviewer's grep because the cost of re-adding one is invisible: the field
-#: compiles, the extractor fills it, and the only symptom is a slightly larger
-#: read of a trace nobody consults. ``obs_sign_mask`` and ``prod_cell_ages`` are
-#: here for a slightly different reason: they were unread as *fields*, and their
-#: local extractions went too once the code that used them moved -- the sign mask's
-#: #67 alignment check into `posterior_analysis.expand_observed_to_obs_id`, which
-#: reads the mask itself, and the produced-cell ages out of
-#: `_extract_produced_cell_observations`, which never had a reader.
+#: Former sample fields with no consumer. Reintroduce one only with its reader.
+
 _REMOVED_UNREAD_SAMPLE_FIELDS = {
     "X_plot_z", "X_query_z", "f_query",
     "f_u_query", "f_s_query", "h_plot", "h_query",
@@ -173,13 +141,9 @@ _REMOVED_UNREAD_SAMPLE_FIELDS = {
     [ModelSamples, BivariateModelSamples, TrivariateModelSamples, JointModelSamples],
 )
 def test_sample_structs_do_not_reintroduce_an_unread_field(struct):
-    """No samples struct re-declares a field that nothing reads.
+    """Keep unused trace fields out of sample containers.
 
-    Companion to the observation-level rule above, on the same principle: a
-    declared field obliges the extractor to populate it, so an unread one is a
-    trace read and a construction argument bought for nothing. If a field on this
-    list becomes genuinely needed, remove it here in the same change that adds the
-    consumer -- the point is that the consumer has to exist.
+    If a field becomes necessary, update this guard alongside its consumer.
     """
     names = {f.name for f in dc_fields(struct)}
     assert not names & _REMOVED_UNREAD_SAMPLE_FIELDS
@@ -196,19 +160,10 @@ _ENGINE_MODULES = sorted(
 
 @pytest.mark.parametrize("module_name", _ENGINE_MODULES)
 def test_no_extractor_reads_an_observation_dimensioned_posterior(module_name):
-    """No engine may read back a deterministic the sampler was told to skip.
+    """Reject posterior reads of dimensions omitted by the sampler.
 
-    The rule is on the *dimension*, so this is checked as a rule rather than as
-    a list of names: any ``extract_posterior(trace, <name>, "obs_id")`` reads
-    ``trace.posterior[<name>]`` for a variable ``pm.sample`` never stored, and
-    raises ``KeyError`` -- after sampling and after posterior prediction, which
-    on a reporting fit is hours in. Read from the source rather than from a fit,
-    so it costs nothing and covers every engine including the ones no CI job
-    samples.
-
-    ``posterior_predictive`` is a different group and is stored in full, so
-    ``extract_posterior_predictive`` on ``obs_id`` is fine and is not matched
-    here.
+    Posterior predictive variables belong to a separate group and are not covered
+    by this posterior-only check.
     """
     tree = ast.parse(
         (Path(inspect.getfile(importlib.import_module(module_name)))).read_text(

@@ -1,7 +1,7 @@
 <!--
 Shared data-access helpers for the report's findings and reference chapters.
-Included via {{< include _report_data.qmd >}} so every chapter reads fitted
-output the same way and no number is hand-entered. Reads from docs/report/figures/
+Revised with assistance from OpenAI Codex/GPT-6.
+Included via {{< include _report_data.qmd >}} so chapters share these readers. Reads from docs/report/figures/
 (the curated, model-by-model figure + summary store), keyed by <MODEL_ID>-<config_name>
 derived from definitions.py so paths cannot drift from the code.
 -->
@@ -82,9 +82,9 @@ def recovery_rows(model_id, quantity):
     """One row per recovery replicate for `quantity`, or None if unavailable.
 
     Replicate files are `comparisons/recovery/recovery_<model>_rNN.csv`; each
-    scores one simulate-and-refit against the draw it was simulated from. The
-    caveats that cite these want the replicates side by side, not aggregated,
-    because a bias claim rests on the direction repeating.
+    scores one simulate-and-refit against the draw it was simulated from.
+    Keep replicates separate to show variation in recovery. A few errors in
+    the same direction do not establish bias or interval coverage.
     """
     root = COMP_ROOT / "recovery"
     if not root.is_dir():
@@ -120,19 +120,7 @@ def words(model_id, summary, age_months, column="Ey_median"):
     return "—" if v is None else f"{round(v):d}"
 
 
-# --- Matched-comprehension Δq contrast --------------------------------------
-#
-# The findings chapter's headline contrast used to quote its window, peak and
-# direction as hand-typed prose. Those numbers silently outlived the fits that
-# produced them (they were written against an 800-item denominator and a
-# marginal spoken likelihood, and by the current fits both the credible window
-# and the *sign of the trend* had changed). Everything the prose asserts about
-# this contrast is now derived from the written table via
-# vocab_growth.comparison.dq_contrast_facts — the same coverage filter the
-# chapter tabulates — so it cannot restate a superseded fit. The derivation
-# lives in the package (and is unit-tested) rather than here.
-
-
+# Derive contrast summaries from the same coverage-filtered table the report uses.
 def dq_facts(name="ds_td_comprehension_q_at_U", **kwargs):
     """Derived facts about Δq = q_TD − q_DS at matched comprehension, or None."""
     from vocab_growth.comparison import dq_contrast_facts
@@ -140,15 +128,7 @@ def dq_facts(name="ds_td_comprehension_q_at_U", **kwargs):
     return dq_contrast_facts(comp_load(name), **kwargs)
 
 
-# --- Generic derived facts over any comparison table -------------------------
-#
-# `dq_contrast_facts` is not specific to Δq: it takes the grid column and the
-# column prefix, coverage-filters, and reports the covered range, the credible
-# sub-ranges, the signed peak and whether the quantity rises with the grid. The
-# results chapters use it for every level- and age-indexed contrast, so a
-# direction word ("grows", "behind", "narrows") is always read off the same
-# filtered table the chapter tabulates and can never disagree with it.
-
+# Reuse the contrast helper for other grids and column prefixes.
 # Column names `summarise_draws` writes with no prefix (the attainment-delay
 # tables), mapped onto a prefix so the shared helper can read them.
 _BARE_COLS = ("median", "ci50_lo", "ci50_hi",
@@ -359,7 +339,7 @@ def dq_trend():
 
 
 # Columns to surface, in order, when present (posterior_summary_*.csv schema:
-# age_months; Ey_* = expected count, typical child; Y_* = predictive, individual;
+# age_months; Ey_* = reference expected count; Y_* = predictive count;
 # ci50_* = inner 50% interval, ci_* = outer 89% interval).
 # The engines report a median with a 50% and an 89% equal-tailed interval
 # (ReportingConfiguration ci_prob=0.89, interval_kind="eti"; see vocab_growth.intervals).
@@ -409,8 +389,8 @@ def psi_evidence(model_id="VG15"):
     from dse_research_utils.statistics.evidence import evidence_label, odds_string
 
     p = float(df["P_psi_gt_1"].iloc[0])
-    # When every draw clears the reference the literal odds are absurd (e.g.
-    # "1000000000:1"); cap the display at the point it stops being informative.
+    # No sampled draw in the opposite tail does not establish zero tail probability.
+    # Cap displayed odds rather than treating the finite sample as certainty.
     odds = ">999:1" if p >= 0.999 else odds_string(p)
     return p, odds, evidence_label(p)
 

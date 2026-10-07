@@ -8,11 +8,8 @@ format:
   html:
     code-fold: true
     theme: cosmo
-    # Noto Sans for text, Noto Sans Mono for code and Noto Sans Math for
-    # equations. The style below sets the code font because the theme's code
-    # rules ignore Quarto's `monofont`. MathML rather than MathJax, whose own
-    # math fonts cannot be replaced: the browser typesets MathML with the font
-    # named below, using its OpenType MATH table.
+    # Set Noto fonts for text, code and native MathML equations.
+    # CSS sets code and maths fonts explicitly for the HTML theme.
     mainfont: "Noto Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
     html-math-method: mathml
     include-in-header:
@@ -28,10 +25,7 @@ format:
     toc: true
     toc-depth: 2
     code-links:
-      # Explicit href rather than `- repo`, for the reason recorded on VG20's
-      # page: the per-model reports render in the OUTPUT directory, which is a
-      # symlink to a scratch volume with no repository above it, so Quarto's
-      # `repo` resolution became a hard render error.
+      # An absolute link also works when reports render outside the checkout.
       - text: GitHub Repo
         icon: github
         href: https://github.com/dseinternational/vocabulary-growth/

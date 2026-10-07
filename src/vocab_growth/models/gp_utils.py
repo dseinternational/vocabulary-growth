@@ -1,44 +1,14 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""PyMC-graph build helpers shared across the model engines.
+"""PyMC builders for age trends, smooth corrections and random effects.
 
-This module holds helpers that emit PyMC ops (as opposed to the pure-NumPy
-helpers in :mod:`vocab_growth.models.build_utils`). It is deliberately kept
-separate so the pure module stays ``pymc``-free.
+Two-anchor logit trends and three-anchor signing trends share an HSGP builder.
+Dispersion uses a positive floor plus an exponential age term, with priors
+on its intercept and slope or on excesses at two reference ages.
+Child builders implement intercepts, slopes, factors and age-varying scales.
 
-It provides :func:`make_kappa_of_z`, the age-varying dispersion
-closure factory. The factory takes random variables the caller has already
-created (in the caller's own order) and returns a closure whose body is
-byte-identical to the ``kappa_of_z`` closures previously inlined in every engine,
-so it moves no random-variable creation and cannot change the model graph.
-
-Two builders wrap it, differing only in how the same curve is parameterised:
-:func:`build_kappa_of_z` (a free intercept and a sign-constrained slope) and
-:func:`build_kappa_of_z_anchored` (priors on the age term at two reference ages,
-from which the intercept and slope are derived). Models migrate one at a time;
-see :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams`.
-
-It also provides the mean + HSGP constructions shared by every engine. They differ
-only in the mean term and share the HSGP tail through :func:`_gp_from_mean`:
-:func:`trend_and_gp` (a logit-linear age trend, anchored at two reference ages —
-every understood and production-ratio trajectory in the family) and
-:func:`tent_and_gp` (three anchors interpolated as a tent meeting at a peak, used
-for the signed ratio by VG14 and VG15, where a free age slope would extrapolate
-the ratio below the data floor; it replaced an intercept-only builder in #154).
-Because these carry the sole RNG-bearing call (``hsgp.prior()``), they are
-parameterised (``suffix``, ``store_deterministic``, ``latent_name``,
-``anchor_idx``, ``grid``) so each engine reproduces its previous PyMC graph
-byte-for-byte (same free RVs, in the same order, with the same names and
-``logp``); the named-``Deterministic`` differences between engines change only
-what is stored in the trace, not the sampled distribution.
-
-Child-effect and variance builders live here too, and are tabulated by structure
-in :mod:`vocab_growth.models.subject_effects`, which resolves *which* structure a
-definition selects but holds none of the builders: :func:`build_child_factor`
-(VG22's low-rank factor), :func:`build_child_slope` (VG19's per-child slope),
-:func:`build_subject_scale_of_z` (Proposal A1's age-varying scale) and
-:func:`build_variance_partition` (the shared subject/dispersion budget).
+Pure NumPy grid and validation helpers live in build_utils.
 """
 
 from __future__ import annotations
@@ -71,16 +41,10 @@ def make_kappa_of_z(kappa_min, a_kappa, b_kappa):
 
 
 def build_kappa_of_z(kappa_min_dist, a_kappa_dist, b_kappa_mag_dist, suffix=""):
-    """Create the kappa RVs and return the age-varying dispersion closure.
+    """Create the legacy floor, intercept and negative-slope priors.
 
-    Mechanical extraction of the identical four-line block every engine
-    repeats once per outcome: ``kappa_min{suffix}``, ``a_kappa{suffix}`` and
-    ``b_kappa_mag{suffix}`` are created via ``to_pymc`` (in that order), then
-    ``b_kappa{suffix} = -b_kappa_mag{suffix}`` is stored as a named
-    ``Deterministic``, and the two feed :func:`make_kappa_of_z`. Because the
-    op order and names are unchanged from the inlined form, this moves no
-    random-variable creation and cannot change the model graph (same
-    contract as :func:`make_kappa_of_z`, which it wraps).
+    The named b_kappa deterministic is -b_kappa_mag. Return the concentration
+    function built by make_kappa_of_z.
     """
     kappa_min = kappa_min_dist.to_pymc(f"kappa_min{suffix}")
     a_kappa = a_kappa_dist.to_pymc(f"a_kappa{suffix}")
@@ -446,60 +410,25 @@ def build_kappa_of_z_anchored(
     excess_young_value=None,
     hold_constant=False,
 ):
-    """Create the two-anchor kappa RVs and return the dispersion closure.
+    """Create concentration priors at two ages and return the age function.
 
-    The two-anchor counterpart of :func:`build_kappa_of_z`. Instead of free
-    ``a_kappa`` / ``b_kappa_mag``, the *age term* ``exp(a_kappa + b_kappa z)`` is
-    given priors at two standardised reference ages ``anchor_z = (z_young,
-    z_old)``, and the intercept and slope are solved for:
+    For positive excesses e_young and e_old at standardised ages::
 
         b_kappa = (log e_old - log e_young) / (z_old - z_young)
         a_kappa = log e_young - b_kappa * z_young
 
-    so that ``kappa(z_young) = kappa_min + e_young`` and ``kappa(z_old) =
-    kappa_min + e_old`` exactly. See
-    :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams` for why the
-    reparameterisation is worth making.
+    The concentration totals are kappa_min + e at each anchor. The floor remains
+    a lower bound at all ages; the slope can have either sign. Stored a_kappa and
+    b_kappa retain the legacy names but are derived from the anchors.
 
-    **Only the anchor totals are estimands.** The split of each total into
-    ``kappa_min`` plus an excess is not identified: parameter recovery scores
-    ``kappa_min`` at -60.1%, -55.7%, -53.9% (VG10) and ``kappa_excess_old_s`` at
-    +263%, +155%, +112% (VG20), while ``kappa_old_u`` and ``kappa_old_s`` --
-    the sums containing them -- come back within a few percent on the same
-    fits. The floor's *share* of reported kappa carries an 89% interval of
-    [13.2%, 78.3%] on comprehension at 84 months and [21.0%, 99.8%] on the
-    nested spoken scale. So ``kappa_min``, ``kappa_excess_young`` and
-    ``kappa_excess_old`` are sampling coordinates; report and interpret
-    ``kappa`` at an age, never a component, and never a trend in one.
+    Report concentration at an age. Separating the floor from the excess can be
+    weakly informed even when their sum is more stable. Recovery and sensitivity
+    results in notes/202608191800-kappa-components-not-estimands.md apply to the
+    tested fits and do not certify later fits.
 
-    The totals themselves are data-driven. Re-centring the ``kappa_min`` prior
-    from a median of 3.0 to the conditionally calibrated 7.8 -- a 160% move --
-    shifts reported kappa by 14.2% at 84 months and 6.6% at 72 on
-    comprehension, an elasticity of 0.09 and 0.04, and the 89% intervals
-    overlap throughout. See ``notes/202608191800-kappa-components-not-estimands.md``.
-
-    ``a_kappa{suffix}`` and ``b_kappa{suffix}`` are still stored as named
-    ``Deterministic``\\ s, under the same names the legacy form gives them, so a
-    migrated model's dispersion posterior stays directly comparable with the
-    fits that preceded it — ``a_kappa`` is a derived quantity here and a free RV
-    there, but it is the same quantity in both. ``kappa_young{suffix}`` and
-    ``kappa_old{suffix}`` carry *total* kappa at the two anchors, which is what a
-    per-age empirical estimate can be checked against.
-
-    The three free RVs are the asymptote and the two anchors. No prior is placed
-    on the slope at all: its sign is whatever the two anchors imply, so a rising
-    dispersion trajectory is representable (the legacy form's ``b_kappa =
-    -b_kappa_mag <= 0`` is not). When it does rise, ``kappa_min`` is the
-    *young*-age asymptote rather than an old-age floor — the exponential term
-    vanishes at whichever end the slope points away from.
-
-    ``hold_constant`` pins ``b_kappa`` to exactly zero, so dispersion is flat in
-    age with its *level* still free (``kappa_min + excess_young``). It exists for
-    Proposal A1, which *moves* the age variation onto the between-child scale
-    rather than adding it there, and it drops ``excess_old_dist`` — there is no
-    old anchor left to place a prior on. Every name the anchored form emits is
-    still emitted, with ``kappa_old`` equal to ``kappa_young`` by construction,
-    so a flat-kappa fit stays directly comparable with the fits around it.
+    hold_constant sets the slope to zero and omits the old-excess prior. The
+    young total supplies the constant level. excess_young_value can instead supply
+    the young excess from a variance partition and replaces its independent prior.
     """
     z_young, z_old = (float(anchor_z[0]), float(anchor_z[1]))
     if not z_old > z_young:
@@ -787,40 +716,17 @@ def tent_and_gp(
 
 
 def _orthogonalise_and_anchor(g_unit, nuisance_basis, n_obs, anchor_idx, *, ridge=1e-6):
-    """Project the GP out of the mean's identifiable basis, then point-anchor it.
+    """Project the GP away from the mean basis, then set its reference value to zero.
 
-    ``nuisance_basis`` is the ``(n_all, k)`` design whose columns span the mean term
-    the GP would otherwise alias with (``[1, z]`` for the logit-linear trend, ``[1]``
-    for the free-intercept mean, the three tent hats for the peak mean). Two
-    properties matter, and both are enforced here:
+    Projection coefficients use the first n_obs rows and are applied to the full
+    evaluation grid. Plot and query ages therefore do not set the projection.
+    The nuisance basis must use the mean's actual coordinates, including the
+    effective age under a clamp.
 
-    * **Inference must not depend on the reporting grid.** ``X_all_z`` stacks the
-      observations with plot points, query ages and the anchor row; the projection
-      coefficients are therefore fitted on the first ``n_obs`` *observed* rows only
-      (a fixed model design), then applied to every row. Changing ``n_plot`` /
-      ``ages_query`` cannot move the observed-row latent, so it cannot move the
-      likelihood or posterior.
-    * **The reference-age anchor contract is preserved.** After removing the
-      identifiable directions, the residual is shifted so it is exactly zero at
-      ``anchor_idx`` — every posterior draw still passes through zero at the
-      reference age, fixing the GP level against the mean (the reference age is a
-      deliberate model choice, unlike the plot/query grids). The linear/tent
-      directions removed above are the additional decoupling that stops the GP
-      aliasing with ``slope`` / the anchors.
-
-    The two steps do **not** compose into full-basis orthogonality, and this
-    docstring must not claim they do (#240): subtracting ``g[anchor_idx]``
-    restores a constant component that is generically nonzero over the observed
-    rows, so the result is not orthogonal to the constant direction — nor, for
-    the tent basis, to any individual hat except up to that shared constant.
-    What survives exactly is the centred orthogonality (``z`` is standardised
-    over the observed rows, so orthogonality to it is constant-invariant and the
-    GP still carries no linear component there) and the point anchor, which is
-    what fixes the level. No graph-identification failure follows: the constant
-    direction is pinned by the anchor rather than projected away.
-
-    A tiny ridge stabilises the normal-equations solve if a basis column is empty
-    over the observed rows (e.g. a tent hat with no observations in its support).
+    Subtracting the reference-row value enforces the point anchor but restores a
+    constant component. The result is generally not orthogonal to every basis
+    column. A small ridge stabilises the normal-equations solve and makes the
+    projection itself approximate. The point anchor remains exact.
     """
     B = nuisance_basis
     B_obs = B[:n_obs]
@@ -845,32 +751,22 @@ def _gp_from_mean(
     n_obs=None,
     nuisance_basis=None,
 ):
-    """Shared HSGP tail: build ell/eta/HSGP, sample ``g_unit``, combine with the mean.
+    """Build the HSGP correction and combine it with the supplied mean.
 
-    Factored out of :func:`trend_and_gp` / :func:`tent_and_gp` so the mean builders
-    differ only in their mean term. ``ell_unit`` and ``eta`` are created after the
-    mean term and before the single RNG-bearing ``hsgp.prior`` call, so the free-RV
-    stream is identical across engines. When ``anchor_idx`` is set the GP is
-    orthogonalised against ``nuisance_basis`` and pinned to zero at the reference
-    row by :func:`_orthogonalise_and_anchor` (deterministic ops only — no new RVs).
+    The helper creates length-scale and amplitude variables under the supplied
+    names. An optional fixed length scale or omitted GP changes that prior.
+    When configured, _orthogonalise_and_anchor removes mean-like components and
+    sets the correction to zero at the reference row.
     """
     if cfg_eta is None:
-        # No GP at all: the mean carries the whole latent. For an outcome whose GP
-        # hyperparameters are unidentifiable, sampling them adds prior-driven
-        # spread to the reported band without adding information -- VG15's signed
-        # GP contributes a posterior-median curve of at most 0.11 logits (7% of the
-        # tent's range) while injecting a per-age posterior sd of 0.269, six times
-        # larger. Dropping it makes a trajectory that is already parametric in
-        # substance parametric in form, and says so.
+        # Without a GP, the supplied mean defines the whole latent curve.
         if store_deterministic:
             return pm.Deterministic(latent_name, mean_trend, dims=("all_id",))
         return mean_trend
 
     if isinstance(cfg_ell, (int, float)):
-        # Fixed length-scale on the unit scale. Keeps the GP's flexibility while
-        # removing a hyperparameter the data cannot inform (VG15's `ell_unit_sign`
-        # reaches contraction 0.033). Still stored under its usual name so
-        # downstream readers do not need to know which branch produced it.
+        # Keep the usual trace name so readers can handle fixed and sampled
+        # length scales through the same interface.
         ell_unit = pm.Deterministic(f"ell_unit{suffix}", pt.as_tensor_variable(float(cfg_ell)))
     else:
         ell_unit = cfg_ell.to_pymc(f"ell_unit{suffix}")
@@ -880,27 +776,15 @@ def _gp_from_mean(
     eta = cfg_eta.to_pymc(f"eta{suffix}")
     cov = pm.gp.cov.ExpQuad(1, ls=ell)
     if grid.x_center_z is not None:
-        # The realised geometry, as three saved scalars: basis count, domain
-        # half-width, and the centre the basis is built about. Handing them to
-        # `create_hsgp` (shared library 0.14.0) pins the centre through a public
-        # PyMC call on the centre alone, before any query row enters the object.
-        #
-        # It replaces an assignment to the private `_X_center`. PyMC (6.3.1)
-        # exposes no constructor argument for the centre and sets it lazily from
-        # the min/max of the X passed to `prior`, guarded by a None check
-        # (pymc/gp/hsgp_approx.py), so the reporting grid would otherwise move
-        # the approximation. The pinned value is identical either way -- for a
-        # single row, `(max + min) / 2` is that row -- and a regression test
-        # against the locked PyMC version checks the resulting basis.
+        # Pin the basis centre before query rows enter the HSGP. Otherwise,
+        # PyMC derives its centre from the query range, so a reporting grid can
+        # change the approximation. create_hsgp uses a public PyMC call.
         hsgp = create_hsgp(
             HSGPDesign(m=grid.M[0], L=grid.L[0], center=float(grid.x_center_z)),
             cov_func=cov,
         )
     else:
-        # No declared centre: PyMC's own, taken from the query rows. Only the
-        # exploratory modules and the experiment arms that deliberately test
-        # that default reach this branch; every registered engine builds its
-        # grid through `GPGrid.from_age_grids`, which sets one.
+        # Without a declared centre, PyMC derives one from the query rows.
         hsgp = pm.gp.HSGP(cov_func=cov, m=grid.M, L=grid.L)
     g_unit = hsgp.prior(f"g_unit{suffix}", X=X_all_z_data, dims="all_id")
     if anchor_idx is not None:

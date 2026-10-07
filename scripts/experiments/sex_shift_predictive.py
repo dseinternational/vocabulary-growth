@@ -12,9 +12,10 @@ against the fit's own stored predictive quantiles and threshold probabilities,
 then applies a girl/boy shift on the logit scale, girls up by half the
 difference and boys down by half, and reports what moves.
 
-Parameter uncertainty is dropped (posterior medians are used), which is small
-next to the child spread and count noise that dominate these intervals. The
-shift sizes are the descriptive estimates from
+The calculation uses separate posterior medians and omits parameter uncertainty.
+Agreement with stored predictive summaries checks this approximation at the
+selected ages; it does not establish that the omitted uncertainty is negligible.
+The shift sizes are descriptive estimates from
 ``scripts/experiments/sex_effect_by_study.py``, not fitted quantities.
 
 Writes ``<output-root>/comparisons/sex-effect/sex_shift_predictive.csv``,

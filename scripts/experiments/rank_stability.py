@@ -3,11 +3,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Do children keep their relative vocabulary standing over time?
 
-Developmental **tracking**: if a child is ahead of others their age at one
-assessment, are they still ahead later? The repeated-measures structure answers
-this directly, and no fitted model can — VG08-VG10 give each child a *constant*
-random intercept, which assumes perfect tracking by construction and therefore
-cannot test it.
+Developmental tracking asks whether a child who is ahead of peers at one visit
+stays ahead later. Repeated measures can test that association. VG08-VG10 use
+constant child offsets, so those offsets cannot describe changes in standing;
+models with child slopes or changing effects can address a different structure.
 
 Method
 ------
@@ -139,13 +138,10 @@ def icc(d: pd.DataFrame, key: str = "child") -> float:
 
 
 def icc_ci(d: pd.DataFrame, n_boot: int) -> tuple[float, float]:
-    """Cluster bootstrap CI for the ICC.
+    """Bootstrap the ICC over children, rebuilding the score adjustment each time.
 
-    A child drawn twice must count twice, so each draw gets a fresh key. An
-    earlier version subset the frame with ``isin(unique())``, which silently
-    dropped the duplicates and sampled WITHOUT replacement -- it returned
-    intervals that did not contain their own point estimate, which is how the
-    error was caught.
+    Give each sampled child a fresh key so a child drawn twice contributes two
+    blocks. Selecting only unique keys would discard bootstrap multiplicities.
     """
     if not d.groupby("child").size().ge(2).any():
         return (np.nan, np.nan)
@@ -316,13 +312,12 @@ def _neg_loglik(blocks, centre, tau0, tau1, rho01, sigma_occ, ell=None, tau_tran
 
 
 def fit_child_structure(blocks, centre, *, slope=True, fix_rho=None):
-    """Maximum-likelihood fit of one child structure. Returns ``(params, negll)``.
+    """Fit one child covariance structure and return ``(params, negll)``.
 
-    ``slope=False`` is the constant-intercept baseline the models of record
-    carry; ``fix_rho=1.0`` is Proposal A1 (one deviate scaled by an age function
-    is a rank-one covariance, i.e. perfect rank correlation). Several starting
-    values are tried because the slope scale is small and the surface is flat
-    near ``tau1 = 0``.
+    ``slope=False`` gives a constant random intercept. ``fix_rho=1.0`` gives
+    rank-one affine scaling, which can change sign across ages. It is not A1's
+    positive exponential scaling. Try several starts because the slope scale
+    can approach zero and leave a nearly flat likelihood.
     """
     from scipy.optimize import minimize
 
@@ -421,8 +416,8 @@ def bootstrap_null(blocks, centre, *, null_kwargs, alt_kwargs, draws, seed):
         _, sim_alt = fit_child_structure(simulated, centre, **alt_kwargs)
         replicates.append(2.0 * (sim_null - sim_alt))
     replicates = np.asarray(replicates)
-    # The +1 convention keeps the p-value strictly positive and unbiased for a
-    # finite number of replicates.
+    # The +1 convention avoids zero Monte Carlo p-values. With a fitted null,
+    # this remains a parametric-bootstrap approximation, not an unbiased estimate.
     p_value = float((1 + (replicates >= observed).sum()) / (len(replicates) + 1))
     return observed, p_value, replicates
 

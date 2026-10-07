@@ -1,29 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Graph-shape guard for the shared trend + HSGP builder (issue #86).
+"""Check graph names and structure built by the shared trend/HSGP helpers.
 
-The inlined trend + HSGP construction was lifted into
-``vocab_growth.models.gp_utils`` (``trend_and_gp`` / ``tent_and_gp``) and
-adopted across all six engines. Because ``hsgp.prior`` is the sole RNG-bearing
-call, the consolidation must not change any model's PyMC graph. These tests build
-the real model for one representative of each engine (no sampling) and pin the
-graph shape the helpers must reproduce:
-
-- the trend / GP free RVs each engine creates;
-- the named ``Deterministic``\\ s the *store-deterministic* engines keep
-  (``g`` / ``f_all`` and the suffixed ``g_u`` / ``f_u_all`` / ``g_q`` / ``h_all``),
-  and that the trace-memory engines (trivariate / joint) do **not** store them;
-- that the q-side latent is ``h_all`` and never ``f_q_all`` (the latent name is
-  passed explicitly, not derived from the suffix); and
-- that the signed trajectory uses a three-anchor tent mean: three free anchor RVs
-  (``p_slope_low_sign`` / ``p_slope_mid_sign`` / ``p_slope_hi_sign``) and two
-  segment-slope ``Deterministic``\\ s (``slope_up_sign`` / ``slope_dn_sign``), with
-  no intercept-only ``intercept_sign`` and no single ``slope_sign``.
-
-Builds the real models, so they need the prepared DuckDB; they skip cleanly when
-it is absent (the CI fit job runs ``prepare_data`` first, but bare ``pytest`` may
-not).
+Build registered models without sampling. Check free variable names, retained
+reporting deterministics and the two-anchor or three-anchor mean structure.
+These checks protect the reporting interface; graph names alone do not prove
+likelihood equivalence. Real-data builds require the prepared database and skip
+when it is absent.
 """
 
 import os
@@ -117,13 +101,9 @@ def _build_uncached(model_id, tmp_path, monkeypatch):
 
 @pytest.fixture(scope="session")
 def _built_models():
-    """One built model per registered id, for the whole session.
+    """Cache one graph per requested registered model in this worker.
 
-    Six of the nineteen models are asked for twice -- once by the parametrised
-    build check and again by the dedicated graph test below -- and a build costs
-    seconds. Nothing here mutates a model, only reads its variable names, so the
-    same object serves both. Under ``--dist loadfile`` this file is one worker's
-    work, so the cache is never split across processes.
+    Tests only read the graphs, so repeated structural checks can reuse them.
     """
     return {}
 

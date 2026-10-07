@@ -197,11 +197,11 @@ def rank_analysis():
     tests in :func:`main` and matters far more for the design than any single
     correlation does.
 
-    Refits Sigma = L L' with L of shape (4, rank), which is unconstrained,
-    always positive semi-definite, and exactly rank ``rank``. A rank-3 fit
-    reaching the same likelihood as rank-4 confirms the deficiency is real
-    rather than an artefact of the other parameterisation, because the two
-    searches share no coordinates. Free covariance parameters are
+    Refit Sigma = L L' with unconstrained L of shape (4, rank). Sigma is positive
+    semi-definite with rank at most ``rank``, reaching that rank when L has full
+    column rank. A rank-3 fit with the same likelihood as rank-4 supports a
+    lower-rank explanation; agreement between numerical searches is not proof
+    of the global optimum. The dimension of a full-rank covariance of this form is
     ``4 * rank - rank * (rank - 1) / 2``: 4, 7, 9, 10 for ranks 1 to 4.
     """
     d, _ = paired_residuals()

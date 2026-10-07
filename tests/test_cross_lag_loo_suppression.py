@@ -1,18 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""A cross-lag model must not report the leave-one-out scores that leak.
+"""Suppress LOO scores that still condition on the held-out count via a lag.
 
-The lag predictor holds an earlier wave's observed counts as fixed covariates of
-every later row it feeds, so leaving one of those likelihood terms out does not
-remove that count from the model. The "held-out" score still conditions on the
-held-out outcome, and Pareto-k checks the importance-sampling approximation
-rather than this leakage, so nothing in the number itself shows it (#242).
-
-Both engines that carry a cross-lag suppress the scores that leak and keep the
-one that does not. Neither suppression had a test until VG25's was written, and
-the joint engine had no suppression at all: it computed all three marginals plus
-the administration-level score, with the leak flagged only in the report's prose.
+Lag predictors store earlier observed counts as fixed covariates. Removing
+an earlier likelihood term does not remove its count from later predictors.
+Pareto-k assesses the importance-sampling approximation, not this leakage.
+The engines and stored-trace backfill must suppress the same affected scores.
 """
 
 from __future__ import annotations
@@ -201,14 +195,7 @@ def _backfill_module():
 
 
 def test_the_backfill_refuses_exactly_what_the_engine_refuses(monkeypatch):
-    """Two paths write `loo_summary.csv`, and they must not disagree.
-
-    `emit_loo_summaries.py` recomputes the table from a stored trace for fits
-    made before the fit pipeline wrote one. It scored every log-likelihood
-    variable it found, so a backfill of a cross-lag model would have written the
-    row its own engine refuses to compute -- and a published table would then
-    hold the leaking number for exactly the models the suppression exists for.
-    """
+    """Keep stored-trace LOO backfill consistent with engine suppression."""
     backfill = _backfill_module()
     engines = {
         "bivariate_re": common_bivariate,

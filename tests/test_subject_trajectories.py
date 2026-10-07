@@ -1,22 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for the observed per-child trajectories on the median-trend plot.
+"""Check observed and predictive child-trajectory overlays.
 
-The overlay exists to contrast individual growth with the population median, and
-its one real hazard is the recording form: the Down syndrome pool spans item
-counts from 396 to 810, roughly half the children with three or more
-administrations are recorded on more than one form, and a child near the ceiling
-of a short form can record *fewer* words on a longer form a month later. Joining
-those points with a plain line draws a developmental reversal that did not
-happen, so the segment across a form change is drawn dashed and the compressed
-observations are marked.
-
-These pin that behaviour, the administration threshold, and -- the defect most
-likely to be introduced later and least likely to be noticed -- that the
-``max_age_months`` cut is applied to the trajectory inputs as well as to the
-observations, since a mask applied to one and not the other joins one child's
-points to another's.
+Form changes can alter recorded counts without a corresponding vocabulary
+change. Dash those connecting segments and mark near-ceiling observations.
+Apply reporting-age masks consistently to ages, counts and child identifiers.
 """
 
 import matplotlib.pyplot as plt
@@ -56,7 +45,7 @@ def _draw(subjects, ages, counts, forms=None, minimum=3):
 # Which children are drawn
 # ---------------------------------------------------------------------------
 def test_a_child_needs_the_minimum_administrations():
-    """Two points are a segment, not a trajectory, and must not be drawn."""
+    """Require the overlay's minimum of three administrations per child."""
     summary = _draw(
         subjects=["a", "a", "a", "b", "b", "c"],
         ages=[12, 18, 24, 12, 18, 12],
@@ -83,7 +72,7 @@ def test_no_eligible_child_draws_nothing():
 
 
 def test_observations_are_ordered_by_age_not_by_input_order():
-    """A frame that arrives unsorted must still draw a monotonic path."""
+    """Order trajectory points by age without imposing monotonic vocabulary counts."""
     summary = _draw(
         subjects=["a", "a", "a"],
         ages=[24, 12, 18],
@@ -122,7 +111,7 @@ def test_segments_within_one_form_stay_solid():
 
 
 def test_a_child_on_two_forms_keeps_its_within_form_segments_solid():
-    """Only the crossing segment is untrustworthy; the rest still carries shape."""
+    """Dash only segments that cross a form change."""
     summary = _draw(
         subjects=["a"] * 4,
         ages=[12, 18, 24, 30],
@@ -207,13 +196,7 @@ def test_the_legend_states_the_figure_s_own_composition():
 
 
 def test_the_age_cap_is_applied_to_the_trajectory_inputs_too():
-    """A mask applied to the ages but not the subjects joins the wrong children.
-
-    Child "a" is entirely under the cap; "b" is entirely over it. If the cut is
-    applied to ``x_obs``/``y_obs`` only, the subject column still carries b's
-    labels, so a's three points get read as two children and the trajectory
-    silently disappears -- or worse, joins across children.
-    """
+    """Mask ages, outcomes and child labels together to preserve row alignment."""
     frame = pd.DataFrame(
         {
             "subject": ["a", "a", "a", "b", "b", "b"],

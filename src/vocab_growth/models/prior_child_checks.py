@@ -1,40 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Prior predictive checks that exercise the child random effects (issue #233).
+"""Prior predictive checks for bivariate child-effect structures.
 
-``prior_predictive_checks`` draws from the prior and plots ``p_u_plot``,
-``q_plot`` and ``p_s_plot`` — all three evaluated at **zero** study and child
-effects. That is the right check for the mean function and it is the only check
-these reports have ever had, which leaves a gap that #233 named precisely: the
-figures a child-effect model puts in front of a reader cannot test the prior
-that model was added for. VG19's cannot say whether ``tau1_sigma = 0.5`` per
-year implies plausible individual trajectories, and VG20's cannot reveal a
-defect in the correlated block, because neither figure contains a child.
+The engine's zero-effect population curves do not exercise its child prior.
+These checks draw a child effect per prior draw and reuse it across ages.
+Words understood follow the child's Beta-Binomial distribution; spoken words
+then condition on that drawn comprehension count.
 
-This module fills the gap without touching the graph. Everything here is
-computed in NumPy from prior draws the model already emits — the zero-effect
-logit curves ``f_u_plot`` and ``h_plot``, the dispersion curves
-``kappa_u_plot`` and ``kappa_s_plot``, and whichever child-effect scales the
-definition carries — so no node is added, no fit is invalidated, and the check
-can run at build time where the unseen-child block does not yet exist (it is
-created in ``sample_posterior_predictive``).
-
-Two properties make the output worth reading:
-
-* **One child per prior draw, reused across the whole grid.** A child effect
-  drawn independently at each age would give a scatter, not a trajectory, and
-  would hide exactly the thing a slope prior needs testing for.
-* **Actual nested Beta-Binomial counts.** Words understood are drawn from the
-  child's own ``p_u`` at the grid's dispersion, and words spoken are then drawn
-  **conditional on that draw** — the same nesting the likelihood uses, so a
-  prior that implies impossible children shows up as impossible counts rather
-  than as an implausible mean.
-
-The child-effect construction mirrors ``common_bivariate``'s predictive path
-branch for branch. It is a second implementation, which is a drift risk, so
-``tests/test_prior_child_checks.py`` pins the correlated branch against the
-graph's own ``unseen_child_correlated_delta_q`` at shared standard normals.
+The calculations use NumPy and existing prior draws, without changing the
+graph. The child constructions mirror common_bivariate's predictive path;
+tests compare the correlated branch at shared standard normals.
 """
 
 from __future__ import annotations
@@ -328,11 +304,10 @@ def plot_unseen_child_trajectories(curves, definition, *, output_dir=None):
 
 
 def plot_unseen_child_counts(curves, definition, *, output_dir=None):
-    """Nested Beta-Binomial count draws for the same unseen children.
+    """Draw nested counts for the same unseen children.
 
-    The mean-function figures cannot show these: a prior can imply a perfectly
-    reasonable expected trajectory and still put a real administration at an
-    impossible count once the child effect and the dispersion are both in play.
+    Mean curves alone cannot show the count variation implied by child effects
+    and dispersion. Inspect these draws for implausible floors, ceilings or spread.
     """
     ages = curves["ages"]
     fig, ax = plt.subplots(figsize=plot_styles.FIGSIZE_XL)
@@ -358,13 +333,10 @@ def plot_unseen_child_counts(curves, definition, *, output_dir=None):
 
 
 def plot_prior_joint_association(curves, definition, *, output_dir=None):
-    """The joint (understood, spoken) association the prior induces.
+    """Show prior-drawn understood and spoken counts together at selected ages.
 
-    The figure #233 asks for on VG20. The correlated block's whole purpose is
-    the alignment between a child's comprehension standing and their conversion
-    standing, and no zero-effect figure can show it. Each panel is one age; the
-    printed correlation is of the *drawn counts*, which is what a defect in the
-    correlated block would move.
+    Count association includes nesting, population-curve uncertainty and child
+    effects. It is not a direct estimate of the child-effect correlation.
     """
     ages = curves["ages"]
     fig, axes = plt.subplots(
@@ -385,19 +357,15 @@ def plot_prior_joint_association(curves, definition, *, output_dir=None):
         ax.set_ylim(0, n_trials)
     np.atleast_1d(axes)[0].set_ylabel("Words spoken")
 
-    # The count correlation in each panel is NOT the correlated block's doing:
-    # it is dominated by the shared age trend, which moves both outcomes
-    # together draw by draw, and it would be positive under independent child
-    # effects too. The deviate correlation is the one the block controls, so it
-    # is reported beside it -- if the two are confused, this figure looks like
-    # confirmation of a correlation the model may not have estimated.
+    # Count correlation also includes nesting and uncertainty in population
+    # curves. Report the child-deviate correlation separately.
     deviate_r = float(
         np.corrcoef(curves["delta_u"][:, 0], curves["delta_q"][:, 0])[0, 1]
     )
     fig.suptitle(
         "Prior joint association across unseen children — "
         f"child-deviate correlation {deviate_r:+.2f}; "
-        "the per-panel r also carries the shared age trend"
+        "the per-panel r also includes nesting and population uncertainty"
     )
     fig.tight_layout()
     _save(fig, output_dir, "prior_joint_association")
@@ -435,9 +403,7 @@ def run(context, definition, *, seed=None):
     written.append("prior_unseen_child_counts")
     plt.close(fig)
 
-    # The joint association is only interesting where the two child effects can
-    # actually be aligned -- a model drawing them independently induces the
-    # association its mean function implies and nothing more.
+    # These structures couple the two child effects explicitly.
     if curves["structure"] in {"correlated", "factor"}:
         fig = plot_prior_joint_association(curves, definition, output_dir=output_dir)
         context.plots["prior_joint_association"] = fig

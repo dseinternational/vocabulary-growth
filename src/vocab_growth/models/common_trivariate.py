@@ -1,34 +1,24 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Shared dataclasses and pipeline functions for the trivariate vocabulary growth
-model (VG14): words understood, spoken and signed.
+"""Shared engine for VG14's understood, spoken and signed counts.
 
-Uses a production-ratio reparameterization that extends the bivariate engine
-(common_bivariate.py) with a third parallel ratio for signing:
+For age a, the trajectories satisfy
 
-    p_U(a)    = sigmoid(f_U(a))                        # proportion understood
-    q(a)      = sigmoid(h(a))                          # fraction of understood spoken
-    r(a)      = sigmoid(g_sign(a))                     # fraction of understood signed
-    p_S(a)    = p_U(a) * q(a)                          # enforces p_S    <= p_U
-    p_Sign(a) = p_U(a) * r(a)                          # enforces p_Sign <= p_U
-    p_any(a)  = p_U(a) * (1 - (1 - r(a)) * (1 - q(a))) # total expressive vocabulary
+    p_U(a) = sigmoid(f_U(a))
+    q(a) = sigmoid(h(a))
+    r(a) = sigmoid(g_sign(a))
+    p_S(a) = p_U(a) * q(a)
+    p_Sign(a) = p_U(a) * r(a)
+    p_any(a) = p_U(a) * (r(a) + q(a) - r(a)*q(a))
 
-The total-expressive quantity p_any assumes signing and speaking are
-*conditionally independent given age* (the stated Option 1 limitation of
-issue #49). VG15 relaxes that assumption and is the model of record for the
-sign-speech association; see :func:`plot_p_any_validation`, which quantifies
-what the independence assumption costs here.
+q and r are proportions within understood words. The union p_any assumes
+independent signing and speech within understood words at fixed age and model
+parameters. VG15 estimates their association from cell counts. The uk_02 check
+in plot_p_any_validation examines this assumption for that source.
 
-This module does not import from or modify :mod:`common_bivariate`: the signed
-logic is deliberately isolated from the bivariate graph builder, and the
-structural parallel between the two ratio blocks is a duplication that was
-accepted for that isolation. It is **not** otherwise self-contained — the
-configuration base class, the kappa dispatch, the sampling, diagnostics,
-monthly-summary and report stages and the fit-pipeline driver all come from
-:mod:`vocab_growth.models.common`, and a change there reaches VG14 like every
-other model.
+The graph and ratio blocks remain separate from the bivariate builder. Sampling,
+diagnostics and report stages use the common pipeline.
 """
 
 import os
@@ -158,10 +148,7 @@ class TrivariateModelConfiguration(BaseModelConfiguration):
     a_kappa_sign_dist: Continuous | None = None
     b_kappa_mag_sign_dist: Continuous | None = None
 
-    # Two-anchor dispersion priors, in place of the triples above. This engine
-    # accepted only the legacy form until 2026-08-06, which is why VG14 still
-    # carried it while VG10 and VG15 had migrated — the definition was not the
-    # blocker, the engine was.
+    # Optional two-anchor dispersion, independently selected for each outcome.
     kappa_anchored_u: AnchoredKappaPriors | None = None
     kappa_anchored_s: AnchoredKappaPriors | None = None
     kappa_anchored_sign: AnchoredKappaPriors | None = None
@@ -510,12 +497,8 @@ def build_model_graph(
     X_obs = np.asarray(analysis_df["age"], dtype=float).reshape(-1, 1)
     n_trials = context.model_data.n_trials
     y_u_values = np.asarray(analysis_df.loc[has_u, "understood"], dtype=float)
-    # Validate BEFORE the integer cast: NumPy's cast truncates silently, so a
-    # post-cast bound cannot catch 810.9 or -0.1, which truncate into range. This
-    # was `require_integral_counts`, whose finite/integral checks left the range to
-    # a post-cast test -- the weaker of the two forms the engines used. The spoken
-    # and signed sides get the same finite/integral/range checks from
-    # `nested_outcome_spec` (#236, #240).
+    # Validate before integer conversion, which silently truncates fractions.
+    # nested_outcome_spec validates the other outcomes against the same bounds.
     require_valid_counts(y_u_values, "understood", n_trials)
     y_u_observed = y_u_values.astype(int)
 
@@ -561,14 +544,7 @@ def build_model_graph(
     idx_sign = signed_spec.indices
     n_s = spoken_spec.n_observed
     n_sign = signed_spec.n_observed
-    # Stored masks mark the rows the likelihood actually carries, not every row
-    # with a recorded count. Identical to `has_s` / `has_sign` under every
-    # treatment but `paired_only`, which drops rows -- and storing the recorded
-    # mask there is issue #266 finding 3, which killed every paired-only
-    # bivariate fit at calibration after sampling. This engine had no fallback
-    # choice when that was found, so it carried the same latent defect
-    # unreachably; exposing the choice makes it reachable, so it is fixed here
-    # rather than discovered by the first run.
+    # Store the filtered likelihood rows for aligned downstream checks.
     has_s_likelihood = np.zeros(n, dtype=bool)
     has_s_likelihood[spoken_spec.indices] = True
     has_sign_likelihood = np.zeros(n, dtype=bool)
@@ -731,10 +707,8 @@ def build_model_graph(
         )
 
         # ---- Signed ratio: g_sign(a) -> r(a) = sigmoid(g_sign(a)) ----
-        # Three-anchor "tent" mean (young / peak / old): r(a) is a developmental
-        # hump, so the mean rises to the peak anchor then declines (clamped flat
-        # outside), giving a hill-shaped prior median rather than the flat median an
-        # intercept-only mean gives. The GP carries smooth departures.
+        # Independent anchor heights favour but do not require a middle peak.
+        # Clamp the piecewise mean outside its anchors; the GP adds departures.
         sa_young, sa_peak, sa_old = config.sign_anchor_ages
         sa_young_z, sa_peak_z, sa_old_z = standardize_ages_to_z(
             (sa_young, sa_peak, sa_old), X_obs_mean=X_obs_mean, X_obs_std=X_obs_std
@@ -746,16 +720,8 @@ def build_model_graph(
             z_low=sa_young_z,
             z_mid=sa_peak_z,
             z_hi=sa_old_z,
-            # Optional: estimate the peak age rather than assert it. Read from the
-            # definition so no configuration class changes -- adding a field to a
-            # definition class invalidates every existing fit of that class, and
-            # nothing here should do that until the change is chosen deliberately.
-            #
-            # **The getattr is REQUIRED, not defensive.** `TrivariateModelDefinition`
-            # declares no `sign_peak_prior` -- the field is `JointModelDefinition`'s
-            # (VG15's) -- so a plain attribute read raises on every VG14 build. This
-            # probe looks identical to ones elsewhere that are provably redundant, so
-            # it is worth saying which kind this is before someone tidies it away.
+            # The middle knot can move when the definition supplies a prior.
+            # getattr is needed because TrivariateModelDefinition lacks this field.
             cfg_peak=(
                 pz.Beta(
                     alpha=definition.sign_peak_prior[0],
@@ -1243,20 +1209,11 @@ sample = _shared_sample
 
 
 def diagnostics(context: TrivariateContext):
-    """Run diagnostics on the posterior samples.
+    """Run shared diagnostics and LOO scores for all three likelihoods.
 
-    Thin wrapper over the shared engine (common.py): trivariate reports
-    per-outcome LOO-CV for understood/spoken/signed. (It used to name the three
-    observation-level kappas for the trace plot as well; an observation-sized
-    variable never fitted under ArviZ's subplot cap, so they never rendered, and
-    since 2026-08-23 the sampler does not store them.)
-
-    Each per-outcome score is leave-one-likelihood-term-out rather than
-    leave-one-administration-out: the spoken and signed likelihoods take the
-    same administration's observed understood count as their trial count, so a
-    held-out expressive term is scored conditional on that observed
-    comprehension, and a held-out understood term leaves its own observed value
-    in the expressive terms' denominators (#266).
+    Per-outcome LOO holds out a likelihood term. Spoken and signed terms condition
+    on the row's observed comprehension, so those scores differ from holding out
+    the whole administration. The joint score sums the row's likelihood factors.
     """
     _shared_diagnostics(
         context,
@@ -1280,15 +1237,10 @@ def diagnostics(context: TrivariateContext):
 def sample_posterior_predictive(
     context: TrivariateContext, definition: TrivariateModelDefinition
 ):
-    """Sample from the posterior predictive distribution.
+    """Sample predictive counts from VG14's zero-effect trajectories.
 
-    VG14 has no random intercepts (it mirrors VG05), so the plot/query
-    predictive nodes use the population-mean conditional probabilities directly.
-
-    ``definition`` is required but unread. Every engine's predictive stage is called
-    with the same two arguments so the catalogue can describe them uniformly, and a
-    default of ``None`` here only hid that no caller ever omitted it. Keeping the
-    parameter is the contract; defaulting it was the defect.
+    VG14 has no study or child intercepts. definition is accepted for the catalogue's
+    shared predictive-stage interface.
     """
     n_trials = context.model_data.n_trials
 
@@ -1625,17 +1577,7 @@ def plot_understood_spoken_signed_trajectory(
     ax.fill_between(X_plot[ksg], y_sign_ci50[ksg, 0], y_sign_ci50[ksg, 1], alpha=0.22, color="C2")
     ax.plot(X_plot[ksg], y_sign_median[ksg], lw=3, color="C2", label="Words signed (median)")
 
-    # Observed data, each modality trimmed with its own curve -- as the bivariate
-    # twin has done since b2e999d, which changed only that copy. Without this the
-    # scatter runs to the full 115-month grid while each curve stops at its own cap:
-    # understood at 72 (`report_max_age_understood`), signed at 84
-    # (`report_max_age_signed`) and spoken at `max(ages_query)`, 90, which is no
-    # trim at all. So the figure showed observations in a region it declines to
-    # summarise -- for VG14, 24 understood rows in the 72-84 band inclusive, from
-    # ie_01, uk_01, uk_06, uk_07 and us_02. (18 children: VG14's frame carries no
-    # child identifier, so that is counted on VG10's and VG20's, which select the
-    # same 24 rows. Measured 2026-09-01; the figure recorded elsewhere as 25 rows
-    # from 20 children predates the uk_01 correction of 2026-08-31.)
+    # Trim observations and curves to the same per-outcome reporting windows.
     X_obs = samples.X_obs
     u_cap = np.inf if max_age_months_understood is None else max_age_months_understood
     s_cap = np.inf if max_age_months_spoken is None else max_age_months_spoken
@@ -1782,11 +1724,10 @@ def plot_sign_speech_crossover(
     support_range: tuple[float, float] | None = None,
     max_age_months: float | None = None,
 ):
-    """Plot signed rate r(a) against spoken rate q(a) — the sign->speech hand-off.
+    """Plot the signed and spoken proportions within understood words over age.
 
-    Both ``q`` and ``r`` are ratios of comprehension, so ``max_age_months`` stops
-    the pair where comprehension reporting stops; ``support_range`` separately
-    shades where signing observations run out.
+    max_age_months applies the reporting cap. support_range marks extrapolation
+    beyond signing observations. The curves do not establish a causal hand-off.
     """
     X_plot = samples.X_plot
     q_plot = samples.q_plot
@@ -1848,18 +1789,9 @@ def _multi_outcome_frame(
     ages: np.ndarray,
     series: dict[str, tuple[np.ndarray, float | None]],
 ) -> pd.DataFrame:
-    """One age column shared by several series that stop at different ages.
+    """Share one age column across series with different reporting caps.
 
-    The convention is ``joint_trajectory``'s, which had it first: the age column
-    runs to the **widest** of the caps, and every series is NaN past its own. So
-    the file never carries a row no series reports on, and never implies a series
-    was reported where it was not.
-
-    Trimming each series to its own length instead is what broke
-    ``plot_modality_trajectories``: the frame then has columns of three different
-    lengths and pandas refuses to build it at all. That surfaced only when VG14
-    was first refitted after per-outcome caps arrived, because the figure is
-    written before the CSV and was always correct.
+    Keep ages to the widest cap and set each series to NaN past its own cap.
     """
     caps = [cap for _, cap in series.values() if cap is not None]
     keep = np.ones_like(ages, dtype=bool) if len(caps) < len(series) else ages <= max(caps)
@@ -1884,21 +1816,10 @@ def plot_modality_trajectories(
     max_age_months_signed: float | None = None,
     max_age_months_any: float | None = None,
 ):
-    """Plot expected p_U, p_S, p_Sign and p_any trajectories (in word counts).
+    """Plot expected understood, spoken, signed and union word counts.
 
-    Each curve stops at its own outcome's reporting cap, as the joint-trajectory
-    figure beside it already did. Without the caps this figure ran the full plot
-    grid -- for VG14 that is 115 months, thirty past the comprehension and
-    signing caps -- directly above a ``posterior_summary_p_any`` table trimmed
-    to 84. The policy test could not see it: ``modality_trajectories`` has no
-    outcome suffix, so it matched no entry in the test's stem map.
-
-    ``p_any`` takes its own explicit cap, computed at the call site by
-    :func:`vocab_growth.reporting_ages.max_age_for_sign_ratio`: it is a ratio of
-    understood built from the signed ratio, so the tighter of the comprehension
-    and signing caps binds. This function used to derive the cap itself as
-    ``min(spoken, signed)`` -- the components rule alone -- which stopped being
-    the tighter rule when the comprehension cap moved to 72 on 2026-08-22 (#238).
+    Trim each curve to its supplied cap. The union cap must account for both
+    comprehension and signing support; the caller supplies that reporting policy.
     """
     X_plot = samples.X_plot
 
@@ -1909,18 +1830,7 @@ def plot_modality_trajectories(
         return X_plot[keep], values[keep]
 
     def _masked(values: np.ndarray, cap: float | None) -> np.ndarray:
-        """The same trim, kept on the full grid with NaN past the cap.
-
-        The figure wants each curve against its own shortened x; the CSV wants
-        one age column shared by every series. Trimming for both is what broke
-        this function: the CSV paired the FULL ``X_plot`` with arrays cut at
-        three different caps, so ``pd.DataFrame`` raised "All arrays must be of
-        the same length" the first time a trivariate model was refitted after
-        per-outcome caps arrived. Nothing caught it earlier because the figure
-        is written before the CSV -- the plot was always correct -- and because
-        ``modality_trajectories`` carries no outcome suffix, so the reporting-age
-        policy test matches no entry for it (see this function's docstring).
-        """
+        """Keep the full grid and set values past the cap to NaN for CSV output."""
         if cap is None:
             return values
         return np.where(X_plot <= cap, values, np.nan)
@@ -2138,36 +2048,19 @@ def plot_p_any_validation(
     filename: str | None = None,
     window: tuple[float, float] = P_ANY_VALIDATION_WINDOW,
 ):
-    """Validate the independence-based p_any against uk_02's observed union.
+    """Compare the independence-based union with uk_02's observed union.
 
-    p_any assumes sign and speech are conditionally independent given age. uk_02
-    was the first source with the four-cell breakdown (sign-only / sign+speech /
-    speech-only / understood-only), so we can compute the *observed* fraction of
-    understood words produced in any modality and compare it with the model's
-    union p_any / p_U over the overlap window. The model union systematically
-    exceeds the observed union: the sign-speech association is positive, so
-    independence over-states the total.
+    Use usable four-cell rows within the overlap window. Compute the observed
+    union and the independence union from each row's own signing and speech
+    fractions. Their difference describes observed within-row association.
 
-    This is a **uk_02-specific check, not a general validation** of conditional
-    independence: uk_07, es_01 and nz_01 also carry cross-tabulations, with
-    materially different descriptive associations by source (#238). VG15
-    identifies the association from all four and is the model of record for it.
+    Compare the model union with the observed union over the same rows and ages.
+    Compute the model mean for each posterior draw, so the gap has an interval.
+    This comparison also reflects differences between fitted and observed margins;
+    its sign is not guaranteed by positive observed association alone.
 
-    The model side of ``model_gap_pp`` is evaluated per posterior draw **at the
-    ages of the rows the observed mean is taken over** and averaged over those same
-    rows, so observed and modelled unions share one empirical age distribution and
-    the gap carries a posterior interval. It previously averaged the pointwise
-    median over an equally spaced grid, so part of any reported gap was age
-    weighting rather than model behaviour, and no interval was supplied (#238).
-
-    "The rows the observed mean is taken over" is narrower than "uk_02's observed
-    ages", and the difference was a live defect: 74 of the 130 rows in the window
-    have a missing four-cell entry, so ``union_obs`` is NaN for 56.9% of them and
-    ``mean()`` silently skips those. The model side took **all 130** ages, so the
-    two sides averaged over different age distributions (39.24 against 38.57 months
-    mean age) while this docstring promised they shared one. Both sides now use the
-    usable rows, and ``usable_rows`` / ``window_rows`` are recorded in the ``_gap``
-    CSV and printed, so a future row with a missing cell cannot vanish silently.
+    The check is source specific. Other cross-tab sources need their own assessment.
+    Record usable_rows and window_rows so missing cells remain visible.
     """
     csv_path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_02.csv")
     if not os.path.exists(csv_path):
@@ -2203,11 +2096,7 @@ def plot_p_any_validation(
     union_ci = intervals.bands(union_draws, intervals.DEFAULT_CI_PROB, "eti", sample_axis=1)
     union_pct = int(round(intervals.DEFAULT_CI_PROB * 100))
 
-    # Binned observed union (4-month bins, >= 3 children with a USABLE union per
-    # bin). The guard used to count every row in the bin, including those whose
-    # four-cell entry is missing: bin 44-48 has 25 rows and 4 usable ones, and the
-    # series is labelled "binned mean", so a bin could be drawn from a single child
-    # while appearing to rest on 25.
+    # Four-month bins need at least three usable union rows.
     usable = raw["union_obs"].notna()
     edges = np.arange(lo, hi + 4, 4)
     centers, obs_means, indep_means = [], [], []
@@ -2243,9 +2132,7 @@ def plot_p_any_validation(
     ax.legend(loc="upper left", frameon=True)
     ax.set_title("p_any validation: independence over-states the observed union")
 
-    # The rows both means are taken over. `mean()` skips NaN, so this is the set the
-    # observed mean has always used; the model side used to take every row in the
-    # window, which is what broke the shared-age-distribution guarantee.
+    # Use the same usable rows for observed and model means.
     scored = raw.loc[usable]
     window_rows = int(len(raw))
     usable_rows = int(len(scored))

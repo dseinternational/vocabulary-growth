@@ -1,17 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Every comparison writer records its provenance, or is a recorded exemption.
+"""Require each comparison writer to record provenance or an exemption.
 
-Issue #266 finding 1 asked for comparison outputs to "record and validate all
-contributing fit manifests". The mechanism landed in August and the sync
-enforces it, but coverage was two scripts of thirteen: the other eleven wrote
-figures and tables into the comparisons directory that ``sync_report_figures.py``
-could only report as unclaimed.
-
-Unclaimed is a warning rather than an error precisely so the ratchet could turn
-one script at a time -- which means nothing fails when it stops turning. This
-test is what stops it slipping back.
+The source scan checks scripts that use ``comparisons_output_dir()``.
+An unclaimed output produces a warning during ordinary validation, so this
+check also guards writer coverage.
 """
 
 from __future__ import annotations

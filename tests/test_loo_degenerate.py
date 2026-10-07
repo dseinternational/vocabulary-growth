@@ -1,21 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Unit tests for ``loo_dropping_degenerate`` in ``models.common``.
+"""Drop constant pointwise log-likelihood rows before PSIS-LOO.
 
-The nested joint likelihood models a paired outcome conditionally on the
-observed *understood* count, so an ``understood == 0`` row gives that outcome a
-structurally constant (``n = 0``) pointwise log-likelihood across every draw.
-``arviz_stats`` cannot run such a degenerate point through PSIS-LOO — ``az.loo``
-raises ``ValueError: All tail values are the same``. The helper drops those
-observations before calling ``az.loo``.
-
-These tests pin that the helper (a) reproduces — and then prevents — the bare
-``az.loo`` crash, (b) counts the dropped observations, (c) is a no-op when no
-observation is degenerate, and (d) leaves the caller's ``InferenceData``
-unmutated so repeated per-outcome calls stay independent. A synthetic
-``InferenceData`` reproduces the degeneracy exactly, so no fitted joint trace
-is required.
+A nested count with zero trials has zero log likelihood for every draw.
+The helper must avoid the equal-tail failure, count dropped observations,
+preserve ordinary scores and leave the input trace unchanged.
 """
 
 import arviz as az

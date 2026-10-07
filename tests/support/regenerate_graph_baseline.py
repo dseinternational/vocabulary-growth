@@ -3,10 +3,8 @@
 
 """Rewrite ``graph_baseline.json`` from the current code.
 
-Run this **only** when a deliberate statistical change has moved a graph, and
-review the resulting diff as part of that change: it is the change's own
-statement of what moved. Running it to make a failing refactor pass discards
-the guard.
+Run this only after a deliberate statistical change, then review the diff.
+Regenerating the baseline to make a refactor pass removes the regression check.
 
     uv run python tests/support/regenerate_graph_baseline.py [model ...]
 """
@@ -32,7 +30,7 @@ REFERENCE_PATH = os.path.join(os.path.dirname(__file__), "graph_reference_points
 
 
 class _Patcher:
-    """The one hook ``build_registered_model`` wants, outside pytest."""
+    """Supply the attribute-patching hook without requiring pytest."""
 
     def setattr(self, obj, name, value, raising=True):
         setattr(obj, name, value)

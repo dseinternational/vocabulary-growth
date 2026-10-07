@@ -10,12 +10,8 @@ measure) and scatter plots with each study drawn in a distinct colour.
 ``descriptives`` stage of ``scripts/prepare_report_figures.py``, which populates
 the standalone descriptive report and the main report's "Data" chapter.
 
-Note: ``categorical_palette`` moved to
-``dse_research_utils.plot.styles`` in v0.12.0 (merged with the other repo's
-variant, which also samples continuous colormaps evenly) and is re-exported
-below. ``summarise_by_group`` and ``scatter_by_group`` are also generic (no
-vocabulary-growth specifics apart from the ``MEASURES`` default and the
-save-side-effect convention) and remain candidates for promotion.
+Colours come from ``dse_research_utils.plot.styles``. Figures with more than
+six groups use an explicit Matplotlib palette.
 """
 
 from __future__ import annotations
@@ -82,7 +78,7 @@ def summary_table_by_group(
     Age statistics and the observation/child counts come from ``age_frame``;
     each measure's statistics come from its own frame's non-missing values.
     The split matters for the typically-developing pool, whose comprehension
-    and production are loaded from different form sets — a single frame would
+    and production are loaded from different form sets. A single frame would
     either drop the Words & Sentences production rows or misstate the ages the
     pool covers. For the Down syndrome pool, pass the same frame throughout.
 
@@ -139,8 +135,8 @@ def td_form_alignment_table(
     """Per-age, per-form medians of a typically-developing count on two scales.
 
     Every model scores checklist counts against the fixed 810-item reference
-    inventory, which assumes the shorter forms are *nested* -- each omits the
-    rarer, later-acquired words -- rather than proportional samples of one
+    inventory, which assumes the shorter forms are nested and omit rarer,
+    later-acquired words, rather than proportional samples of one
     word universe. Under nesting, forms of different length record similar raw
     counts at a given age; under proportional sampling the shorter forms sit
     systematically lower on raw counts and align instead on the proportion of
@@ -251,10 +247,10 @@ def _binned_outcome_summary(
 def _draw_pooled_summary(
     ax, summary: pd.DataFrame, bin_width: int, *, centre_lines: bool = True
 ) -> None:
-    """The red pooled overlay: IQR band, plus solid median and dashed mean
-    unless ``centre_lines`` is False (the observation scatters draw the band
-    alone — a fitted-looking centre line overstates what a raw-data figure
-    shows)."""
+    """Draw a pooled IQR band, with optional median and mean lines.
+
+    Raw-data scatters omit the lines to avoid implying a fitted trajectory.
+    """
     ax.fill_between(
         summary["age_mid"],
         summary["q25"],
@@ -309,9 +305,8 @@ def plot_observations_by_group(
 
     The scatter companion to :func:`plot_repeat_measures_by_group`: the same
     age window, binning and per-group colouring, but overlaying only the
-    pooled interquartile band (no median/mean centre lines — a fitted-looking
-    centre line overstates what a raw-data figure shows) and showing
-    ALL observations as points — single-visit children included — rather than
+    pooled interquartile band without median or mean lines and showing
+    all observations as points, including single-visit children, rather than
     only the repeat-measures subset. An ``age_range`` upper bound of None means
     the data's own maximum, so the scatter can show where the pool thins while
     the windowed trajectory figures stay within the reporting range.
@@ -393,11 +388,8 @@ def plot_monthly_violins(
     """Per-month distributions of ``outcome`` as violins, with the pooled
     monthly median and interquartile band.
 
-    Built for pools too dense for a scatter — the typically-developing
-    Wordbank pool records hundreds of administrations at each integer age, so
-    a scatter saturates into stripes while violins show the distribution's
-    shape: the mass on zero before production starts, the growing right tail,
-    and the accumulation at form ceilings. Ages are rounded to the nearest
+    Intended for pools with many observations at each age. Violins show the
+    count distribution without overlapping points. Ages are rounded to the nearest
     month; months with fewer than ``min_month_n`` observations are omitted.
     Each violin's density estimate is clipped to that month's observed range,
     so no mass is drawn below zero or beyond the ceilings. An ``age_range``
@@ -500,7 +492,7 @@ def plot_repeat_measures_by_group(
     drawn as a line joining those visits, coloured by ``group``. Over the fan
     sit the pooled median (solid red), mean (dashed red) and interquartile band
     (translucent red), computed in ``bin_width``-month age bins over ALL
-    observations in ``df`` within ``age_range`` — single-visit subjects
+    observations in ``df`` within ``age_range``, including single-visit subjects,
     included, so the central trajectory describes the whole pool rather than
     the repeat-measures subset.
 
@@ -512,7 +504,7 @@ def plot_repeat_measures_by_group(
     from view), and bins with fewer than ``min_bin_n`` observations are not
     summarised. ``group_colors`` maps group name to colour; when None the
     colours come from :func:`_group_palette` over the groups that contribute a
-    fragment — pass a shared mapping (see :func:`drawable_groups`) when several
+    fragment. Pass a shared mapping (see :func:`drawable_groups`) when several
     figures must keep group colours aligned. Saves ``.png``/``.svg`` and the
     binned summary as ``.csv`` when ``output_dir``/``filename`` are given.
     """
@@ -683,7 +675,7 @@ REPEAT_OUTCOMES = [
     ("spoken", "Words spoken (raw count)"),
 ]
 
-# The Down syndrome trajectory figures stop at 72 months — the reporting
+# The Down syndrome trajectory figures stop at 72 months, the reporting
 # window; the sparse older visits are excluded rather than clipped. The
 # typically-developing pool is bounded at 30 months by its own admission
 # window, and its density supports finer bins.
@@ -696,11 +688,8 @@ def _group_palette(n: int) -> list:
     """``n`` colours for the groups (studies) of a descriptive figure.
 
     Up to six groups take the design language's chart colours, in order. It
-    allows no more, but these figures colour by study and the pools hold more:
-    fifteen Down syndrome studies and twelve typically developing ones. Larger
-    figures therefore keep the matplotlib palettes ``categorical_palette`` gave
-    them before dse-research-utils 0.18.0, ``tab10`` widened to ``tab20`` above
-    ten groups, until they are redesigned.
+    supports six categorical colours. Larger figures use ``tab10`` up to ten
+    groups and ``tab20`` beyond ten.
     """
     if n <= len(CHART_COLOURS):
         return categorical_palette(n)
@@ -746,10 +735,8 @@ def _is_reddish(colour) -> bool:
 def write_descriptive_artefacts(out_dir: str) -> None:
     """Write every descriptive table and figure into ``out_dir``.
 
-    Reads the prepared dataset (``scripts/prepare_data.py``), so it is not
-    importable-cheap: the model definitions are imported here rather than at
-    module level to keep ``import vocab_growth.descriptive`` light for the
-    helpers above.
+    Reads the prepared dataset from ``scripts/prepare_data.py``. Model
+    definitions are imported here so the display helpers can be imported alone.
     """
     from vocab_growth.models.definitions import (
         ENGLISH_AND_ROMANCE_LANGUAGES,
@@ -785,7 +772,7 @@ def write_descriptive_artefacts(out_dir: str) -> None:
         print(f"Wrote {filename}")
 
     # Age-trajectory views of the Down syndrome pool against the pooled
-    # median/IQR: every observation as a study-coloured point over the FULL
+    # IQR: every observation as a study-coloured point over the full
     # age range (so where the data thins is visible), and the repeat-measures
     # children linked within form over the reporting window.
     ds = load_combined_data(max_age_months=DS_REPEAT_AGE_RANGE[1])
@@ -816,8 +803,7 @@ def write_descriptive_artefacts(out_dir: str) -> None:
     # The same view of the typically-developing Wordbank reference pool. Each
     # outcome is loaded on its own: requesting understood restricts the TD
     # loader to the bivariate forms, so a joint frame would silently drop the
-    # Words & Sentences spoken observations. The ~1,000 repeat-measures
-    # children need fainter lines.
+    # Words & Sentences spoken observations. Fainter lines reduce overlap.
     td_frames = {
         outcome: load_data(
             Population.TYPICALLY_DEVELOPING,
@@ -838,8 +824,7 @@ def write_descriptive_artefacts(out_dir: str) -> None:
     ).to_csv(os.path.join(out_dir, "summary_table_td.csv"), index=False)
     print("Wrote summary_table_td")
 
-    # The cross-form alignment check behind the methods chapter's "raw counts
-    # versus proportions" reassurance. It uses the hierarchical models' full
+    # Compare raw counts with proportions using the hierarchical models' full
     # typically-developing scope (English plus Italian and Spanish), so the
     # 309-item Spanish form is in the comparison, over the 8-15 month window
     # the comprehension forms share; the frames above are English-only.
@@ -858,7 +843,7 @@ def write_descriptive_artefacts(out_dir: str) -> None:
     for outcome, ylabel in REPEAT_OUTCOMES:
         # The TD pool is too dense for a scatter (hundreds of administrations
         # at each integer age), so the by-age view is monthly violins. The
-        # axis ends at the measure's own data — comprehension stops where the
+        # axis ends at the measure's own data. Comprehension stops where the
         # bivariate forms do, before the pool's 30-month bound.
         filename = f"violins_age_{outcome}_td"
         fig = plot_monthly_violins(

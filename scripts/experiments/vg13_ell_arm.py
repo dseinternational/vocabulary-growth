@@ -1,27 +1,19 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Fit one VG13 arm at `test` config to test whether its window hides curvature.
+"""Fit VG13 with its baseline or a shorter GP length-scale prior.
 
-VG13's GP is unidentifiable by construction: `ell_months_range = (6, 18)` puts
-the median length-scale at 12 months over a **10-month** data window (8-18), and
-the per-draw anchor orthogonalises the GP against [1, z] — the very shape a
-length-scale longer than the window can produce. So it can express almost
-nothing, and the amplitude of nothing is unidentifiable.
+Compare the registered 6-18 month length-scale range with 2-8 months over the
+8-18 month data window. A long length scale, after removal of constant and linear
+components, can leave little curvature inside a short window. It does not make
+all curvature mathematically impossible or establish non-identification by itself.
 
-That says the model *cannot answer* whether there is curvature in 8-18 months. It
-does not say there is none. A GP that cannot express curvature looks inert either
-way, so the inert-GP diagnostics are uninformative about the question.
+Predictive comparisons assess whether the shorter-range arm helps on these data.
+No improvement would not prove that the underlying vocabulary trajectory has no
+curvature. This is an experiment, separate from the models of record.
 
-The `rescaled` arm shortens the length-scale prior to (2, 8) months, short enough
-to express structure inside the window. Comparing the two arms by ELPD answers
-it: if the flexible GP earns predictive improvement there is curve the current
-model is blind to; if it does not, there is not.
+Usage::
 
-This matters beyond VG13's own fit — VG13 supplies the typically-developing side
-of the matched-comprehension contrast, and 8-18 months is where typically
-developing vocabulary acceleration begins.
-
-Usage: vg13_ell_arm.py {baseline,rescaled} --output-dir DIR
+    python scripts/experiments/vg13_ell_arm.py {baseline,rescaled} --output-dir DIR
 """
 import argparse
 import dataclasses

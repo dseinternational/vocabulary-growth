@@ -1,12 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""`render_model_graph` must skip a missing `dot` quietly and report a failing one.
+"""Check missing and failing Graphviz executables separately.
 
-The blanket `except Exception` this replaces existed for the first case and
-silently swallowed the second, which is how a sensitivity variant lost its
-`gp_model_graph.svg` unnoticed on 2026-09-06: the path was 262 characters and
-graphviz, which is not long-path-aware, could not write it.
+A missing executable skips the optional figure. A render failure warns without
+preventing the fit from completing.
 """
 
 from __future__ import annotations

@@ -3,18 +3,13 @@
 
 """Rebuild posterior deterministics a stored trace does not carry.
 
-Since 2026-08-23 the engines' ``sample`` stage tells the sampler not to store
-the observation-sized deterministics (``f_obs``, ``p_obs``, ``kappa_obs``,
-their per-outcome counterparts and the concatenated ``*_all`` grids — see
+By default, the sampler omits observation-sized deterministics (``f_obs``,
+``p_obs``, ``kappa_obs``, their per-outcome counterparts and ``*_all`` grids; see
 :func:`vocab_growth.fit_artifacts.sampled_variable_names`). The model graph
 still defines every one of them, so a reader that needs one rebuilds the model
 and computes it from the stored free parameters with ``pm.compute_deterministics``.
-This module is that one path, so the few readers that need it
-(``scripts/loso_compare.py``) do not each grow their own.
-
-A trace written before the change still carries the variables, and
-:func:`with_deterministics` leaves anything already present alone — so the same
-call serves old and new fits, and computes nothing when nothing is missing.
+``with_deterministics`` leaves stored variables unchanged and computes only
+missing variables, so it also accepts older traces that contain these arrays.
 """
 
 from __future__ import annotations
@@ -41,7 +36,7 @@ def with_deterministics(
     """Return ``posterior`` carrying every name in ``names``.
 
     Names already present are used as they are; the rest are computed from
-    ``model`` — which must be the graph the posterior was sampled from, rebuilt
+    ``model``, which must be the graph the posterior was sampled from, rebuilt
     on the same data, so that observation order and every data rule match
     (callers check that with ``fit_artifacts.validate_fit_output`` before
     aligning anything by row). The input is not modified.
@@ -71,8 +66,8 @@ def with_deterministics(
     )
     # `compute_deterministics` relabels the sample dimensions 0..n-1, so on a
     # thinned posterior (draw labels 0, 36, 72, ...) the output would not align
-    # with the input. The sizes are equal by construction — it computes one
-    # value per input draw — so carry the input's own labels over before
+    # with the input. It computes one value per input draw, so carry the input's
+    # own labels over before
     # merging, and merge with join="exact" so that if the sizes ever differ the
     # merge fails rather than fabricating all-missing draws (the same guard
     # recovery/simulate.py uses).

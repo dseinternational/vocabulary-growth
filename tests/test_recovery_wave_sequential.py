@@ -1,30 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""A predictor built from an outcome must be simulated in an order that is sound.
+"""Check simulation ordering for predictors derived from observed outcomes.
 
-VG16's cross-lag reads each child's earlier-wave comprehension count, so its
-design matrix is a function of the outcome rather than of the design. It was
-listed unsupported for recovery on the ground that a single simulation pass
-"would fit synthetic-lag data against real-lag truth" -- #242 item 6, #289 task
-3.9, and the deferral of #297 all rest on that sentence.
-
-**It is false for VG16**, and this module is where that is established rather
-than asserted. The simulator already rebuilds between stages, and VG16's lag
-reads a column drawn in a strictly earlier stage than the node it enters, so the
-lag is recomputed from the simulated parent before anything that uses it is
-drawn. :func:`single_pass_is_sound` derives that from the stage order.
-
-It is *not* false in general, and the case it is false for is now a registered
-model: VG25's sign-to-speech lag reads ``signed``, which the joint engine draws
-in the same stage as the ``spoken`` it shifts. So the wave loop exists, is
-selected by the same derivation, and the guard that would have caught the
-original misdiagnosis runs on every simulation either way. The synthetic
-same-stage predictor below predates VG25 and is kept beside it: it fixes the
-*rule* independently of any model that happens to satisfy it, so unregistering
-VG25 could not quietly remove the coverage.
-
-Data-free and sampling-free except for the two marked ``slow``.
+VG16 reads comprehension simulated in an earlier stage. VG25 reads signing
+from the same stage as speech, so it needs wave-by-wave simulation. Derive this
+choice from source and consumer declarations. After each round, verify that
+simulated rows reproduce the predictor used to draw them.
 """
 
 from __future__ import annotations
@@ -134,11 +116,7 @@ def test_the_declared_source_and_consumer_are_names_the_engine_actually_uses():
 
 
 def test_vg16_needs_no_wave_loop_because_its_source_is_drawn_first():
-    """The correction. `understood` is stage 0; `y_s_obs` is stage 1.
-
-    Measured alongside this on 2026-09-11: at the build whose draw consumes the
-    lag, the predictor already matched the finished frame's in 0 of 1,708 rows.
-    """
+    """Draw understood in stage 0 before its lag enters spoken in stage 1."""
     predictor = outcome_dependent_predictor(VG16)
     assert single_pass_is_sound(BIVARIATE_RE_SPEC, VG16, predictor)
 
@@ -183,7 +161,7 @@ def test_the_declared_sign_source_and_consumers_are_names_the_engine_uses():
 
 
 def test_a_consumer_the_engine_does_not_draw_fails_toward_the_wave_loop():
-    """Unrecognised means slower, never wrong."""
+    """Select the conservative wave loop when the consumer is unrecognised."""
     nonsense = OutcomeDependentPredictor(
         name="x",
         source_column="understood",
@@ -228,12 +206,7 @@ def test_the_guard_passes_when_the_draw_used_the_final_predictor():
 
 
 def test_the_guard_refuses_a_draw_made_under_a_predictor_the_frame_does_not_reproduce():
-    """The failure the whole design exists to catch, shown failing.
-
-    A guard that has never been seen to fail is not evidence. This is the
-    single-pass defect exactly: the row was drawn under the *real* earlier wave's
-    logit and would be fitted under the *synthetic* one.
-    """
+    """Reject a simulated frame whose lag differs from the predictor used for its draws."""
     final = _state([0, 0, 1], [0, 1, 1], [0.0, -1.5, 0.5])
     used = _state([0, 0, 1], [0, 1, 1], [0.0, -1.5, 2.25])
     with pytest.raises(RuntimeError, match="finished .* frame does not reproduce"):
@@ -320,19 +293,10 @@ def test_vg16_simulates_and_the_finished_frame_reproduces_its_own_predictor(
 def test_the_wave_loop_runs_and_produces_the_same_shape_of_simulation(
     tmp_path, monkeypatch, require_prepared_data
 ):
-    """The wave loop on a model that does not need it, forced.
+    """Compare wave and single-pass output shapes on VG16, which supports both.
 
-    Written when no registered model selected the loop; VG25 now does, and
-    :func:`test_vg25_simulates_wave_by_wave_on_its_own_declaration` is the
-    end-to-end check on the model that needs it. This one stays because it is
-    the only comparison available: VG16 is sound in **one** pass, so the loop
-    and the single pass can be run on the same model and required to agree. No
-    such comparison exists for VG25, where one pass is simply wrong.
-
-    The two passes draw different *values* (each round seeds from its own index)
-    and must not be compared on those. What must match is the shape: the same
-    columns simulated, over the same likelihood rows, with the guard passing --
-    both are valid forward simulations of the same model.
+    Round-specific seeds change values, so compare simulated columns, likelihood
+    rows and predictor coherence instead.
     """
     from vocab_growth.models.cross_lag import prev_wave_lag_for_frame
     from vocab_growth.recovery import simulate as simulate_module
@@ -379,20 +343,7 @@ def test_the_wave_loop_runs_and_produces_the_same_shape_of_simulation(
 def test_vg25_simulates_wave_by_wave_on_its_own_declaration(
     tmp_path, require_prepared_data
 ):
-    """The registered model the loop exists for, end to end (#297).
-
-    Everything here is derived rather than declared, which is the property the
-    2026-09-11 correction turned this module into: nothing tells the simulator
-    to go wave by wave. ``outcome_dependent_predictor`` says the lag reads
-    ``signed``; ``single_pass_is_sound`` finds that column drawn in the same
-    stage as every node the lag enters, and selects the loop. The run then
-    checks, on every round, that each row was drawn under the predictor the
-    finished frame implies.
-
-    Measured at about 70 s at ``dev`` on 2026-09-11 -- seven waves over the
-    joint frame, sixteen coherence checks. It earns that by being the first
-    time the loop has run on a model that actually needs it.
-    """
+    """Run the wave loop selected by VG25's source and consumer declarations."""
     from vocab_growth.models.cross_lag import prev_wave_sign_share_lag_for_frame
     from vocab_growth.recovery.simulate import simulate_replicate
 
@@ -428,14 +379,7 @@ def test_vg25_simulates_wave_by_wave_on_its_own_declaration(
 def test_forcing_the_unsound_order_makes_the_simulation_abort(
     tmp_path, monkeypatch, require_prepared_data
 ):
-    """The guard catching the defect on a real simulation, not on arrays.
-
-    VG16 is sound in one pass, so the unsound case is manufactured the only
-    honest way: declare the consumer to be the node that draws the *source*, so
-    the predictor is read before its own input exists. That is the VG25 ordering,
-    and with the wave loop suppressed the run must stop rather than produce a
-    dataset generated under one design matrix and fitted under another.
-    """
+    """Force a source to be consumed before simulation and require the guard to reject it."""
     from vocab_growth.recovery import simulate as simulate_module
 
     unsound = dataclasses.replace(

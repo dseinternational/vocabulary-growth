@@ -55,8 +55,7 @@ UNIVARIATE_OUTCOME = ""
 #: ``q`` and ``s``, and what each means.
 OUTCOME_SUFFIXES = ("u", "q", "sign")
 
-#: Default reference age for a child slope, in months — the Down syndrome pool's
-#: median. Mirrors ``BivariateChildSlopeModelDefinition``'s own default so a
+#: Default reference age for a child slope, in months. Mirrors ``BivariateChildSlopeModelDefinition``'s own default so a
 #: definition that predates the field resolves the same way it always did.
 DEFAULT_SLOPE_REF_AGE_MONTHS = 36.0
 
@@ -103,14 +102,12 @@ class SubjectOutcomeEffect:
     """One outcome's child effect, fully resolved."""
 
     outcome: str
-    """``"u"``, ``"q"``, or ``""`` for a single-outcome model."""
+    """Outcome suffix: u, q, sign, or the empty string for a single-outcome model."""
 
     kind: SubjectEffectKind
 
     scale_name: str
-    """The emitted scale's variable name — ``tau_subject``, ``tau_subj_u`` or
-    ``tau_subj_q``. Named here because every downstream reader indexes the trace
-    by it, so it is part of the contract rather than a naming detail."""
+    """Trace name for the child scale, including tau_subject and tau_subj_sign."""
 
     sigma: float | None = None
     """``HalfNormal`` scale for :attr:`SubjectEffectKind.CONSTANT`, and the level
@@ -134,7 +131,7 @@ class SubjectEffectPlan:
     omitted, so a consumer indexes rather than searches."""
 
     correlation_eta: float | None = None
-    """VG20's LKJ concentration on the two constant offsets, or ``None``."""
+    """LKJ concentration for the supported constant-offset block, or None."""
 
     factor: SubjectFactorPriorParams | None = None
     """VG22's low-rank factor over all four child effects, or ``None``."""
@@ -229,16 +226,13 @@ def _outcome_effect(
 
 
 def resolve(definition: ModelDefinition) -> SubjectEffectPlan:
-    """The child-effect plan ``definition`` implies, with every rule applied.
+    """Resolve the definition's child effects and check supported combinations.
 
-    Works for both definition shapes: a single-outcome definition (``use_subject_re``)
-    resolves to one entry keyed ``""``, a bivariate one (``use_subject_re_u`` /
-    ``use_subject_re_q``) to two, keyed ``"u"`` and ``"q"`` in build order.
+    Single-outcome definitions use one entry keyed by the empty string. Multi-outcome
+    definitions use the declared u, q and, where present, sign suffixes in build order.
+    Definitions without child-effect fields yield an empty plan.
 
-    Raises ``ValueError`` for every combination the engines refuse. Each is a
-    configuration that would otherwise fit something other than what was asked
-    for, silently, and each is refused here rather than part-way through
-    building a graph.
+    Unsupported combinations raise ValueError before graph construction.
     """
     outcomes = tuple(
         suffix
@@ -284,12 +278,10 @@ def resolve(definition: ModelDefinition) -> SubjectEffectPlan:
 
 
 def _with_correlation(plan: SubjectEffectPlan, definition) -> SubjectEffectPlan:
-    """Attach VG20's correlation, refusing every combination that is not it.
+    """Attach the constant-offset correlation after checking its child blocks.
 
-    Read through ``getattr`` because the field lives on a definition subclass,
-    as the variance partition and the child slope do: putting it on
-    ``BivariateModelDefinition`` would change the serialised definition of the
-    six bivariate models of record and invalidate every one of their fits.
+    The field lives on subclasses so definitions without this structure retain their
+    serialised schema. Both understood and production-ratio blocks must be active.
     """
     eta = getattr(definition, "subject_re_correlation_eta", None)
     if eta is None:
@@ -349,8 +341,8 @@ def _with_factor(plan: SubjectEffectPlan, definition) -> SubjectEffectPlan:
     if SubjectEffectKind.AGE_VARYING in plan.kinds:
         raise ValueError(
             "subject_factor cannot be combined with an age-varying subject "
-            "scale (A1): both claim the same seam, and A1's rank-one scaling is "
-            "a special case of the factor form."
+            "scale (A1): both claim the same seam, and A1's exponential age scaling is "
+            "not the factor form's affine age scaling."
         )
     if SubjectEffectKind.CHILD_SLOPE in plan.kinds:
         raise ValueError(

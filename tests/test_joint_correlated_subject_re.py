@@ -1,30 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""VG24's correlated subject random effects on the joint engine (issue #296).
+"""Check VG24's correlated child effects against the independent VG15 structure.
 
-VG24 is VG15 with its three independent child blocks -- understood, ``q`` and the
-signed ratio -- drawn from one joint Normal instead. VG15 is nested exactly at
-the identity correlation, and the deliverable is ``rho_sign_q``.
-
-Three properties carry the design and are pinned here.
-
-- **VG15 is nested exactly at the identity.** The comparison against VG15 reads
-  "did anything else move?" as a red flag, which is only meaningful if the two
-  graphs coincide there. Checked on the arithmetic itself, not by inspection.
-- **The correlation prior is exchangeable and is LKJ.** ``rho_sign_q`` sits at
-  position (1, 2) of the matrix and ``rho_uq`` at (0, 1); if the prior depended
-  on the position, the quantity the model exists to estimate would be
-  regularised differently from the one it is compared against. This is not
-  hypothetical -- see :func:`test_lkjcorr_is_not_a_correlation_matrix` for the
-  primitive that fails it, which was the obvious choice and was measured wrong.
-- **The scales are unchanged.** Moving them under ``sd_dist`` must reproduce
-  VG15's three independent ``HalfNormal(1.5)`` priors, or VG24's child scales are
-  not comparable with VG15's and neither are the correlations they imply.
-
-The definition-subclass check matters as much and is cheap: putting the field on
-``JointModelDefinition`` would change VG15's serialised definition and invalidate
-every VG15 fit on disk.
+At the identity correlation, the Cholesky transformation must reproduce the
+independent block. Tests also check the named correlation entries, the LKJ
+prior and unchanged marginal scale priors. The correlation field belongs on
+a subclass so VG15's serialised definition stays unchanged.
 """
 
 import math
@@ -91,11 +73,10 @@ def test_vg24_is_the_subclass():
 
 
 def test_vg24_matches_vg20_and_vg23_on_eta():
-    """The three models' `rho_uq` must be estimated under the same concentration.
+    """Use the same LKJ eta across the compared models.
 
-    Not the same marginal -- n differs, which the model page states -- but the
-    same eta, so a difference between the two populations' correlations is not an
-    artefact of how each was regularised.
+    Matrix dimension still changes each correlation's marginal prior. Equal
+    eta alone does not establish equal regularisation.
     """
     from vocab_growth.models.definitions import VG20, VG23
 

@@ -1,14 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The shared report blocks must describe the fit they are rendered against.
+"""Check shared report blocks against fit metadata and stored summaries.
 
-Every one of these tests exists because the hand-written block it replaces got
-the answer wrong on a published report. The sampling banner told five models of
-record they were not fitted at reporting quality when they were fitted at more
-than the default reporting effort; the convergence callout told VG11 it had
-cleared a gate it is published under an exception to; and the priors prose in
-VG10 and VG15 described amplitudes that had been changed months earlier.
+Sampling labels, convergence verdicts, prior descriptions and reported
+quantities must describe the supplied fit rather than template defaults.
 """
 
 import json
@@ -48,13 +44,7 @@ def _fit(tmp_path, *, definition=None, config="rep", parameters=("eta_u",), gate
 
 @pytest.mark.parametrize("config", ["rep", "rep-hightune", "rep-lite"])
 def test_reporting_configs_are_not_called_approximate(tmp_path, capsys, config):
-    """The defect this replaces: rep-hightune fits published a disclaimer.
-
-    VG08, VG09, VG11, VG12 and VG13 were each fitted at 6 chains x 8,000-10,000
-    draws -- more sampling effort than the 6 x 6,000 the old lookup table called
-    "reporting" -- fell through it, and printed "It was not fitted in reporting
-    mode" on a reporting-quality fit.
-    """
+    """Recognise reporting configurations with more effort than the default tier."""
     report_cells.render_sampling_banner(str(_fit(tmp_path, config=config)))
     out = capsys.readouterr().out
     assert "not** fitted at reporting quality" not in out
@@ -109,12 +99,7 @@ def test_priors_table_omits_parameters_the_fit_did_not_sample(tmp_path, capsys):
 
 
 def test_priors_table_carries_the_correlation_prior(tmp_path, capsys):
-    """VG20's whole reason for existing had no row in its own priors table (#233).
-
-    `subject_re_correlation_eta` is a top-level scalar rather than part of a
-    subject-scale block, so neither the scalar HalfNormal path nor
-    `_subject_scale_row` reached it and the table simply omitted it.
-    """
+    """Render the top-level correlation-prior field alongside scale-block priors."""
     fit = _fit(
         tmp_path,
         definition={"subject_re_correlation_eta": 2.0},
@@ -125,6 +110,31 @@ def test_priors_table_carries_the_correlation_prior(tmp_path, capsys):
     assert "LKJ(2)" in out
     assert "Beta(2, 2)" in out
     assert "a correlation has to be evidenced" in out
+
+
+@pytest.mark.parametrize(
+    "eta, dimension, shape, emphasis",
+    [
+        (1.0, 2, 1.0, "flat over (-1, 1)"),
+        (1.0, 3, 1.5, "pulled toward zero"),
+        (0.5, 3, 1.0, "flat over (-1, 1)"),
+        (0.25, 3, 0.75, "pushed toward ±1"),
+    ],
+)
+def test_correlation_prior_wording_follows_its_marginal(eta, dimension, shape, emphasis):
+    # LKJ(1) is flat over matrices, but each correlation is flat only at dimension 2.
+    row = report_cells._prior_row(
+        "rho_uq", "Child-effect correlation", "subject_re_correlation_eta", "lkj",
+        {
+            "subject_re_correlation_eta": eta,
+            "use_subject_re_u": True,
+            "use_subject_re_q": True,
+            "use_subject_re_sign": dimension == 3,
+        },
+    )
+    assert row is not None
+    assert f"Beta({shape:g}, {shape:g})" in row[1]
+    assert emphasis in row[2]
 
 
 def test_priors_table_omits_the_correlation_for_an_uncorrelated_model(tmp_path, capsys):
@@ -178,13 +188,7 @@ _VG22_DEFINITION = {
 
 
 def test_priors_table_carries_the_factor_block(tmp_path, capsys):
-    """VG22's page said the table "omits every prior this block adds" (#273).
-
-    The four scales, the loading directions and the per-child factor scores had
-    no entry in `_PRIOR_SPECS`, and nothing but that sentence recorded it -- so
-    the rendered table described VG10's two child intercepts for a model that
-    does not have them.
-    """
+    """Render the factor scales, loading directions and child-score prior."""
     fit = _fit(tmp_path, definition=_VG22_DEFINITION, parameters=_VG22_PARAMETERS)
     report_cells.render_priors_table(str(fit))
     out = capsys.readouterr().out
@@ -256,12 +260,7 @@ def test_prior_coverage_reports_no_gap_for_the_factor_model(tmp_path):
 
 
 def test_the_table_discloses_its_own_gap(tmp_path, capsys):
-    """A gap must announce itself on the page, not in a hand-written sentence.
-
-    VG22's template carried the disclosure by hand, which is the same failure
-    the whole module exists to replace: a fact about the fit, copied into prose,
-    that nothing keeps true.
-    """
+    """Disclose missing prior coverage from the table's own parameter check."""
     definition = dict(_VG22_DEFINITION)
     definition.pop("subject_factor")
     fit = _fit(tmp_path, definition=definition, parameters=_VG22_PARAMETERS)
@@ -289,11 +288,7 @@ def test_prior_coverage_names_an_unrendered_family(tmp_path):
 
 
 def test_priors_table_carries_the_dirichlet_multinomial_concentration(tmp_path, capsys):
-    """VG15's concentration had a prior figure, a sensitivity mention, and no row.
-
-    Found by the coverage check written for VG22's factor block: the same class
-    of omission, in a different model, that nothing had noticed (#273).
-    """
+    """Include the Dirichlet-Multinomial concentration in prior-table coverage."""
     fit = _fit(
         tmp_path,
         definition={"log_conc_mu": 3.0, "log_conc_sigma": 1.0},
@@ -338,14 +333,14 @@ def test_a_scale_that_is_inert_in_one_model_is_still_required_in_another(tmp_pat
 
 
 def test_non_centred_offsets_are_exempt_with_a_reason(tmp_path):
-    """`*_raw` and `*_z` carry no prior a reader would look for."""
+    """Explain why standardised helper offsets have no separate substantive prior row."""
     for name in ("rho_uq_raw", "delta_u_raw", "subject_factor_z"):
         assert report_cells._is_exempt(name), name
     assert report_cells._is_exempt("eta_u") is None
 
 
 def test_signed_anchors_use_the_signed_anchor_ages(tmp_path, capsys):
-    """Signing has its own anchor ages; labelling them with slope_anchors lies."""
+    """Label signing anchors with their own reference ages."""
     fit = _fit(
         tmp_path,
         definition={
@@ -376,13 +371,7 @@ def test_signed_peak_is_reported_as_estimated(tmp_path, capsys):
 def test_the_dispersion_reading_is_within_child_where_a_child_effect_exists(
     tmp_path, capsys
 ):
-    """The priors table kept the label the headline row was corrected for (#240).
-
-    With a child effect on the outcome's mean, `kappa` is the residual spread
-    between one child's own same-age administrations; `tau_subj_u` is what
-    separates children. Calling `kappa` between-child spread there describes the
-    wrong parameter, and did so in every joint model's priors table.
-    """
+    """Describe kappa as residual dispersion conditional on the modelled child effects."""
     fit = _fit(
         tmp_path,
         definition={"kappa_u": {"anchor_ages": [18.0, 48.0]}},
@@ -440,11 +429,7 @@ def test_priors_table_says_so_when_there_is_no_manifest(tmp_path, capsys):
 
 
 def test_accepted_rhat_exception_is_disclosed(tmp_path, capsys):
-    """VG11 is published under a recorded exception and said it had cleared the gate.
-
-    The old per-template block read only `divergences` and `bfmi`, then printed
-    a hard-coded sentence claiming the hard tier had been cleared.
-    """
+    """Disclose a recorded R-hat exception without claiming the ordinary gate passed."""
     gate = {
         "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
         "max_rhat": 1.0125,
@@ -489,14 +474,7 @@ def test_clean_fit_prints_nothing(tmp_path, capsys):
 def test_a_hard_failure_below_reporting_quality_is_not_called_reportable(
     tmp_path, capsys
 ):
-    """The contradiction a `dev` render of VG25 printed, pinned.
-
-    The gate does not stop a fit below reporting quality, so this payload --
-    R-hat 1.21, an effective sample size of 10, two divergences, no exception --
-    reached a report page. The caveat box called it "cleared the hard
-    convergence tier" and "reportable" directly above a verdict saying it "does
-    not clear the hard tier" and "must not be published".
-    """
+    """Keep a development-fit caveat consistent with a failed hard convergence tier."""
     gate = {
         "checks": {"rhat": False, "ess": False, "divergences": False, "bfmi": True},
         "max_rhat": 1.2104,
@@ -515,12 +493,7 @@ def test_a_hard_failure_below_reporting_quality_is_not_called_reportable(
 
 
 def test_a_hard_failure_with_no_sampling_caveat_is_still_disclosed(tmp_path, capsys):
-    """Silence was reserved for a clean fit, and this is not one.
-
-    Before the fix a hard-tier failure with no divergences and a healthy BFMI
-    produced an empty caveat list, so the box printed nothing at all -- the one
-    case where saying nothing was merely incomplete rather than wrong.
-    """
+    """Disclose a hard-tier failure even when sampling caveats are absent."""
     gate = {
         "checks": {"rhat": False, "ess": True, "divergences": True, "bfmi": True},
         "max_rhat": 1.08,
@@ -664,7 +637,7 @@ def test_glossary_renders_in_definition_order(capsys):
 
 
 def test_kappa_definition_states_the_counter_intuitive_direction():
-    """Ten reviews each flagged that kappa is used without saying which way it runs."""
+    """Explain that larger kappa means less residual dispersion."""
     assert "less" in glossary.GLOSSARY["Concentration ($\\kappa$)"]
 
 
@@ -678,12 +651,7 @@ def test_default_interval_convention_is_stated_somewhere():
 
 
 def test_glance_reports_no_hierarchy_when_the_fit_has_none(tmp_path, capsys):
-    """VG05 announced study random intercepts it does not have.
-
-    The definition dataclass carries a non-None default for every scale, so a
-    definition-field test says "study random intercepts" for a model that never
-    instantiates one -- contradicting the report's own prose two sections later.
-    """
+    """Infer hierarchy from fitted parameters rather than unused definition defaults."""
     fit = _fit(
         tmp_path,
         definition={"tau_u_sigma": 0.5, "tau_subj_u_sigma": 1.5},
@@ -694,12 +662,7 @@ def test_glance_reports_no_hierarchy_when_the_fit_has_none(tmp_path, capsys):
 
 
 def test_glance_finds_hierarchy_under_the_univariate_parameter_names(tmp_path, capsys):
-    """The error in the other direction: VG11 and VG12 have both levels.
-
-    The univariate engine names them `tau` and `tau_subject`, not `tau_u` and
-    `tau_subj_u`, so a test written against the joint names reported "none" for
-    two models of record whose whole purpose is the study effect.
-    """
+    """Recognise univariate study and child scales under their own parameter names."""
     fit = _fit(
         tmp_path,
         definition={"tau_study_sigma": 0.5, "tau_subject_sigma": 1.5},
@@ -836,12 +799,7 @@ def test_loo_section_flags_unreliable_importance_sampling(tmp_path, capsys):
 
 
 def test_hierarchical_fits_distinguish_approximation_from_prediction_target(tmp_path, capsys):
-    """A high k share under subject effects is expected, not evidence of misfit.
-
-    VG10 has 20% of spoken and 31% of understood observations over the
-    threshold. Reporting that as unreliability without saying why would send a
-    reader looking for a modelling fault that is not there.
-    """
+    """Explain influential child effects without treating high Pareto k as a fit diagnosis."""
     row = {**_CLEAN_ROW, "pareto_k_good": 1233, "pareto_k_bad": 258, "pareto_k_very_bad": 30}
     fit = _loo_fit(tmp_path, [row], parameters=("eta_u", "tau_subj_u"))
     report_cells.render_loo_section(str(fit))
@@ -877,13 +835,7 @@ _UNRELIABLE_ROW = {
 def test_the_wrong_unit_explanation_names_only_checks_that_cover_the_model(
     tmp_path, capsys, model_id, named
 ):
-    """A page must not send its reader to a check that cannot run on it.
-
-    Until 2026-09-13 every page with a per-child scale named ``kfold_loso.py``
-    and ``loso_compare.py`` as checks that "hold out whole studies or whole
-    children" -- on the typically-developing and joint pages, which neither
-    script accepts, and about studies, which neither holds out for any model.
-    """
+    """Recommend held-out checks only for the model and unit they support."""
     fit = _loo_fit(
         tmp_path, [_UNRELIABLE_ROW], parameters=("eta_u", "tau_subj_u"),
         model={"model_id": model_id},
@@ -1026,12 +978,7 @@ def test_multi_outcome_loo_is_not_labelled_leave_one_administration_out(
 
 
 def test_an_administration_row_is_named_as_the_one_to_read(tmp_path, capsys):
-    """The score the reports always described, once a fit actually carries it.
-
-    The per-outcome caveats stay -- they are still true of those rows -- but the
-    reader is told which row is whole-administration predictive accuracy rather
-    than left with three conditional ones and a warning.
-    """
+    """Identify the administration row while retaining caveats for conditional outcome rows."""
     from vocab_growth.administration_loo import ADMINISTRATION_LABEL
 
     rows = _MULTI_OUTCOME_ROWS + [{**_CLEAN_ROW, "outcome": ADMINISTRATION_LABEL}]
@@ -1082,15 +1029,7 @@ def test_multi_outcome_fits_without_composition_terms_omit_the_psi_note(
 
 
 def test_priors_table_survives_an_overloaded_subject_scale_field():
-    """A subject-scale field holding a block, not a float, must not break render.
-
-    The subject-scale fields are overloaded: VG19 puts a child intercept-and-rate
-    block there and Proposal A1 an age-varying scale. Once through `asdict` both
-    are mappings, and the scalar path fed one straight to `scipy.stats.halfnorm
-    .ppf(scale=...)`, which raises a bare `TypeError: '>' not supported between
-    instances of 'dict' and 'int'` from inside scipy. Nothing surfaced until
-    `quarto render` failed on the whole page.
-    """
+    """Render subject-scale blocks separately from scalar HalfNormal fields."""
     import dataclasses as dc
 
     from vocab_growth.models.definitions import VG19, VG20
@@ -1332,11 +1271,10 @@ def test_variation_table_dates_the_alias_scales_under_a_rate(tmp_path, capsys):
 
 
 def test_variation_table_reports_the_age_varying_child_scale(tmp_path, capsys):
-    """The spread is a parabola in age; one number cannot state it.
+    """Report scale by age rather than treating the intercept scale as constant.
 
-    With rho01 = -0.219, tau0 = 0.751 and tau1 = 0.176 the comprehension scale
-    has its minimum at D = -rho01 * tau0 / tau1 = +0.93 years, so it must fall
-    from 12 months to the reference age and rise again by 72.
+    Variance is quadratic in centred age; its square root is the scale. These
+    fixture values put the minimum about 0.93 years above the reference age.
     """
     report_cells.render_variation_table(str(_slope_fit(tmp_path)))
     out = capsys.readouterr().out
@@ -1735,19 +1673,16 @@ def _kappa_fit(tmp_path, *, definition=None, contraction=None, curves=("u", "s")
 
 
 def test_dispersion_scope_names_the_denominator_of_each_curve(tmp_path, capsys):
-    """The defect: two kappa figures under near-identical headings, no scope stated.
-
-    ``kappa_u`` disperses counts out of the item pool; ``kappa_s`` disperses the
-    production ratio on the child's own understood count. Nothing on the page
-    said so, which invited reading one level against the other.
-    """
+    """Name each denominator and qualify comparisons of concentration levels."""
     report_cells.render_dispersion_scope(str(_kappa_fit(tmp_path)))
     out = capsys.readouterr().out
     assert "810-item reference inventory" in out
     assert "**conditional** ratio" in out
     assert "spoken among the words that child understands" in out
     assert "different denominators" in out and "These two curves" in out
-    assert "never against another model's curve" in out
+    assert "concentrations alone cannot rank the variability" in out
+    assert "adding child slopes does not guarantee a direction" in out
+    assert "Predictive counts under the same conditions" in out
 
 
 def test_dispersion_scope_counts_a_third_curve_in_words(tmp_path, capsys):
@@ -1759,6 +1694,24 @@ def test_dispersion_scope_counts_a_third_curve_in_words(tmp_path, capsys):
     assert "signed among the words that child understands" in out
 
 
+def test_nested_outcome_split_reports_paired_only_omissions(tmp_path, monkeypatch, capsys):
+    """Describe omitted spoken observations without dropping usable comprehension."""
+    frame = pd.DataFrame(
+        {"understood": [100.0, np.nan, 10.0, 50.0], "spoken": [10.0, 20.0, 12.0, 5.0]}
+    )
+    monkeypatch.setattr(report_cells, "_verified_frame", lambda manifest: (frame, None))
+    manifest = {"model": {"definition": {"spoken_fallback": "paired_only"}}}
+
+    report_cells._print_nested_outcome_split(manifest, str(tmp_path))
+
+    out = capsys.readouterr().out
+    assert "**2 (50%)** carry a usable understood count" in out
+    assert "**2 (50%)** lack a usable denominator" in out
+    assert "omitted from the spoken likelihood by `paired_only`" in out
+    assert "usable understood counts remain in the comprehension likelihood" in out
+    assert "fallback concentration" not in out
+
+
 def test_dispersion_scope_omits_the_comparison_for_a_single_outcome(tmp_path, capsys):
     report_cells.render_dispersion_scope(str(_kappa_fit(tmp_path, curves=(None,))))
     out = capsys.readouterr().out
@@ -1767,12 +1720,7 @@ def test_dispersion_scope_omits_the_comparison_for_a_single_outcome(tmp_path, ca
 
 
 def test_dispersion_scope_maps_an_uninformed_kappa_to_its_anchor_age(tmp_path, capsys):
-    """VG22's ``kappa_excess_young_s`` contracts to -0.23 on real data.
-
-    The curve is still drawn there, so the page has to say which *end* of it the
-    data never placed -- which means resolving the parameter to the reference age
-    its prior is anchored at, not just naming the parameter.
-    """
+    """Link a weakly contracted anchor parameter to its reference age."""
     fit = _kappa_fit(
         tmp_path,
         definition={"n_trials": 810, "kappa_s": {"anchor_ages": [18.0, 72.0]}},
@@ -1794,13 +1742,7 @@ def test_dispersion_scope_maps_an_uninformed_kappa_to_its_anchor_age(tmp_path, c
 
 
 def test_dispersion_scope_flags_a_prior_acting_as_a_floor(tmp_path, capsys):
-    """The two-sided test. VG14's kappa parameters press the *lower* tail.
-
-    ``prior_vs_posterior.py`` flagged only ``cdf >= 0.95`` until 2026-09-02, so a
-    fit whose data wants a smaller dispersion than the prior offers carried an
-    empty ``flags`` column. This block reads the numbers, so it is right against
-    a table written either side of that fix.
-    """
+    """Check the lower prior tail as well as the upper tail."""
     fit = _kappa_fit(
         tmp_path,
         definition={"n_trials": 810, "kappa_u": {"anchor_ages": [18.0, 72.0]}},
@@ -1838,11 +1780,7 @@ def test_dispersion_scope_says_so_when_the_fit_writes_no_curve(tmp_path, capsys)
 
 
 def test_prior_vs_posterior_presses_on_both_tails():
-    """A prior acting as a floor is the same finding as one acting as a ceiling.
-
-    ``scripts/`` is not importable from the test run, and the assertion is about
-    one condition, so this reads the source rather than adding path plumbing.
-    """
+    """Inspect the source condition that flags both prior tails."""
     source = (REPO_ROOT / "scripts" / "prior_vs_posterior.py").read_text(encoding="utf-8")
     assert "CONFLICT_CDF = 0.95" in source
     assert "if cdf >= CONFLICT_CDF or cdf <= 1.0 - CONFLICT_CDF:" in source
@@ -1862,23 +1800,12 @@ def test_prior_vs_posterior_presses_on_both_tails():
     ],
 )
 def test_kappa_role_parsing_covers_the_legacy_names(name, expected):
-    """The defect: the first cut matched ``name.startswith("kappa")``.
-
-    The legacy intercept-and-slope form names its parameters ``a_kappa_s`` and
-    ``b_kappa_mag_s``, which do not begin with "kappa", so VG05, VG07 and VG08
-    had every dispersion caveat silently dropped -- including ``b_kappa_mag_s``
-    at 7.8 prior SDs, the strongest prior-data conflict in the suite.
-    """
+    """Recognise legacy a_kappa and b_kappa names as dispersion parameters."""
     assert report_cells._kappa_role_and_suffix(name) == expected
 
 
 def test_dispersion_scope_reports_a_strained_legacy_curve_as_one_finding(tmp_path, capsys):
-    """``kappa_min + exp(a - b_mag z)`` couples the intercept and the slope.
-
-    Reporting them as two caveats would read as two problems where the fit has
-    one, and would invite fixing the intercept prior when the slope prior is what
-    is binding.
-    """
+    """Report the coupled legacy intercept-and-slope curve as one finding."""
     fit = _kappa_fit(
         tmp_path,
         contraction=[
@@ -1898,12 +1825,7 @@ def test_dispersion_scope_reports_a_strained_legacy_curve_as_one_finding(tmp_pat
 
 
 def test_dispersion_scope_does_not_call_a_far_tail_posterior_uninformed(tmp_path, capsys):
-    """Contraction cannot separate "data said nothing" from "said something far away".
-
-    ``b_kappa_mag_s`` is 7.8 prior SDs out with a 13% relative posterior spread,
-    and scores contraction -0.08. Reporting that as "not estimated from this
-    data" would be the opposite of the truth.
-    """
+    """Distinguish weak contraction from a concentrated posterior far outside the prior centre."""
     fit = _kappa_fit(
         tmp_path,
         contraction=[
@@ -1952,11 +1874,7 @@ def _by_understood_fit(tmp_path, monkeypatch, *, frame):
 def test_conditional_production_check_sets_the_children_beside_the_curve(
     tmp_path, monkeypatch, capsys
 ):
-    """The defect (#233): the curve is population q at the age where the population
-    median reaches U, and three captions read it as E[q | understood = U]. At 300
-    words the VG21 and VG22 curves both sit near 0.4 while the children who
-    understood 300 words have median ratios of 0.27 and 0.13.
-    """
+    """Compare observed ratios with the population curve without calling it conditional on count."""
     rng = np.random.default_rng(0)
     n = 60
     frame = pd.DataFrame(
@@ -1970,7 +1888,9 @@ def test_conditional_production_check_sets_the_children_beside_the_curve(
     assert "| 38 months |" in out
     # No children near 50, 100 or 200, so those rows are not shown.
     assert "| 50 |" not in out and "| 200 |" not in out
-    assert "must be made in the right-hand column" in out
+    assert "Population comparisons must state which of these questions they ask" in out
+    assert "each group's ages, study composition and measurement rules" in out
+    assert "Differences alone do not establish causes" in out
 
 
 def test_conditional_production_check_says_why_when_the_frame_is_unavailable(
@@ -2051,9 +1971,7 @@ def test_dispersion_scope_pairs_only_two_pressing_parameters_and_reads_the_direc
 
 
 def test_reference_child_calibration_sets_the_curve_beside_the_sample(tmp_path, monkeypatch, capsys):
-    """The population curve is the child in the average study; the sample median is
-    the children in the data. At ages covered by one or two studies they can sit
-    far apart, and every milestone on the page is read off the former."""
+    """Compare the average-study reference curve with the observed sample median."""
     fit = _fit(tmp_path)
     ages = np.arange(8.0, 61.0)
     pd.DataFrame({"age_months": ages, "Ey_median": ages * 5}).to_csv(fit / "posterior_summary_monthly_u.csv", index=False)
@@ -2096,13 +2014,7 @@ def test_a_damaged_summary_is_not_a_fit_that_has_yet_to_produce_one(tmp_path):
 
 
 def test_a_table_written_with_no_rows_still_reads_as_absent(tmp_path):
-    """`pd.DataFrame([]).to_csv()` writes a bare newline, not a damaged file.
-
-    Several writers here build their table from a list of row dicts and write
-    it whatever that list contains. With no rows the frame has no columns at
-    all, and the file records "there was nothing to tabulate" — which the
-    report has always rendered as pending, and must keep rendering that way.
-    """
+    """Treat a bare newline from an empty, columnless table as absent data."""
     pd.DataFrame([]).to_csv(tmp_path / "posterior_summary.csv", index=False)
     (tmp_path / "diagnostics.csv").write_text("\n", encoding="utf-8")
 

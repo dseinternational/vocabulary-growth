@@ -7,9 +7,9 @@ trajectory (Figure 22 equivalent) and the comprehension-production gap
 
 Reads the per-model CSVs already produced by the model fit pipeline:
 
-- `joint_trajectory.csv` — posterior predictive medians + 5/25/75/95 bands
+- `joint_trajectory.csv` — posterior predictive medians and stored interval bands
   for words understood and words spoken.
-- `comprehension_production_gap.csv` — posterior median + HDI bands for the
+- `comprehension_production_gap.csv` — posterior median and stored interval bands for the
   expected gap (p_U - p_S) * n_trials.
 
 Outputs (in the configured comparisons dir — default `output/comparisons/`, see
@@ -37,7 +37,7 @@ from vocab_growth.comparisons_provenance import (
 from vocab_growth.fit_consumers import add_allow_stale_argument, contributing_fits
 
 DS_KEY = "vg20"
-TD_KEY = "vg21"  # VG13 (8-18 mo) until 2026-09-02
+TD_KEY = "vg21"
 DS_DIR = comparison.model_dir(DS_KEY)
 TD_DIR = comparison.model_dir(TD_KEY)
 OUT_DIR = env.comparisons_output_dir()

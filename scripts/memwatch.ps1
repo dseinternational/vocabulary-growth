@@ -3,24 +3,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 <#
 .SYNOPSIS
-    Per-process RSS sampler for long fitting runs. PowerShell Core port of
-    memwatch.sh, which reads `free` and `ps -eo rss=,args=` and so only ever ran
-    on Linux.
+    Sample fitting-process memory and machine memory use.
 
 .DESCRIPTION
-    Why per-process. A machine-level sampler ("used_GB") records that the box hit
-    its limit but not which fit did it. On 2026-08-13 vg13 was OOM-killed at
-    232 GB while sharing the machine with three sensitivity fits, and the culprit
-    could only be identified afterwards from the kernel log. Naming the process
-    lets the next model's memory budget come from measurement rather than from a
-    remembered figure.
-
-    Peaks matter more than plateaus here: vg13 sampled for seven hours at a
-    steady ~120 GB and then took +100 GB in 90 seconds during post-sampling
-    assembly. Sample often enough to catch that -- the 20s default resolves it,
-    60s would not.
-
-    See docs/runbooks/full-refit.md, "Surviving an OOM".
+    Append timestamps, machine memory totals and each matching fit's resident
+    memory. Short intervals help detect brief post-sampling peaks, but any
+    interval can miss a peak between samples. See the full-refit runbook.
 
 .EXAMPLE
     # Alongside a fitting driver, stopped when the driver exits.
@@ -34,14 +22,14 @@ param(
     [string] $LogFile,
     # Seconds between samples.
     [int]    $IntervalSeconds = 20,
-    # Extra process-name patterns to sample beyond the fitting drivers.
+    # Regular expression selecting fitting-process command lines.
     [string] $Pattern = '(fit_model|fit_sensitivity|refit_hightune|fit_recovery|kfold_loso)\.py'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
 
-# Machine-level used / swap in whole GB, matching memwatch.sh's `free -g` fields.
+# Machine memory and swap/page-file use, rounded to whole GiB.
 function Get-MemorySummary {
     if ($IsWindows) {
         $os = Get-CimInstance Win32_OperatingSystem
@@ -60,7 +48,7 @@ function Get-MemorySummary {
         $swapUsed = $info['SwapTotal'] - $info['SwapFree']
         return @{ Used = [int](($total - $avail) / 1MB); Swap = [int]($swapUsed / 1MB) }
     }
-    # macOS and anything else: report what can be had cheaply.
+    # Fallback: sum process RSS, which can double-count shared pages; swap is unknown.
     $used = (& ps -A -o rss= | Measure-Object -Sum).Sum
     return @{ Used = [int]($used / 1MB); Swap = 0 }
 }

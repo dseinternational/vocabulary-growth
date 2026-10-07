@@ -1,23 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The expressive-comparison panels must not plot uncovered grid points.
+"""Apply the coverage floor to expressive-comparison panels by default.
 
-``scripts/compare_ds_td_expressive.py`` wraps ``comparison.plot_summary_band``
-in a local ``_band`` helper. That helper used to default ``cov=0.0``, which
-overrode the library function's own 0.80 default and made the wrapper weaker
-than the thing it delegates to. Only the three level-indexed calls passed
-``cov`` explicitly, so every age-indexed panel was drawn unfiltered.
-
-On ``ds_td_expressive_delay_by_age`` that mattered: both equivalent ages
-saturate at VG13's 18-month ceiling, above which the delays rise 1:1 with age
-and their difference is forced to zero by arithmetic rather than by anything
-about the children. At 40 months the plotted interval was a single draw
-(coverage 2.8e-05, lower = median = upper).
-
-These tests pin the default and the behaviour, since the regression is
-invisible in the output — an unfiltered panel renders as a longer, smoother
-curve, not as an error.
+The local band wrapper must retain the shared 0.80 floor. A narrow interval
+from very few covered draws must not appear as a supported contrast.
 """
 
 import importlib.util

@@ -15,8 +15,8 @@ excess kurtosis of each margin, (b) the count of children beyond 3 SD, and
 (c) the cross-child Pearson correlation of the standardised pair, full versus
 with the top-1% Mahalanobis children (under that draw's ``rho_uq``) removed.
 The normal reference band for (a) comes from simulating normal samples of the
-same size. Draws are thinned 4x: these are cross-child summaries, not MCMC
-estimands, so thinning costs nothing that matters.
+same size. Draws are thinned fourfold to reduce memory use, at the cost of
+Monte Carlo precision in the posterior summaries.
 
 Result, against the 2026-08-22 ``rep`` fit (commit ``d7ee170``): the tails are
 mildly but genuinely heavy -- excess kurtosis +0.466 (u) / +0.336 (q) against a
@@ -26,10 +26,9 @@ spanning zero, so ``rho_uq`` is not driven by the extreme children and the
 multivariate t was **not adopted**. See
 ``notes/202609011717-multivariate-t-not-adopted.md``.
 
-The check is conservative in one direction only: the normal prior itself pulls
-the per-draw fitted effects toward normality, so real heavy tails are
-understated, never overstated. A positive here means more than the same number
-would from raw data.
+The fitted effects depend on the Normal prior and the observations. Shrinkage
+and uneven information can alter their apparent tails in either direction.
+These summaries describe fitted effects, not a bound on the population's tails.
 
 Reads the trace's posterior group lazily with xarray rather than going through
 ``comparison._load_reshaped_draws``: the per-child deterministics are

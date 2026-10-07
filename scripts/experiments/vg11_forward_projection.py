@@ -18,7 +18,7 @@ where the spoken curve is gaining 3 words a month and slowing) therefore
 disagrees with itself by 173 words at 5 years, and the model's own mean function
 -- a logit-linear age trend, recoverable here exactly from ``intercept`` and
 ``slope`` -- runs to the checklist ceiling by 4 years. The two bracket the
-answer rather than locate it, which is the finding.
+selected continuations but do not bound the unknown future trajectory.
 
 Method, following the Down syndrome harness:
 
@@ -47,7 +47,7 @@ Method, following the Down syndrome harness:
    itself, which is where the curve goes if the HSGP deviation reverts to zero
    above the window, and ``vg11_trend_spliced``, its slope continued from the
    model's own value at the window's top. Both reach the ceiling well inside
-   5 years, and they are the projection's upper bracket.
+   5 years in the recorded run. These are alternatives, not proven upper bounds.
 
 Inside the window the predictive level reproduces VG11's reported ``Y_*``
 intervals, which is what checks the construction.
@@ -98,7 +98,7 @@ EPS = 1e-9
 # figure and quoted in the note; nothing in the projection is clipped to it.
 WS_FORM_ITEMS = 680
 # The levels the age-at-count table is read off: the pooled families and the
-# model's own logit-linear continuation, the two ends of the bracket.
+# model's own logit-linear continuation, two alternative continuations.
 AGE_AT_COUNT_LEVELS = ("population_median_child", "vg11_trend_spliced")
 
 

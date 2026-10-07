@@ -11,9 +11,9 @@ notes/202608231410-td-geometry-remaining-levers.md §3 makes obligations:
     marginal_arm.py marginal               -- singleton child effects integrated out
     marginal_arm.py marginal --nodes 40    -- the node-count sensitivity of that arm
 
-`explicit` and `marginal` differ in the sampled space alone: the marginalisation
-is exact, so `tau_subject`, `kappa` and the trajectory must agree within Monte
-Carlo error. They will not agree bit for bit -- the sampled space has different
+`explicit` and `marginal` target the same posterior in different sampled spaces.
+Numerical quadrature approximates the integral, so agreement in `tau_subject`,
+`kappa` and the trajectory requires checking quadrature and Monte Carlo error. They will not agree bit for bit -- the sampled space has different
 dimensions -- which is why the comparison is a posterior comparison and not a
 diff.
 

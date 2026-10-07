@@ -1,42 +1,25 @@
 #!/usr/bin/env python
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Is `max R-hat <= 1.01 over every sampled parameter` measuring convergence, or size?
+"""Describe R-hat exceedances against parameter count and effective sample size.
 
-The convergence gate fails closed when **any** sampled parameter exceeds R-hat
-1.01. The threshold itself is the current standard (Vehtari et al. 2021, which
-replaced the far laxer 1.1 convention). What this script tests is the *rule
-built on it*, and three specific worries about applying a fixed threshold to a
-maximum over every parameter:
+Read stored draws and summarise R-hat for an approximation to the gate's sampled
+parameter set and for stored reporting grids. Group exceedances by ESS and model.
+This is a descriptive audit of the recorded fits, not a simulation calibrated
+under known convergence. Parameter dependence affects maxima; the tables do not
+show that failures arise solely from multiplicity or set an implied minimum ESS.
 
-1. **Multiplicity.** R-hat is estimated with Monte Carlo error, so the maximum
-   over N parameters is an extreme order statistic whose distribution moves up
-   with N. A model with 14,600 parameters is then held to a stricter standard
-   than one with 30, for reasons unrelated to whether either converged.
-
-2. **Inconsistency with the project's own ESS floor.** R-hat's sampling error
-   shrinks with effective sample size, so a fixed R-hat threshold implies a
-   *minimum ESS* — and if that implied minimum is far above the explicit
-   `ESS >= 400` gate, the two halves of the same gate disagree about how much
-   sampling is enough.
-
-3. **Reparameterisation.** R-hat on internal parameters is not invariant: the
-   same posterior written centred or non-centred has different parameters with
-   different R-hat. The reported estimands — the trajectory and query-age grids
-   — are invariant. Gating on parameters therefore privileges a coordinate
-   system that is an implementation choice.
-
-Outputs, per fitted model and pooled, to `output/comparisons/rhat_calibration/`:
-
-* `rhat_by_model.csv` — parameters screened, max R-hat, count over 1.01, and the
-  same for the *reported* grids.
-* `rhat_by_ess.csv` — exceedance rate binned by ESS, pooled over models. This is
-  the test of worry 2.
+A centred or non-centred representation can have different sampling behaviour.
+Stored reporting grids provide another set of diagnostics but cannot certify
+unscreened quantities. Compact traces can also change which variables are present.
 
 Usage::
 
     python scripts/experiments/rhat_gate_calibration.py
     python scripts/experiments/rhat_gate_calibration.py --models vg11 vg12
+
+Write per-model and pooled tables under
+``<output-root>/comparisons/rhat_calibration/``.
 """
 
 from __future__ import annotations

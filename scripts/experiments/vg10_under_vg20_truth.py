@@ -2,67 +2,25 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Fit VG10 to data simulated from VG20 at a known, non-zero ``rho_uq``.
+"""Compare VG10 and VG20 fits on data simulated from VG20.
 
-The question
-------------
-VG20 estimates a correlation between a child's comprehension deviation and their
-production-ratio deviation; VG10 forces it to zero. Linearising
-``log p_S = log p_U + log q``, the within-administration cross-outcome
-covariance is::
+VG20 correlates child comprehension and production-ratio effects; VG10 keeps
+their priors independent. Fit both to the same simulated frame and compare
+parameter summaries and predictive interval widths. This measures sensitivity
+to omitting that correlation under the selected truths and design. It does not
+prove a unique route by which the fitted model compensates.
 
-    cov(log p_U, log p_S) = tau_u^2 + rho * tau_u * tau_q   [+ no noise term]
+A local approximation to latent log probabilities gives
+``Cov(log p_U, log p_S) = Var(log p_U) + Cov(log p_U, log q)``. The logit-effect
+scales are not generally the log-probability scales. Also, paired observed
+counts are nested: speech conditions on comprehension, so their observation
+noise is not independent. Neither detail supports a universal absorption bound.
 
-with no observation-level term, because the two Beta-Binomial draws are
-independent across outcomes by construction. Setting ``rho = 0`` does not remove
-that equation — it over-constrains it to ``cov = tau_u^2``, so the covariance the
-data carry has to be absorbed somewhere else.
-
-**Where?** ``notes/202608191200`` predicted ``tau_subj_u``. On the real data
-VG10 gives 0.7970 against VG20's 0.7860, a shift of only 0.36 sigma, where full
-absorption would need ``sqrt(tau_u^2 + rho*tau_u*tau_q)`` = 0.995. So the naive
-prediction is a bound that is grossly violated, and the interesting possibility
-is that the covariance lands in the **dispersion** instead — which would be a
-concrete instance of between-child heterogeneity leaking into overdispersion,
-the confound #229 is about. The real-data dispersion shifts point that way but
-none exceeds 0.72 sigma, so they cannot settle it.
-
-Simulated data can, because the truth is known.
-
-The design
-----------
-For each replicate the data and the truth are *identical* between the two arms;
-only the model differs. That is what isolates mis-specification from every other
-source of error, including the ~5.7% low bias in the between-child scale that
-both models show and which would otherwise confound a single-arm reading.
-
-    truth      VG20's own posterior draw (known rho_uq, tau_subj_*, kappa_*)
-    data       the frame `fit_recovery.py vg20` simulated from that draw
-    arm A      VG20 refitted to it  -- correctly specified control, already
-               scored by the recovery harness into recovery_vg20_rNN.csv
-    arm B      VG10 fitted to it    -- mis-specified, this script
-
-Arm A costs nothing extra: this script reads its scores rather than refitting.
-
-Isolation
----------
-VG10's own recovery directories hold the 2026-08-16 baseline that #225 cites, so
-this script must not write there. The VG10 definition it fits carries a
-``-under-vg20-truth`` suffix in its ``config_name``, which sends the output to
-``VG10-...-under-vg20-truth-recovery-rNN/`` and leaves the baseline untouched.
-
-Two modes
----------
-**Pinned** (``--rho 0.368``) is the headline experiment: the truth is a VG20
-posterior draw with ``rho_uq`` overwritten to a stated value, so every replicate
-is generated at the same, named correlation and the replicates differ only in
-the remaining parameters and the simulation noise. This mode simulates and fits
-*both* arms itself, because the recovery harness's own runs are at its own draws.
-
-**Harness draws** (no ``--rho``) reuses whatever ``fit_recovery.py vg20`` already
-simulated and scored. Its truths span the posterior (0.311-0.478 on the current
-run), which makes it the dose-response companion: if the absorption scales with
-the true ``rho``, that is mechanism confirmation the pinned run cannot give.
+With ``--rho``, pin the free correlation variable in a stored posterior truth
+draw, recompute its derived quantities and simulate both arms. Other truth
+parameters still vary across selected draws. Without ``--rho``, reuse VG20
+recovery simulations and control scores. VG10's suffixed definitions keep these
+fits separate from its own recovery baseline. Score only suitable, converged fits.
 
 Usage::
 
@@ -136,14 +94,9 @@ REPORTED = (
     "tau_q",
 )
 
-#: COMPONENTS are the floor-plus-excess terms the reference-age values are built
-#: from. They trade off against one another and are individually unidentified at
-#: recovery tiers: on VG20's own gate-2 replicate the *correctly specified* model
-#: missed `kappa_excess_old_s` by +265%, `kappa_min_s` by -60% and `a_kappa_s` by
-#: +75%, while the derived `kappa_old_s` was within 1%. Differences between the
-#: arms on these are noise on top of noise, so they are reported separately and
-#: must not be read as the answer -- ranking everything together by magnitude
-#: puts precisely the unidentified terms at the top.
+#: Floor-plus-excess components can trade off while reference-age concentration
+#: stays similar. Report them separately from the derived concentrations; large
+#: component errors alone need not imply large predictive errors.
 COMPONENTS = (
     "kappa_min_u",
     "kappa_excess_young_u",
@@ -282,19 +235,11 @@ def _truth_values(replicate: int, source_def) -> dict[str, float]:
 
 
 def _posterior_summary(directory: str, names) -> dict[str, tuple[float, float]]:
-    """``{parameter: (centre, sd)}`` for a completed fit.
+    """Read parameter centres and SDs from a trace or diagnostics table.
 
-    Prefers the trace, which gives the posterior *median*. Falls back to the
-    fit's own ``diagnostics.csv``, which carries the *mean* -- a difference that
-    is negligible for these near-symmetric scalar posteriors and is reported so
-    the substitution is visible rather than silent.
-
-    The fallback is not a convenience. Recovery traces are pruned once scored,
-    and on 2026-08-19 a prune glob written for one experiment deleted another's
-    control traces mid-run; every summary a comparison needs was still on disk,
-    but the scorer insisted on the trace and the run failed. Reading a
-    multi-gigabyte trace to recover a scalar that is already tabulated beside it
-    was never the right dependency.
+    The trace supplies medians; the fallback table supplies means. They can
+    differ for skewed posteriors, so comparisons must allow for that change of
+    summary. The fallback supports recovery fits whose traces were pruned.
     """
     path = os.path.join(directory, "trace.nc")
     out: dict[str, tuple[float, float]] = {}
@@ -348,18 +293,11 @@ def _control(replicate: int, rho: float | None):
 
 
 def interval_widths(replicates, rho: float | None) -> pd.DataFrame:
-    """Subject-marginal interval widths, mis-specified arm against control.
+    """Compare subject-marginal interval widths on the same simulated frame.
 
-    The parameter table can only show where forcing ``rho = 0`` moves an
-    *estimate*. It cannot show the cost that matters, because the correlation
-    enters the child-level predictive directly: the subject-marginal draw takes
-    the two deviates from the joint distribution, so a model without ``rho``
-    cannot express the compounding of ``p_U`` and ``q`` however well its other
-    parameters are recovered.
-
-    On the real data that gap is 9-33% (gate 3 of #224). Here the data are
-    simulated at a known ``rho``, so the same comparison says whether that width
-    difference is the whole of the mis-specification cost.
+    Correlation changes how comprehension and production-ratio effects combine.
+    Width differences assess one predictive consequence; they do not measure
+    every cost of model misspecification or establish interval coverage.
     """
     rows = []
     for replicate in replicates:

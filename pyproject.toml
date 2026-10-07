@@ -11,43 +11,19 @@ requires-python = ">=3.14"
 license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Frank Buckley" }]
 
-# The scientific stack is inherited transitively rather than restated here: the
-# canonical floors (numpy/scipy/pandas/pymc/pytensor/nutpie/arviz/preliz/xarray/
-# …) live in dse-research-utils' own pyproject.toml, so they cannot drift
-# between the repositories that share them. Only the extras this repository
-# actually needs are named:
-#   columnar  duckdb — the prepared-data store (also brings polars, pyreadstat)
-#   graphs    graphviz bindings for the model DAG (needs the system `dot` too)
-#   io        orjson / tabulate, used by the shared reporting helpers
-#   jax       jax + numpyro — imported directly (jax.numpy, jax.scipy.special)
-#   notebook  jupyter + jupytext — Jupytext notebooks and Quarto's kernel
-#   viz       seaborn
-# `storage` is deliberately absent: since dse-research-utils v0.11.1 h5netcdf
-# and h5py — the netCDF engine trace.nc is written with, and imported directly
-# by the model reports to inspect a trace before opening it — are core
-# dependencies, leaving that extra carrying only zarr, which nothing here
-# imports. Dropping it changes nothing in the resolved environment (nutpie
-# depends on zarr regardless); it stops us declaring a need we do not have.
-# nutpie is deliberately absent: PyMC 6 declares it as `pymc[nutpie]` and
-# auto-selects it as the default NUTS sampler when present, so it is a base
-# dependency of dse-research-utils to keep the sampler identical across repos.
+# Scientific dependency floors come from dse-research-utils. Extras add the
+# columnar store, Graphviz bindings, IO helpers, JAX, notebooks and plotting.
+# h5netcdf, h5py and the sampler are shared core dependencies.
 dependencies = [
   "dse-research-utils[columnar,graphs,io,jax,notebook,viz]"
 ]
 
 [dependency-groups]
-# Development-only tooling. A PEP 735 group is never written into published
-# package metadata, so none of this reaches anything that depends on us.
-#
-# `lint` is split out so CI's lint job can install ruff alone. Left inside
-# `dev`, `uv run ruff` syncs the whole project environment,
-# PyMC and JAX among them — to run a self-contained Rust binary.
+# Separate lint and typecheck groups let CI install those tools without the
+# scientific stack. Development groups do not enter wheel dependency metadata.
 lint = [
   "ruff>=0.16.10"
 ]
-# Static type checking, split out for the same reason `lint` is: mypy reads
-# source rather than importing it, so the narrow set of modules it covers can be
-# checked without syncing PyMC, JAX and ArviZ to do it.
 typecheck = [
   "mypy>=2.4.0"
 ]
@@ -55,21 +31,14 @@ dev = [
   "ipython>=9.17.1",
   "ipywidgets>=8.1.9",
   "pytest>=9.1.1",
-  # The suite is dominated by a handful of model builds and sampler runs, which
-  # parallelise cleanly: every model build writes under its own `tmp_path`, so
-  # there is no shared state between workers. See
-  # `notes/202608241530-test-suite-performance.md`.
+  # Tests with costly shared fixtures use xdist_group marks for slow runs.
   "pytest-xdist>=3.8.0",
   { include-group = "lint" },
   { include-group = "typecheck" }
 ]
 
 [tool.uv]
-# Platforms the lockfile resolves for — the same set as dse-research-utils.
-# Intel macOS is absent because numba publishes no macOS x86_64 wheels, an
-# upstream decision. Native win-amd64 is now covered: jaxlib, which had no
-# conda-forge win-64 build, ships a cp314 wheel on PyPI, so Windows
-# contributors no longer need WSL.
+# Resolve the CPU lock on the four supported platforms.
 environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
   "sys_platform == 'linux' and platform_machine == 'aarch64'",
@@ -78,9 +47,9 @@ environments = [
 ]
 
 [tool.uv.sources]
-# dse-research-utils isn't published to PyPI — resolve it from the public git
-# tag. To develop against a sibling checkout instead, comment this out and use:
-#   dse-research-utils = { path = "../research/src/python", editable = true }
+# Pin the shared library to a reviewed release tag. For local development, replace
+# this entry with the sibling checkout source below, then refresh the lock.
+# dse-research-utils = { path = "../research/src/python", editable = true }
 dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.18.0" }
 
 [tool.hatch.version]
@@ -101,17 +70,7 @@ markers = [
 ]
 
 [tool.mypy]
-# Deliberately narrow (issue #273). These are the modules that *declare* things
-# -- the model definitions, the catalogue, the child-effect plan and the
-# analysis-frame mapping derived from it -- and they are where an annotation
-# that quietly disagrees with the value does real damage: `tau_subj_u_sigma`
-# was annotated `float` while three registered models put an object in it, and
-# `TrivariateModelDefinition.kappa_u` said `KappaPriorParams` while VG14 and
-# VG15 both passed the two-anchor form. Both were found by turning this on.
-#
-# The PyMC graph code is **not** covered and should not be until these are
-# stable: PyTensor's tensor algebra is not usefully typed, and the noise would
-# bury findings like the two above.
+# Check the declaration modules. PyTensor graph code lies outside this scope.
 files = [
   "src/vocab_growth/analysis_frames.py",
   "src/vocab_growth/models/catalogue.py",
@@ -148,4 +107,3 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["vocab_growth"]
-

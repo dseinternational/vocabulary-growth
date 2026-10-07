@@ -1,31 +1,17 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Score a recovery refit against the truth that generated its data (issue #163).
+"""Score recovery posteriors against the truths used to simulate their data.
 
-For every target quantity the table records the truth, the recovered posterior,
-the signed error in posterior-standard-deviation units, whether the truth falls
-inside the reported credible intervals, and the truth's posterior quantile.
-Intervals follow the project convention (:mod:`vocab_growth.intervals`): a 50%
-inner and an 89% outer interval, equal-tailed except for the named skewed
-estimands, which use highest-density intervals.
+Tables report signed errors, posterior intervals, interval containment and the
+truth's posterior quantile. Intervals follow the project's quantity-specific
+policy. Poor recovery can reflect weak information, prior influence, constraints,
+simulation error or sampling failure; these summaries do not distinguish them.
 
-What this does and does not establish
--------------------------------------
-A recovery check answers a specific question: *if this model were true, would this
-sampler at this sampling configuration find the parameters back from a dataset of
-this size and shape?* A quantity whose truth sits far outside its posterior points
-to a non-identified parameter, a mis-specified constraint, or a sampler that has
-not converged — all of which matter for the reported intervals.
-
-It is not a calibration proof. Simulation-based calibration needs on the order of
-a hundred replicates before rank uniformity means anything, and the interval
-coverage computed *within* one replicate is over correlated quantities from a
-single truth, so it is descriptive rather than a coverage estimate. The
-``coverage_ci89`` column is reported as what it is — the fraction of target
-quantities whose interval contained the truth — and the pooled row is marked
-indicative. The harness accumulates replicates so a full calibration run remains
-possible later without new code.
+Containment fractions within a replicate describe correlated target quantities,
+not repeated-sample coverage of each quantity. Pooled rows remain descriptive.
+Simulation calibration needs an appropriate generating design and enough
+replicates for its intended precision; no universal replicate count suffices.
 """
 
 from __future__ import annotations
@@ -48,26 +34,22 @@ from vocab_growth.fit_artifacts import (
 from vocab_growth.models.definitions import ModelType
 from vocab_growth.sensitivity.compare import CAVEATS_SEPARATOR, diagnostics_gate
 
-# Dimensions whose elements are reported individually. Observation-level
-# quantities are excluded: they are per-row latents, not estimands, and there are
-# tens of thousands of them.
+# Report scalar, query-age and study quantities individually; omit observation
+# arrays from this target selection.
 ELEMENTWISE_DIMS: tuple[str, ...] = ("query_id", "study_id")
 
-# Dimensions summarised in aggregate rather than element by element. Per-child
-# effects number in the thousands; their individual recovery is uninformative but
-# their aggregate behaviour is not.
+# Summarise the many child effects in aggregate to keep their recovery readable.
 AGGREGATE_DIMS: tuple[str, ...] = ("subject_id",)
 
-# A target quantity is "recovered" when the truth lies inside the outer (89%)
-# interval. Reported alongside the 50% interval so a systematically biased
-# posterior shows up even when the wide interval still covers.
+# Report containment in both intervals. A hit in one interval is not proof of
+# good recovery; interpret errors, interval widths and diagnostics alongside it.
 OUTER_PROB = intervals.DEFAULT_CI_PROB
 INNER_PROB = intervals.INNER_CI_PROB
 
 # Variables excluded from the target set, with the reason each is not an estimand:
 #
-#   z_*            standardised age grids — fixed functions of the design, so
-#                  "recovering" them is vacuous (zero posterior spread).
+#   z_*            standardised design grids or non-centred deviates, omitted
+#                  in favour of their reported scaled quantities.
 #   f_*, h_*       logit-scale latent trajectories. Each is a monotone transform
 #                  of a probability-scale quantity that is already a target
 #                  (f_u_query of p_u_query, h_query of q_query), so counting both
@@ -148,24 +130,10 @@ def target_variables(
     return elementwise, aggregate
 
 
-# The total spread: derived, not read from the graph (#229 option 4; #289 task
-# 4.12). The between-child contrast adopted for publication is the SD in words of
-# a new child's count at matched age or level, and until it is scored here no
-# recovery run had ever tested it -- the 1.2-13.9% shortfall on VG10 and VG20 was
-# reconstructed from tau and kappa after the fact. It is computed from the
-# probability-scale curves, the concentrations and the child scales at the query
-# ages, identically for the recovered posterior and the truth draw, by the same
-# function the comparison uses, so a recovery result speaks to the number the
-# comparison reports.
-#
-# Its variables sit on ``query_id``, so :func:`target_variables` selects them with
-# every other trajectory quantity. It is not excluded as the ``f_``/``h_`` logits
-# are: those are monotone transforms of one scored quantity each, while this is a
-# distinct estimand built from several, as ``p_s_query`` is from ``p_u_query`` and
-# ``q_query``. Its rows are correlated with its inputs' all the same, so they make
-# ``coverage_ci89`` lean further on the trajectory block, and they change the
-# target count: a matrix scored before 2026-09-14 is not comparable row for row
-# with one scored after.
+# Derive new-child count SD from the same function used in population contrasts.
+# Query-age targets are correlated with their inputs. Adding them changes target
+# counts and descriptive containment fractions, so compare matrices with matching
+# target sets. See notes/202609141600-total-spread-estimand.md.
 
 
 def total_spread_targets(definition) -> tuple[tuple[str, str], ...]:
@@ -345,12 +313,11 @@ def recovery_table(
 
 
 def aggregate_table(truth: xr.Dataset, posterior: xr.Dataset) -> pd.DataFrame:
-    """Aggregate recovery of the high-dimensional random effects.
+    """Aggregate interval containment and error across high-dimensional effects.
 
-    Individual child effects are barely identified by design — each child has one
-    or a few administrations — so the informative question is whether the *set* of
-    them is recovered: does the posterior track the true effects across children,
-    and do their intervals cover at about the nominal rate?
+    Report correlation of truth with posterior means, absolute error and spread
+    across children. These summaries can reveal poor recovery of the fitted
+    effects but do not establish nominal repeated-sample coverage.
     """
     _elementwise, aggregate = target_variables(posterior, truth)
     rows: list[dict[str, Any]] = []
@@ -392,11 +359,7 @@ def aggregate_table(truth: xr.Dataset, posterior: xr.Dataset) -> pd.DataFrame:
 
 
 def sampling_tier(fit_dir: str) -> str | None:
-    """The sampling configuration a fit was made at, from its manifest.
-
-    ``None`` when the directory carries no manifest, which no fit made by the
-    pipeline lacks -- the manifest is written before sampling starts -- so a
-    missing tier is a fit from outside the pipeline rather than an old one.
+    """Recorded sampling configuration, or ``None`` when absent or unreadable.
     """
     path = os.path.join(fit_dir, FIT_MANIFEST_FILENAME)
     if not os.path.isfile(path):
@@ -417,19 +380,12 @@ def summarise(
     truth_source: str,
     z_threshold: float = 4.0,
 ) -> dict[str, Any]:
-    """One-row verdict for a replicate.
+    """Summarise interval containment and error, with a convergence-qualified label.
 
-    A non-converged fit is never reported as recovered: a truth outside the
-    posterior of a fit that did not converge says nothing about identifiability.
-    "recovered" is likewise reserved for a fit whose gate payload passed
-    cleanly; a fit that cleared the hard R-hat/ESS tier but recorded soft-tier
-    caveats (divergences, low BFMI, unassessable parameters) — or a pre-payload
-    fit assessed only from ``diagnostics.csv`` — is scored, but its verdict says
-    "converged with caveats" and the caveats travel in their own column.
-
-    The row also records the fit's sampling tier, read from its manifest, so
-    the matrix can say what each replicate was sampled at and
-    :func:`pooled_row` can refuse to pool across tiers (#289 task 4.7).
+    Missing or failed diagnostics prevent assessment. Confirmed fits with caveats
+    retain scores but are not labelled clean recovery. Even the clean recovered
+    label only describes containment at these selected truths, not general
+    identification. Record the sampling tier for pooled-row checks.
     """
     gate = diagnostics_gate(fit_dir)
     converged, max_rhat, min_ess = gate
@@ -509,21 +465,12 @@ def _tier_groups(summaries: list[dict[str, Any]]) -> dict[str, list[str]]:
 
 
 def pooled_row(summaries: list[dict[str, Any]]) -> dict[str, Any]:
-    """Pooled indicative row across replicates.
+    """Pool confirmed replicates descriptively unless recorded sampling tiers differ.
 
-    Marked indicative deliberately: with a handful of replicates over correlated
-    quantities this is a descriptive summary, not a coverage estimate.
-
-    Replicates sampled at different tiers are **not pooled** (#289 task 4.7).
-    The matrix is assembled from whatever replicate directories exist, and on
-    2026-09-03 a ``rep`` run stopped after two replicates pooled with a
-    ``test``-tier fit still sitting in the third directory, publishing a
-    mixed-tier ``POOLED (2 of 3 replicates assessed)`` row that the comparison
-    book rendered as three replicates of three. The refusal row keeps the
-    ``POOLED`` prefix so readers that drop the pooled row still drop it, and
-    its verdict says ``not assessed`` so readers that count assessed
-    replicates do not count it. A replicate with no recorded tier is grouped
-    on its own; it does not stop the recorded ones pooling with each other.
+    Unknown tiers do not trigger the mixed-tier refusal and may contribute if
+    diagnostics confirm convergence. Preserve the POOLED prefix for downstream
+    readers and disclose how many replicates were assessed. Correlated target
+    rows are not independent calibration experiments.
     """
     recorded_tiers = sorted(
         tier for tier in _tier_groups(summaries) if tier != "unrecorded"
@@ -604,20 +551,15 @@ def compare_replicate(
     definition=None,
     truth_definition=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
-    """Score one replicate: ``(table, aggregate_table, summary)``.
+    """Return elementwise scores, aggregate scores and one summary for a replicate.
 
-    ``definition`` is the fitted model's and ``truth_definition`` the one the
-    data were simulated from (the same model unless the run is a cross-definition
-    one); given them, the total spread is derived on each side and scored.
-    Without them it is not, which is how a caller outside ``fit_recovery.py``
-    keeps the previous target set.
+    Require a full trace so reduced persistence cannot silently remove scaled
+    effects. Select shared target variables by dimensions and exclusion rules.
 
-    Each side is derived on its own definition's query ages, and only when the
-    two grids are the same ages: a cross-definition run whose truth sits on a
-    different grid (a window variant, say) has no age at which the two spreads
-    describe the same child, so the quantity is left out rather than compared
-    across ages. ``query_ages`` overrides the fitted side's grid, and the truth's
-    too when there is no separate ``truth_definition``.
+    When definitions are supplied, derive total spread separately for truth and
+    fit only if their query-age grids match exactly. ``query_ages`` overrides the
+    fitted grid and, without a separate truth definition, the truth grid too.
+    Mismatched grids omit this derived target rather than compare different ages.
     """
     if not os.path.isfile(trace_path):
         raise FileNotFoundError(f"No recovery trace at {trace_path}.")
@@ -641,12 +583,9 @@ def compare_replicate(
             definition if truth_definition is None else truth_definition,
             query_ages=truth_ages,
         )
-    # Targets are the intersection of truth and posterior, so anything the fit
-    # did not persist drops out of the score silently rather than failing. The
-    # scaled random effects are exactly the targets a compacted trace omits (the
-    # `_raw` offsets are deliberately excluded from scoring), so a compacted
-    # recovery fit would report a quietly smaller target set as if it were the
-    # whole one.
+    # Reduced persistence omits scaled effects. Since target selection uses
+    # the intersection, require full persistence before a missing variable can
+    # silently reduce the score set.
     require_full_trace(
         os.path.dirname(trace_path), purpose="Parameter-recovery scoring"
     )

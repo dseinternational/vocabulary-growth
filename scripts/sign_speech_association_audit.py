@@ -1,45 +1,24 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Is signing additive or substitutive? Between-child association and cross-lag.
+"""Describe signing overlap, between-child associations and cross-lag associations.
 
-Two questions the fitted models do **not** answer, measured directly from the
-four-cell cross-tabulation sources. ``psi`` (VG15) is a *within*-child,
-item-level overlap parameter with a study-level term; it says how much of a
-child's signing lands on words that child also speaks. Neither it nor any other
-fitted parameter says whether children who sign more produce more overall, or
-whether signing at one wave precedes speech at the next.
+Report regressions with ``sign_only`` and with total ``signed`` vocabulary. The
+first uses disjoint cells; the second shares the ``both`` cell with ``spoken``.
+These define different associations. Compositional constraints and shared cells
+can affect them, but do not prove their slopes bound a causal effect or an
+unobserved true association.
 
-Part A -- between-child (cross-sectional).
-    At matched comprehension and age, is a child's spoken vocabulary larger or
-    smaller when their signed vocabulary is larger? Two specifications bracket
-    the mechanical bias, which is why both are reported:
+For repeated visits, fit both lag directions and within-child contrasts.
+Neither time order nor child adjustment establishes a causal effect. A result
+in both directions can be consistent with shared development without proving it.
 
-    * ``spoken ~ sign_only`` -- the cells are disjoint, but the four cells sum
-      to ``understood``, so at fixed comprehension they compete for one budget
-      and the compositional constraint biases the slope **negative**. A positive
-      slope here is therefore conservative; a negative one is not established.
-    * ``spoken ~ signed`` -- both totals contain the ``both`` cell, so sharing
-      biases the slope **positive**. This is the upper bracket.
+uk_02, uk_07 and es_01 partition understood words. nz_01 partitions produced
+words and supplies no comprehension total, so it is reported separately. Cell
+mapping follows ``scripts/psi_heterogeneity_audit.py``; uk_07's expressive
+columns are exclusive cells, while uk_02 and es_01 also supply marginal totals.
 
-    The truth sits between them. Reporting one alone would be a choice of answer.
-
-Part B -- cross-lag (longitudinal).
-    Among children measured more than once, does the sign-only vocabulary at one
-    wave predict the *gain* in spoken vocabulary by the next, over and above the
-    spoken vocabulary already there? The reverse direction is fitted too: a
-    result that appears in both directions is general growth, not a lead.
-
-Reference sets are not interchangeable. uk_02, uk_07 and es_01 partition the
-words a child *understands*; nz_01 records no comprehension total, so its cells
-partition only what the child *produces*. nz_01 is therefore reported in its own
-section against a produced-vocabulary denominator, never pooled with the rest.
-
-The cell mapping matches ``scripts/psi_heterogeneity_audit.py``: uk_07's
-expressive columns are modality-exclusive cells, where uk_02's and es_01's
-``signed``/``spoken`` are totals and the cells carry ``_only`` names.
-
-Run from the repository root:
+Usage::
 
     python scripts/sign_speech_association_audit.py
 """
@@ -238,10 +217,9 @@ def report_between_child(cells: pd.DataFrame) -> None:
     console.print(
         "Standardised slope (cluster-robust SE) of spoken vocabulary on the two "
         "signing measures, controlling for understood vocabulary and age.\n"
-        "  [bold]sign_only[/bold] — disjoint cells; compositional constraint "
-        "biases this [bold]negative[/bold], so a positive slope is conservative.\n"
-        "  [bold]signed[/bold]    — shares the 'both' cell with spoken, which "
-        "biases it [bold]positive[/bold]. Upper bracket.\n"
+        "  [bold]sign_only[/bold] uses disjoint cells within a fixed total.\n"
+        "  [bold]signed[/bold] shares the 'both' cell with spoken.\n"
+        "These are different associations, not bounds on a causal effect.\n"
     )
     rows = []
     for study in WITHIN_UNDERSTOOD:
@@ -250,8 +228,8 @@ def report_between_child(cells: pd.DataFrame) -> None:
         hi = ols_cluster(d, "spoken", "signed", ["understood", "age"])
         rows.append({
             "source": study, "rows": lo["n"], "children": lo["n_children"],
-            "beta_sign_only (lower)": _fmt(lo), "z": round(lo["z"], 2),
-            "beta_signed (upper)": _fmt(hi), "z ": round(hi["z"], 2),
+            "beta_sign_only": _fmt(lo), "z": round(lo["z"], 2),
+            "beta_signed": _fmt(hi), "z ": round(hi["z"], 2),
         })
 
     pooled = cells.copy()
@@ -262,8 +240,8 @@ def report_between_child(cells: pd.DataFrame) -> None:
     hi = ols_cluster(pooled, "spoken", "signed", ["understood", "age", *study_dummies])
     rows.append({
         "source": "pooled (study FE)", "rows": lo["n"], "children": lo["n_children"],
-        "beta_sign_only (lower)": _fmt(lo), "z": round(lo["z"], 2),
-        "beta_signed (upper)": _fmt(hi), "z ": round(hi["z"], 2),
+        "beta_sign_only": _fmt(lo), "z": round(lo["z"], 2),
+        "beta_signed": _fmt(hi), "z ": round(hi["z"], 2),
     })
     dataframe_table(pd.DataFrame(rows), title="Spoken vocabulary on signing, given comprehension and age",
                     show_index=False)
@@ -275,8 +253,8 @@ def report_between_child(cells: pd.DataFrame) -> None:
     ext_lo = ols_cluster(es, "spoken", "sign_only", ["mental_age", "age"])
     ext_hi = ols_cluster(es, "spoken", "signed", ["mental_age", "age"])
     key_value_table("es_01 only — controlling on mental age instead of comprehension", [
-        ("sign_only slope (lower bracket)", f"{_fmt(ext_lo)}  z={ext_lo['z']:.2f}"),
-        ("signed slope (upper bracket)", f"{_fmt(ext_hi)}  z={ext_hi['z']:.2f}"),
+        ("sign_only slope", f"{_fmt(ext_lo)}  z={ext_lo['z']:.2f}"),
+        ("signed slope", f"{_fmt(ext_hi)}  z={ext_hi['z']:.2f}"),
         ("n", ext_lo["n"]),
     ])
 
@@ -288,11 +266,10 @@ def report_total_decomposition(cells: pd.DataFrame) -> None:
         "Total production is an identity: [bold]produced = spoken + "
         "sign_only[/bold]. So the slope of produced on sign_only is exactly "
         "1 + (slope of spoken on sign_only), and the whole question is where it "
-        "sits between 0 and 1:\n"
-        "  [bold]1.0[/bold] — signing is purely additive; every sign is a word "
-        "speech would have missed and nothing is displaced.\n"
-        "  [bold]0.0[/bold] — signing fully displaces speech; the total does not "
-        "move.\n"
+        "sits relative to these reference values:\n"
+        "  [bold]1.0[/bold]: no conditional association with spoken count.\n"
+        "  [bold]0.0[/bold]: no conditional association with total produced count.\n"
+        "Slopes can fall outside this range and do not establish displacement.\n"
         "Raw words per word, at matched comprehension and age.\n"
         "[bold red]Do not read this table alone.[/bold red] A single slope is the "
         "wrong summary here — A4 shows it averages a sign change across the "
@@ -327,13 +304,11 @@ def report_total_decomposition(cells: pd.DataFrame) -> None:
 
 
 def report_stratified_check(cells: pd.DataFrame) -> None:
-    """Model-free version of A3: the same contrast, with no regression at all.
+    """Compare sign-only groups within comprehension quartiles.
 
-    A3's slopes are large enough to be worth verifying without a functional form.
-    One row per child, comprehension quartiles, then a within-quartile split on
-    sign-only vocabulary. If the regression is describing the data rather than an
-    artefact of the linear control, spoken should fall across the split and the
-    total should be flat-to-falling.
+    Use one selected row per child to describe heterogeneity in the association.
+    Group summaries avoid a linear control function but do not remove residual
+    age, study or comprehension differences, nor establish causal substitution.
     """
     heading("A4. The same contrast without a model")
     first = cells.sort_values("age").groupby(["study", "subject_id"], as_index=False).first()
@@ -385,9 +360,7 @@ def report_stratified_check(cells: pd.DataFrame) -> None:
                     title="A3's slope refitted within comprehension quartile",
                     show_index=False)
 
-    # es_01 is 185 of the 243 children and is the one source whose within-child
-    # association is ~1 where the others are 6-15, so the gradient above could be
-    # es_01's alone. Split each source at its own comprehension median.
+    # Check the comprehension contrast within each source as well as pooled.
     rows = []
     for study, d in first.groupby("study"):
         med = d["understood"].median()
@@ -490,12 +463,11 @@ def report_cross_lag(cells: pd.DataFrame, nz: pd.DataFrame) -> None:
 
 
 def report_within_child(cells: pd.DataFrame, nz: pd.DataFrame) -> None:
-    """Does an individual child's signing get absorbed into speech as speech grows?
+    """Describe changes and demeaned associations within repeated-measure children.
 
-    The cross-study gradient in A1b confounds development with four studies'
-    worth of other differences. Every test here is within child, so the child is
-    their own control and nothing that is fixed about them — severity, family,
-    study, instrument, whether they were taught to sign — can drive it.
+    Demeaning removes additive effects that stay constant within a child.
+    Time-varying confounding, interactions and measurement differences remain
+    possible; a child serving as their own control does not identify causation.
     """
     heading("C. Within child: is signing absorbed as speech grows?")
     lon = pd.concat([cells[cells["study"].isin(["uk_02", "uk_07"])], nz])
@@ -534,8 +506,8 @@ def report_within_child(cells: pd.DataFrame, nz: pd.DataFrame) -> None:
         ("sign test p", f"{stats.binomtest(fell, fell + rose, 0.5).pvalue:.2e}"),
     ])
 
-    # C2 -- the same question as a slope, in words. Child-demeaning removes every
-    # time-invariant confound; SEs stay clustered because waves are not independent.
+    # Demeaning removes child-constant additive effects. Cluster standard errors
+    # because the child's visits can still share unexplained variation.
     rows = []
     for study, d in lon.groupby("study"):
         d = d.dropna(subset=["sign_only", "spoken", "age"])

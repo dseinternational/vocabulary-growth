@@ -1,91 +1,29 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Numerical marginalisation of singleton child effects (experimental).
+"""Numerically integrate child effects for children observed once (experimental).
 
-A child assessed once contributes a single likelihood term, and its random
-effect ``delta_subject`` appears in that term alone. Nothing else in the model
-sees it, so it can be integrated out numerically:
+For one row, integrate the Beta-Binomial likelihood over a standard-normal
+child deviate, with latent logit eta + tau*u. This retains tau and the child
+variation in the model while removing that child's sampled coordinate.
+Repeated children retain explicit effects shared across their rows.
 
-    p(y | eta, kappa, tau) = INT phi(u) BetaBinom(y | sigmoid(eta + tau u), kappa) du
+Exact integration would preserve the posterior of retained parameters. Finite
+quadrature can change it. The stored pointwise likelihood also changes from
+conditional to marginal, so importance-sampling diagnostics can differ.
+Fresh-child predictions differ from replicates conditional on fitted effects;
+neither has guaranteed training-data coverage.
 
-Children with repeated administrations keep an explicit ``delta_subject``: their
-rows are coupled through it. Integrating a shared scalar intercept still needs
-only a one-dimensional integral, but its integrand is the product of all the
-child's likelihood terms. That requires a joint child likelihood and changes
-the unit of the pointwise likelihood used for leave-one-out assessment.
+Adaptive Gauss-Hermite quadrature centres nodes near the integrand's mode.
+The mode uses damped Newton steps on finite differences. Node placement is
+held out of the gradient; see _marginal_logp for the resulting approximation.
+Validation must cover values and gradients over each proposed parameter range.
+No registered model enables this path.
 
-**This is not the removal of the subject random effect.** The marginal
-likelihood still contains ``tau_subject`` -- the mixing is integrated, not
-deleted -- so the joint model, ``kappa``'s meaning as within-child dispersion,
-and the posterior of every retained quantity are unchanged. What changes is the
-sampled space: the thousands of prior-dominated singleton dimensions whose
-conditional scale tracks ``tau_subject`` (the funnel mass that
-``notes/202608050900-td-hierarchical-geometry.md`` section 4 measured as the
-energy-BFMI driver) leave it. See
-``notes/202608231410-td-geometry-remaining-levers.md`` section 3.
-
-The stored pointwise likelihood changes from conditional to marginal. For a
-singleton, exact leave-one-out prediction can still target the same held-out
-child under either representation. Importance-sampling behaviour can differ.
-Predictive draws with fresh child effects answer a different question from
-replicates conditional on that fitted child's effects; neither has guaranteed
-training-data coverage. Finite quadrature can also change the posterior through
-approximation error. Publication rejects this experimental path until its
-numerical error has been validated over the relevant parameter range.
-
-Why the quadrature is adaptive
-------------------------------
-
-Gauss-Hermite nodes on the ``Normal(0, 1)`` prior -- the rule the lever was
-proposed with -- are **not** accurate enough for these models. One
-administration of an 810-word inventory is informative about that child's own
-level, so the integrand is a narrow spike inside a unit-width prior, and prior
-nodes sit roughly 0.6 apart where the spike's width is 0.2. Measured against a
-mode-centred fine grid on the fitted rows and draws of the two models of record:
-
-| rule                     | VG12 worst row | VG11 worst row |
-| ------------------------ | -------------: | -------------: |
-| prior nodes, 20          |        6.6e-02 |        1.5e+00 |
-| prior nodes, 40          |        2.1e-03 |        3.9e-01 |
-| prior nodes, 80          |        6.7e-06 |        6.1e-02 |
-| **adaptive, 20**         |    **3.4e-06** |    **4.0e-05** |
-| adaptive, 30             |              - |        4.5e-06 |
-
-(VG11 is the harder model: its dispersion reaches ``kappa`` 714 at the youngest
-ages against VG12's 98, and a larger ``kappa`` is a sharper spike.) The nodes
-are therefore placed at the integrand's own mode and scaled by its curvature --
-adaptive Gauss-Hermite, the rule ``lme4`` and ``glmmTMB`` use for the same
-reason. The mode comes from a short damped Newton search on **finite
-differences** of the log-integrand rather than on its analytic derivatives,
-which would need digamma and trigamma and then, for the gradient with respect to
-the model's parameters, a third derivative of ``gammaln`` that PyTensor does not
-implement. The search is then held out of the gradient altogether, so what the
-sampler differentiates is the quadrature at fixed nodes; :func:`_marginal_logp`
-gives the reasoning and the measurement behind that.
-
-What the implementation requires
---------------------------------
-
-Three things here are load-bearing, and each was found by fitting a model rather
-than by testing the density -- in every case the value was right and the
-gradient was not. See ``notes/202608231745-singleton-marginalisation.md``
-section 3.
-
-* **Rows ordered marginalised-first**, so the two blocks are slices.
-  :func:`singleton_first_order` produces that order and the engine's data
-  preparation applies it. Indexing the blocks out and permuting the result back
-  returned non-finite gradients; the scatter that PyTensor rewrites a
-  ``set_subtensor`` into is an in-place write, and nutpie evaluates the density
-  from several threads at once, so it raced.
-* **Both blocks on this module's own density.** ``pm.logp`` of a
-  ``pm.BetaBinomial`` agrees with :func:`betabinomial_logp` on the value to
-  1e-9, but inside a ``CustomDist`` it returns a non-finite gradient at most
-  points a sampler's initialisation jitter visits.
-* **Double precision throughout.** PyTensor types a bare Python scalar constant
-  as the narrowest dtype that holds it, and single-precision ``gammaln`` of an
-  argument in the hundreds is wrong in the fourth decimal -- a hundred times the
-  quadrature error this module exists to keep small, and silent.
+Keep marginalised rows first, use the local density in both likelihood blocks,
+and use double precision. Earlier graph variants produced non-finite gradients
+under concurrent sampling. The rationale and measurements are recorded in
+notes/202608231745-singleton-marginalisation.md.
 """
 
 from __future__ import annotations
@@ -100,35 +38,19 @@ from pytensor.gradient import disconnected_grad
 
 EPSILON = math_constants.EPSILON
 
-#: Quadrature nodes used unless a definition asks for more. With the adaptive
-#: placement below, twenty nodes hold the worst per-row error to 3.4e-06 on
-#: VG12's fitted rows and 4.0e-05 on VG11's; thirty takes VG11 to 4.5e-06. The
-#: node count is a definition field so the doubling sensitivity check is a
-#: definition change, not a code change.
-# The historical error figures above describe those tested points only. For
-# n=810, y=400, mu=8, kappa=1000, sigma=0.5, 20 nodes overestimate the log
-# probability by about 0.751. No registered model enables this path.
+#: Default node count. The definition can request more for a convergence check.
+# Historical probes do not bound the error globally. For n=810, y=400, mu=8,
+# kappa=1000 and sigma=0.5, 20 nodes overestimate log probability by about 0.751.
 DEFAULT_QUADRATURE_NODES = 20
 
-#: Damped Newton steps used to find each row's integrand mode. Measured on
-#: VG11's rows, the search converges in two steps: three steps and five give the
-#: same node placement to the last digit, so three is one step of headroom
-#: rather than a tuning parameter.
+#: Fixed number of damped Newton updates in the mode approximation.
 _NEWTON_STEPS = 3
 
-#: Step for the central differences the Newton search uses, in prior standard
-#: deviations of the child effect. Large enough that cancellation in the second
-#: difference stays below 1e-8 absolute, small enough that its own truncation
-#: bias is far below the node-placement tolerance.
+#: Finite-difference step, in standard-normal child-deviate units.
 _NEWTON_FD = 1e-3
 
-#: Largest Newton step, and the range the mode is confined to, both in prior
-#: standard deviations. The clamps only bind on rows whose child effect would
-#: have to be many prior standard deviations out -- rows contributing a
-#: log-density of a few hundred negative nats, which a fit visits only in early
-#: warmup if at all. There the rule degrades to an underestimate of a
-#: numerically absent term rather than to an overestimate, which would be an
-#: attractor.
+#: Limits on the Newton update and mode, in prior standard deviations.
+#: These numerical safeguards do not bound quadrature error or its direction.
 _NEWTON_MAX_STEP = 2.0
 _MODE_CLAMP = 8.0
 
@@ -205,15 +127,11 @@ class SubjectPartition:
 
 
 def singleton_first_order(subject_codes: np.ndarray) -> np.ndarray:
-    """A stable row order that puts every marginalised row before every other.
+    """Return a stable row order with marginalised children first.
 
-    The likelihood then reads its two blocks as **slices** rather than by
-    indexing them out and permuting the results back. That is not a
-    micro-optimisation: an advanced-index gather over a concatenation returned a
-    non-finite gradient on this graph, and its in-place scatter counterpart
-    raced across nutpie's threads. Slices and one concatenation have neither
-    problem. Stable, so within each block the rows keep the order the data
-    preparation gave them.
+    Contiguous slices avoid the gather/scatter graph that produced non-finite
+    gradients in earlier concurrent-sampling probes. Keep the input order within
+    each block.
     """
     codes = np.asarray(subject_codes, dtype=int)
     counts = np.bincount(codes, minlength=int(codes.max()) + 1 if codes.size else 0)
@@ -250,13 +168,10 @@ def partition_subject_rows(subject_codes: np.ndarray) -> SubjectPartition:
 
 
 def zero_padded_subject_shift(delta_subject, partition: SubjectPartition):
-    """The per-row child shift: the child's effect, or an exact zero.
+    """Return each repeated child's shift and zero on marginalised rows.
 
-    The zero is structural, not estimated: a marginalised row's child effect
-    lives inside the likelihood's quadrature rather than in the linear
-    predictor, so ``f_obs`` and ``p_obs`` on those rows are the
-    population-and-study prediction for the row, which is what they mean once
-    the child effect has been integrated out.
+    The likelihood integrates the latter rows' child effects. Their zero-effect
+    linear predictor is not the integrated mean count.
     """
     padded = pt.concatenate([delta_subject, pt.zeros(1)])
     return padded[partition.padded_codes]
@@ -376,16 +291,10 @@ def _node_placement(value, mu, kappa, sigma, *, n_trials, epsilon):
 
 
 def _conditional_logp(value, mu, kappa, *, n_trials, epsilon):
-    """The Beta-Binomial log density these models have always used.
+    """Evaluate the conditional density through the local Beta-Binomial helper.
 
-    Written out through :func:`betabinomial_logp` rather than by calling
-    ``pm.logp(pm.BetaBinomial.dist(...), value)``, which is what this block did
-    first. The two agree on the value to 1e-9 -- a test pins that -- but PyMC's
-    version carries its parameter checks into the graph, and inside a
-    ``CustomDist`` those return a **non-finite gradient**: measured on the small
-    VG12 build, 132 of 150 jittered points against 0 of 150 for the form below.
-    A sampler cannot start from a point whose gradient is not finite, and nutpie
-    rejected every initial point until this changed.
+    Earlier CustomDist graphs using pm.logp returned non-finite gradients during
+    initialisation. The local density is tested against PyMC on the support.
     """
     p = pt.clip(pm.math.sigmoid(mu), epsilon, 1 - epsilon)
     return betabinomial_logp(value, p, kappa, n_trials=n_trials, epsilon=epsilon)
@@ -407,20 +316,10 @@ def _marginal_logp(value, mu, kappa, sigma, *, n_trials, nodes, log_weights, eps
     centre, scale = _node_placement(
         value, mu, kappa, sigma_t, n_trials=n_trials, epsilon=epsilon
     )
-    # Where the nodes sit is held out of the gradient. Two reasons, one
-    # necessary and one welcome. Necessary: the mode search divides second
-    # differences by the square of a 1e-3 step, and differentiating through that
-    # chain returns a non-finite gradient at a large fraction of the points a
-    # sampler's initialisation jitter visits -- measured at 319 of 400 on the
-    # small VG12 build -- and NUTS cannot start where the gradient is not
-    # finite. Welcome: it prunes the backward pass through the mode search's
-    # twelve extra density evaluations. It is legitimate because the value is
-    # unchanged and the rule is, to quadrature accuracy, invariant to where its
-    # nodes sit: the term this drops is the rule's sensitivity to the placement
-    # times the placement's sensitivity to the parameters, and the first factor
-    # is of the order of the quadrature error itself. What the sampler is given
-    # is the exact gradient of the same rule with the nodes held fixed, which is
-    # the same quadrature applied to the derivative of the integrand.
+    # Hold node placement out of the gradient. Differentiating the finite-
+    # difference mode search produced non-finite gradients in earlier probes.
+    # This drops the finite rule's derivative through node placement. Validate
+    # both value and gradient errors against independent integration.
     centre = disconnected_grad(centre)
     scale = disconnected_grad(scale)
     z = centre[:, None] + scale[:, None] * nodes[None, :]

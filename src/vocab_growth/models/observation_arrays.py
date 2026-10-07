@@ -62,12 +62,10 @@ class BivariateObservations:
     """Speech counts and rows, **after** the fallback treatment has been applied."""
 
     has_u_likelihood: np.ndarray
-    """Which rows the comprehension likelihood covers, over all ``n`` rows.
+    """Mask of understood likelihood rows, has_u & ~holdout.
 
-    ``has_u & ~holdout``. Stored in the trace as ``obs_u_mask``. Unlike the
-    spoken side there is no fallback treatment that drops rows, so it has no
-    second definition -- named as a likelihood mask anyway, so the two sides
-    read the same way and a reader does not have to know that asymmetry."""
+    Stored as obs_u_mask for aligned downstream checks.
+    """
 
     has_s_likelihood: np.ndarray
     """Which rows the spoken likelihood covers, as a mask over all ``n`` rows.

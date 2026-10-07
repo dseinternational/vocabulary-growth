@@ -2,22 +2,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Write the leave-one-out summary for fits that computed it and threw it away.
+"""Rebuild leave-one-out summary tables from stored log likelihoods.
 
-Every fit runs PSIS-LOO, prints it to the console and discards it, while the
-predictive-calibration section of every model report points the reader at
-leave-one-out as the out-of-sample counterpart to its in-sample checks. The
-number they were sent to find has never existed in the output directory.
-
-``vocab_growth.models.common.emit_loo_summary`` closes that for future fits.
-This closes it for the fits already on disk, without a refit, because LOO is a
-**deterministic function of the stored ``log_likelihood`` group** -- the fit's
-own recorded output. That is the same basis on which ``regenerate_plots.py``
-rebuilds plot-stage artefacts from a stored trace, and it is the line this
-script stays on the right side of: it recomputes from what the fit wrote, and
-never manufactures anything the fit did not record. A trace saved under the
-``minimal`` persistence tier has no ``log_likelihood`` group and is refused
-rather than approximated.
+Use the same helpers and outcome exclusions as the fit engines. The calculation
+requires the stored ``log_likelihood`` group and estimates relative efficiency
+from posterior draws. Traces saved at ``minimal`` cannot supply the likelihoods.
+Cross-lag outcomes whose later predictors contain held-out counts are excluded.
 
 Usage::
 

@@ -2,13 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Write a factor model's implied child-effect correlation matrix as a table.
 
-VG22 emits ``subject_factor_corr`` — the 4x4 correlation over ``(b0u, b1u, b0q,
-b1q)`` implied by its loadings — as a deterministic in the trace and nowhere
-else. It is the quantity the model exists to estimate (the level-to-rate
-coupling no other model carries), and its report could not show it: the
-diagnostics table lists scalars only. This reads that one variable from
-``trace.nc`` without loading the posterior, and writes
-``subject_factor_corr.csv`` beside it for the report's rendered cell.
+Read only ``subject_factor_corr`` and its coordinate labels from ``trace.nc``.
+VG22 stores the 4-by-4 matrix over ``(b0u, b1u, b0q, b1q)`` as a deterministic.
+Write posterior means, standard deviations and 89% equal-tailed intervals to
+``subject_factor_corr.csv`` beside the trace for the model report.
 
 Usage::
 

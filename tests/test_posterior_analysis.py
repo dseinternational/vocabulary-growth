@@ -176,13 +176,7 @@ def test_monthly_summary_rejects_a_grid_too_coarse_for_months():
 
 
 def test_monthly_summary_agrees_with_the_canonical_table_at_shared_ages():
-    """The monthly table must be the canonical table at finer resolution.
-
-    Both read the same posterior draws through the same row builder, so at a
-    canonical query age the monthly row is the query row up to the sub-month
-    difference in age. This is the check that the plot-grid derivation is a
-    refinement of the reported table rather than a different quantity.
-    """
+    """Compare the monthly and query tables at shared ages, allowing grid offsets."""
     X_plot, p_plot, y_plot = _plot_grid_draws()
     monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
 
@@ -255,18 +249,7 @@ def test_monthly_summary_without_predictive_draws_omits_the_predictive_columns()
 
 
 def test_monthly_summary_excludes_months_outside_the_grid_span():
-    """A boundary month that would snap from outside the span is dropped.
-
-    Raised in review on PR #187: with a grid starting at 8.1, month 8 sits 0.1
-    months away — inside MAX_MONTH_SNAP_OFFSET — so a "nearest point within
-    bound" reading would include it. It is excluded deliberately. Month 8 is
-    below every observed age (the plot grid spans exactly the observed range), so
-    reporting it would extrapolate, and its value would be the trajectory at 8.1
-    labelled as month 8.
-
-    Pinned so the boundary rule cannot be widened into extrapolation by a later
-    change that reads the snapping bound as the coverage rule.
-    """
+    """Exclude months outside the grid even when the nearest point is within snap tolerance."""
     X_plot, p_plot, y_plot = _plot_grid_draws(lo=8.1, hi=89.9)
     monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
 
@@ -280,7 +263,7 @@ def test_monthly_summary_excludes_months_outside_the_grid_span():
 
 
 def test_monthly_summary_keeps_boundary_months_when_the_grid_is_integral():
-    """With whole-month observed ages — the real case — no month is lost."""
+    """Retain boundary months that fall exactly on whole-month grid points."""
     X_plot, p_plot, y_plot = _plot_grid_draws(lo=8.0, hi=115.0)
     monthly = monthly_summary_table(X_plot, p_plot, y_plot, n_trials=800)
 
@@ -312,7 +295,7 @@ def _masked_trace(mask, observed):
 
 
 def test_expansion_scatters_the_observed_rows_through_the_mask():
-    """The five copies of this in two engines asserted nothing between them."""
+    """Scatter observed values into their original rows, leaving other rows missing."""
     trace = _masked_trace([1, 0, 1, 1, 0], [10.0, 30.0, 40.0])
 
     out = expand_observed_to_obs_id(trace, "y_u_obs", "obs_u_mask")
@@ -377,15 +360,7 @@ def test_the_rate_estimand_columns_name_both_estimands_and_emit_no_count():
 
 
 def test_the_historical_rate_columns_and_the_population_block_are_the_same_numbers():
-    """The reports say so, so it has to be true (issue #233).
-
-    ``posterior_summary`` builds ``q_median`` / ``q_ci*`` through
-    ``intervals.summarise`` and the ``q_population_*`` block through
-    ``add_rate_estimand_columns``. Two paths to one estimand: the report tells a
-    reader they can use either, and a divergence -- a different interval kind
-    resolved from the name, say -- would make that sentence false without
-    breaking anything else.
-    """
+    """Keep both reported names for the population rate numerically consistent."""
     rng = np.random.default_rng(3)
     draws = rng.beta(2.0, 5.0, size=(7, 500))
     ages = np.arange(7.0)

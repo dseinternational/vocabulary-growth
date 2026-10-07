@@ -93,11 +93,7 @@ def _written_table(levels=(0.5, 0.8, 0.9)):
 
 
 def test_default_levels_follow_the_reporting_convention():
-    """Predictive coverage must be tabulated at the widths the report leads with.
-
-    Otherwise the report can only quote coverage at some unrelated round number
-    while every credible interval beside it is an 89% one.
-    """
+    """Use the reporting convention for tabulated predictive coverage levels."""
     from vocab_growth import intervals
     from vocab_growth.models.calibration import DEFAULT_INTERVAL_PROBS
 
@@ -211,13 +207,10 @@ def test_render_calibration_section_carries_the_in_sample_caveat(tmp_path, capsy
 
 
 def test_discrete_reference_matches_theory_for_calibrated_bernoulli():
-    """Perfectly calibrated Bernoulli(0.5): mid-PIT variance 0.0625, not 1/12.
+    """Check the discrete reference for a calibrated Bernoulli(0.5) prediction.
 
-    The canonical counter-example to the continuous-uniform reference (#234):
-    the observed mid-PIT variance must sit close to the model-implied
-    ``expected_mid_pit_variance`` — well below 1/12 — with no miscalibration
-    anywhere, and the equal-tailed discrete interval covers with probability 1
-    against a 0.89 nominal level, which ``expected_coverage`` must record.
+    Its mid-PIT variance is 0.0625 rather than the continuous-uniform value 1/12.
+    The equal-tailed discrete interval has coverage 1 at the 0.89 nominal level.
     """
     rng = np.random.default_rng(7)
     predictive = rng.integers(0, 2, size=(500, 4000))
@@ -308,14 +301,9 @@ def test_render_calibration_section_explains_a_legacy_table(tmp_path, capsys):
 
 
 def _stratifiable_trace(n_rows: int, n_conditional: int, *, observed_ids=None):
-    """A minimal trace carrying one outcome and a branch indicator.
+    """Build a labelled trace with one outcome and a likelihood-branch indicator.
 
-    The chain, draw and observation coordinates are the ones a real trace
-    carries: every engine builds its model with ``pm.Model(coords=...)``, and
-    the calibration writer now checks the observed array's labels against the
-    replications' rather than assuming equal lengths mean equal rows.
-    ``observed_ids`` overrides the observed group's labels so that check can be
-    exercised.
+    Override observed_ids to check alignment against predictive draws.
     """
     import xarray as xr
 
@@ -353,12 +341,7 @@ def _stratifiable_trace(n_rows: int, n_conditional: int, *, observed_ids=None):
 
 
 def test_calibration_splits_an_outcome_by_its_likelihood_branch(tmp_path):
-    """The spoken outcome's two branches are fitted by different distributions.
-
-    A pooled row can be well behaved while one branch is not, and the branches
-    differ systematically in age and study, so pooling is the wrong summary.
-    Read from the trace's own constant data, so it needs no refit.
-    """
+    """Report each likelihood branch so a pooled score cannot hide branch differences."""
     from vocab_growth.models.calibration import write_trace_calibration
 
     n_rows = 40
@@ -444,13 +427,7 @@ def test_calibration_rejects_a_stratum_that_is_not_row_aligned(tmp_path):
 
 
 def test_calibration_rejects_observations_labelled_differently_from_the_draws(tmp_path):
-    """Equal lengths never established that the rows are the same rows.
-
-    The observed group and the posterior-predictive group are separate arrays
-    on the trace. Before the labelled extraction they were flattened and paired
-    by position, so a reordered or re-labelled observed group would have been
-    scored against the wrong replications and produced a plausible table.
-    """
+    """Require matching row labels, since equal array lengths do not establish alignment."""
     from vocab_growth.models.calibration import write_trace_calibration
 
     n_rows = 12
@@ -469,11 +446,7 @@ def test_calibration_rejects_observations_labelled_differently_from_the_draws(tm
 
 
 def test_calibration_rejects_a_non_finite_observation(tmp_path):
-    """A NaN outcome means the engine masked the wrong rows.
-
-    Reported here rather than left to the shared checks, so the message names
-    the table being written and how many rows are unusable.
-    """
+    """Reject non-finite outcomes with a calibration-specific error."""
     observed = np.array([1.0, np.nan, 3.0])
     predictive = np.array([[0, 1, 2, 3], [0, 1, 2, 3], [1, 2, 3, 4]])
     ages = np.array([12.0, 13.0, 14.0])
@@ -488,7 +461,7 @@ def test_calibration_rejects_a_non_finite_observation(tmp_path):
 
 
 def test_calibration_splits_an_outcome_by_repeated_and_single_visit_children(tmp_path):
-    """A child effect is informed by replication only for a repeated child."""
+    """Distinguish within-outcome repeated observations from single visits."""
     from vocab_growth.models.calibration import write_trace_calibration
 
     n_rows = 12

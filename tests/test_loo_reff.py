@@ -1,15 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""PSIS-LOO's relative efficiency is pinned to the sampled parameters.
+"""Calculate PSIS-LOO relative efficiency from sampled parameters.
 
-ArviZ's default ``reff`` averages ESS over every variable in the posterior group,
-so it moved with the storage policy (0.561 over everything VG10 stored at
-``dev``, 0.554 without the observation-sized variables, 0.905 over the sampled
-parameters alone). ``vocab_growth.loo_reff`` computes the same quantity over the
-model's free random variables only — named by the caller, or read from the
-record the ``sample`` stage writes into the trace — and falls back to ArviZ's
-convention, audibly, only when neither is available.
+Posterior-wide averaging depends on stored deterministic arrays. The helper
+uses named sampled variables, from the caller or trace metadata, and warns
+before falling back to the posterior-wide convention.
 """
 
 import json

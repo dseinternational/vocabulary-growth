@@ -1,19 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The exact prepared-frame hash, and the builders it is computed from (#266).
+"""Check prepared-frame hashes and agreement with engine preparation stages.
 
-Every fit manifest records ``data.analysis_frame_hash``, but nothing read it
-back: validation compared only the raw-CSV fingerprint, so a change to the
-loader's *rules* left stale posteriors accepted as current. Reading it back
-needs the prepared frame to be recomputable outside a fit, which is what
-``vocab_growth.analysis_frames`` provides.
-
-That buys a second construction of each engine's frame, so the load-bearing
-test here is the drift guard: for every engine, the pure builder must produce
-exactly the frame its ``prepare_*_data`` stage sets on the fit context. If the
-two diverge, validation compares a hash of one frame against a fit of another
-and either rejects every fit or accepts a stale one.
+The raw-data fingerprint alone cannot detect changes to preparation rules.
+Compatibility checks rebuild the prepared frame, so its builder must agree
+with the frame recorded by the fit's ``prepare_*_data`` stage.
 """
 
 import os
@@ -30,10 +22,8 @@ from vocab_growth.analysis_frames import (
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY
 
-# One representative model per engine. The builders are per-engine, so covering
-# every registered model would re-test the same code paths at several minutes
-# a run; the registry-coverage test below is what stops a new model slipping
-# through without a builder.
+# Compare preparation stages for one model per engine. The registry tests also
+# check that every registered model maps to a builder for its own engine.
 ENGINE_REPRESENTATIVES = [
     ("vg01", "vocab_growth.models.common", "prepare_univariate_data"),
     ("vg05", "vocab_growth.models.common_bivariate", "prepare_bivariate_data"),
@@ -62,12 +52,10 @@ def test_an_unregistered_model_is_refused_rather_than_guessed():
 
 @pytest.mark.parametrize("model_key", sorted(MODEL_REGISTRY))
 def test_each_builder_belongs_to_the_engine_its_model_actually_uses(model_key):
-    """A model moved between engines must not keep the old engine's builder.
+    """Check the frame-builder mapping against each model wrapper's imports.
 
-    The mapping is keyed by model rather than by definition class, because the
-    engine choice lives in each ``model_vgNN`` module (VG05 and VG07 share a
-    definition class on different engines). That makes it possible for the two
-    to drift silently, so the module's own import is what this checks against.
+    Definition classes alone do not identify an engine. VG05 and VG07 share a
+    definition class but use different engines.
     """
     import importlib
 

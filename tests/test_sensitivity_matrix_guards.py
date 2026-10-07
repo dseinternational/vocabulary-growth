@@ -1,20 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The three ways a sensitivity comparison can be confidently wrong.
+"""Check pairing, coverage and provenance before assessing sensitivity.
 
-Every one of these produced a well-formed matrix row on 2026-08-16 — none
-produced an error, a blank, or a missing file. A harness that reads two
-directories of CSVs will compare whatever it finds, so the guards have to be
-positive checks rather than the absence of a crash. See
-``notes/202608142000-refit-run-record-and-disk-failure.md`` §7.
-
-A fourth was found on 2026-09-06 and is guarded at the end of this file: a
-targeted rerun retains the rows it did not recompute, and a retained row was
-scored against whatever baseline existed at the time. After a refit the matrix
-therefore presents verdicts against two different baselines side by side. That
-one is not a bad row either -- it is a true record, mislabelled by its
-neighbours.
+A well-formed comparison row can still use incompatible definitions, too few
+paired points or a superseded baseline. Preserve missing variants and flag
+retained comparisons when the baseline changes.
 """
 
 from __future__ import annotations
@@ -78,14 +69,7 @@ BASE_DEF = {
 
 
 def test_a_stale_pairing_is_never_reported_as_robust(tmp_path):
-    """The live case: the baseline was refitted under CLAMP_Q_ONLY mid-run.
-
-    ``pairing_errors`` is what detects this now — it validates each fit against
-    the definition the registry currently builds, values and all, rather than
-    diffing the two manifests for unexpected field names. The guard kept here is
-    the consequence: whatever the containment says, an unsound pairing must not
-    reach a robustness verdict, and the reason must reach the matrix row.
-    """
+    """Require current-definition validation before assigning a robustness verdict."""
     comparison = pd.DataFrame([_row("Ey", 10.0, 10.0, 9.0, 11.0, True)])
     _write_clean_gate_payload(tmp_path)
     row = summarise(
@@ -103,12 +87,7 @@ def test_a_stale_pairing_is_never_reported_as_robust(tmp_path):
 
 
 def test_coverage_uses_the_comparison_own_matching_rule(tmp_path):
-    """Plot-grid series only align when the two fits share an age range.
-
-    ``gap`` is a linspace over the observed span, so a pool-restricting variant
-    gets different ages and the intersection collapses. Measuring coverage any
-    other way overstates what the comparison actually paired up.
-    """
+    """Measure query-grid coverage using the comparison's exact-age matching rule."""
     base = _write_fit(tmp_path, "base", BASE_DEF, ([8.0, 8.5, 9.0, 9.5], [1.0, 2.0, 3.0, 4.0]))
     variant = _write_fit(
         tmp_path, "variant", BASE_DEF, ([8.0, 8.4, 8.8, 9.2], [1.0, 2.0, 3.0, 4.0])
@@ -131,7 +110,7 @@ def test_collapsed_coverage_is_not_assessed():
 
 
 def _write_clean_gate_payload(dirpath):
-    """A cleanly passing ``diagnostics_summary.json`` — what "robust" needs."""
+    """Write a clean convergence payload required for an assessed robustness verdict."""
     (dirpath / "diagnostics_summary.json").write_text(
         json.dumps({
             "passed": True,
@@ -229,12 +208,7 @@ def _matrix_row(variant, *, status="compared", baseline="2026-09-01T00:00:00+00:
 
 
 def test_a_retained_row_against_a_superseded_baseline_is_marked():
-    """The concrete defect: two verdicts side by side, scored against two baselines.
-
-    ``robustness_matrix_vg10.csv`` held exactly this on 2026-09-06 — one row
-    against the pre-``us_03`` fit and two against the refitted one, with nothing
-    in the presented columns to tell them apart.
-    """
+    """Flag retained comparisons against an earlier baseline after a targeted rerun."""
     previous = pd.DataFrame([_matrix_row("us01-implausible-reinstated")])
     recomputed = pd.DataFrame(
         [_matrix_row("dse-native-only", baseline="2026-09-06T11:57:26+00:00")]

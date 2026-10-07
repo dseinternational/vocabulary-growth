@@ -1,17 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for the staging-liveness check in ``scripts/compact_traces.py``.
+"""Check whether a trace-promotion staging entry may still be active.
 
-``_is_live`` guards the mid-promotion refusal: a staging entry whose embedded
-PID belongs to a running process must read as live so the script refuses to
-rewrite that model's trace under the fit. The original implementation probed
-``/proc/<pid>``, which on native Windows — this repository's primary
-development platform — is always absent, so every entry read as dead and the
-guard never fired. The check now uses ``psutil.pid_exists``, which is portable
-(``os.kill(pid, 0)`` is not: CPython's ``os.kill`` on Windows calls
-``TerminateProcess``). These tests pin the portable probe and the conservative
-fallbacks: an unparseable name, or a probe that raises, is treated as live.
+A parsed PID uses the portable ``psutil.pid_exists`` probe. A name that
+cannot be parsed, or a probe that raises, is treated as live so compaction
+cannot rewrite a potentially active fit. ``/proc`` is unavailable on native
+Windows, and ``os.kill(pid, 0)`` is not a portable existence check.
 """
 
 import importlib.util

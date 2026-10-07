@@ -1,8 +1,6 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""
-Fits the specified model to the latest data. Saves plots and data, and report to output directory.
-"""
+"""Fit selected models and save their traces, summaries, figures and reports."""
 
 import argparse
 import os
@@ -65,23 +63,11 @@ def _fit_selected_models(selected, config: str):
 
 
 def _render_output(output_dir: str, model_id: str | None = None, *, force: bool = False) -> None:
-    """Render one already-promoted fit without changing its lifecycle state.
+    """Render a promoted fit using the current report template and shared includes.
 
-    The report template is refreshed from ``docs/models/<model>/index.qmd`` first.
-    The fit stage copies the template into the output directory, so without this
-    ``--render-only`` would re-render whichever template was current when the fit
-    ran, and a fix to the report could never reach an existing fit.
-
-    That is not hypothetical: the soft-tier convergence callout was added to every
-    model report on 2026-08-05, and VG13 — one of the three fits that actually has
-    caveats to disclose — kept rendering without it. ``--render-only`` reported
-    success each time. A disclosure mechanism that silently discloses nothing is
-    the failure this whole path exists to prevent.
-
-    Only the template is refreshed. The trace, the summaries and the manifest are
-    untouched, and the caller has already validated the fit against the current
-    registered definition, so the refreshed template is being run against a fit it
-    is compatible with.
+    The caller validates compatibility before rendering. Refresh the source template
+    so report corrections reach existing fits without resampling. The trace,
+    summary tables, manifest and lifecycle state remain unchanged.
     """
     from vocab_growth.render_cache import (
         RENDER_CHECKPOINT,

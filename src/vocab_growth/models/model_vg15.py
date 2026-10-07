@@ -1,24 +1,20 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Model VG15: Joint sign/speech model (issue #49 Option 3) - children with Down
-syndrome.
+"""VG15 jointly models signing and speech in children with Down syndrome.
 
-Estimates the within-understood sign-speech association: a Plackett odds ratio
-``psi`` with a study-level random intercept, identified from four
-cross-tabulation sources — the uk_02, uk_07 and es_01 four-cell
-within-understood cross-tabs plus nz_01's three-cell within-produced cross-tab.
-The population ``psi`` is a shrunk centre over sources that disagree; the
-per-study values are the primary read. All three latent trajectories
-(understood, speak ratio q, sign ratio r) have study and child offsets. Only
-the study offsets sum to zero over the studies involved in each likelihood.
-The model also uses VG10's tighter q-GP amplitude and per-draw GP anchor at the
-reference age, with an estimated middle knot in the signing mean.
-The q age anchors remain the shared weakly informative DS-joint
-priors. It estimates total expressive vocabulary using the fitted sign-speech
-association; VG14 calculates it assuming independence. See
-``common_joint_modality`` for the engine.
+The Plackett odds ratio ``psi`` describes their association within understood
+words. It uses four-cell counts from uk_02, uk_07 and es_01 and three-cell
+counts conditional on production from nz_01. Study-specific estimates matter
+because these sources differ in measurement.
+
+All three latent trajectories have study and child intercepts. Child
+intercepts enter the marginal likelihoods, not the cell likelihoods. Study
+offsets sum to zero over the studies contributing to each likelihood.
+The signing trend has an estimated middle reference age.
+
+Total expressive vocabulary uses the fitted overlap. VG14 assumes independence.
+See ``common_joint_modality`` for the engine and ``definitions.py`` for priors.
 """
 
 from vocab_growth.models.common_joint_modality import (

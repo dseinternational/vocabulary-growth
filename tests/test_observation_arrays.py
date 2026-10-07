@@ -1,23 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The bivariate likelihood's arrays and masks, tested without a model.
+"""Check bivariate observation arrays without constructing a model.
 
-Issue #273's first extracted builder seam. Seventy lines at the top of a
-743-line function, mixed with the graph they feed, and each of the three things
-most likely to be got wrong has a real past failure behind it -- yet none could
-be exercised without building a PyMC model on real data.
-
-Separated, they are a pure function of ``(frame, definition, n_trials)``. These
-tests are the three failures, stated directly:
-
-* the **spoken likelihood mask** must mark the rows the likelihood carries.
-  Storing the unfiltered mask made every paired-only fit fail at calibration,
-  after sampling and before the trace was written (#266 finding 3);
-* **count validation runs before the integer cast**, because NumPy truncates
-  silently and 810.9 or -0.1 land inside the post-cast bounds check (#236, #240);
-* **held-out rows stay in observation space** and leave every likelihood, which
-  is what makes a K-fold LOSO subject's random effect a draw from the prior.
+Likelihood masks must reflect branch selection. Validate counts before integer
+conversion, and retain held-out rows in observation space while excluding their
+likelihood contributions.
 """
 
 from __future__ import annotations
@@ -89,12 +77,7 @@ def test_a_missing_outcome_leaves_its_row_out_of_that_likelihood_only():
 
 
 def test_the_spoken_mask_marks_the_likelihood_rows_not_every_recorded_row():
-    """Under paired-only, the marginal fallback rows leave the likelihood.
-
-    A mask that still marked them made calibration align the wrong ages against
-    the stored draws, and it did so after sampling -- the most expensive place
-    to find out.
-    """
+    """Exclude marginal fallback rows from the paired-only likelihood mask."""
     understood = np.round(np.linspace(18.0, 72.0, 12) * 5.0)
     # Four rows record speech but no comprehension to condition it on.
     understood[[1, 4, 7, 10]] = np.nan
@@ -135,12 +118,7 @@ def test_a_count_the_integer_cast_would_hide_is_refused(bad):
 
 
 def test_a_missing_count_is_not_an_invalid_one():
-    """NaN means "not recorded", which is the frame's ordinary state.
-
-    It must leave the row out of the comprehension likelihood, not raise: 444 of
-    the current frame's spoken observations have no understood count, and the
-    whole `spoken_fallback` question exists because of them.
-    """
+    """Omit missing counts from their likelihood instead of rejecting the row."""
     understood = np.round(np.linspace(18.0, 72.0, 12) * 5.0)
     understood[5] = np.nan
     observations = _prepare(_frame(understood=understood))
@@ -184,7 +162,7 @@ def test_a_frame_with_no_holdout_column_holds_nothing_out():
 
 
 def test_subject_codes_are_absent_when_no_outcome_carries_a_child_effect():
-    """Asking "does this model have child effects?" twice is how answers diverge."""
+    """Follow the subject-effect plan when constructing child codes."""
     observations = _prepare(_frame(), use_subject_codes=False)
     assert observations.subject_codes is None
     assert observations.n_subjects == 0

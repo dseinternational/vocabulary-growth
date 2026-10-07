@@ -1,49 +1,18 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Forward-simulate a dataset from a model at a known parameter draw (issue #163).
+"""Draw synthetic outcomes from engine likelihoods at one fixed parameter draw.
 
-The simulation is done *by the model*, not by a re-implementation of it: the
-engine's own build code constructs the likelihood nodes, and
-:func:`pymc.sample_posterior_predictive` draws from those nodes at a single fixed
-parameter draw. Nothing here restates a mean function, a dispersion function, or
-a row denominator, so a change to a model cannot silently invalidate its
-recovery check.
+Rebuild the graph between dependent stages so nested outcomes use simulated
+comprehension totals. If a lag predictor reads an outcome drawn in the same
+stage as its consumer, repeat the stage sequence in wave order. Verify the
+recorded predictors, denominators and row classification against a graph
+rebuilt from the finished frame.
 
-The simulator must sequence two things itself, and both are handled the same
-way -- by rebuilding the model from the frame as simulated so far, so the
-engine's own build code re-derives what it derives.
-
-**The nesting.** Words spoken and words signed are modelled conditionally on the
-child's comprehension total, whose denominator is a ``pm.Data`` array fixed at
-build time. Comprehension is therefore drawn first, written into the analysis
-frame, and the model rebuilt before the dependent outcomes are drawn. After the
-final round the denominators and nested/marginal flags of a model rebuilt from
-the finished synthetic frame are compared against the ones the simulation
-actually used; a mismatch aborts, because it would mean the data were generated
-under a different decomposition from the one that will be fitted.
-
-**The waves**, for a model whose predictor is built from an outcome rather than
-from the design. A cross-lag reads an earlier wave's count, so the order the
-simulator draws in starts to matter -- but *whether* it matters is derived, by
-:func:`vocab_growth.recovery.spec.single_pass_is_sound`, rather than assumed.
-Rebuilding between stages already recomputes such a predictor from the simulated
-value, so a predictor whose source is drawn in a strictly earlier stage than
-every node it enters is correct in one pass. Where it is not -- a predictor
-reading an outcome drawn in the *same* stage as the one it shifts -- the stage
-pass is repeated once per administration wave, writing back only that wave's
-rows, so each wave's predictor is built from the simulated wave before it.
-
-Either way the guard is the same shape as the nesting one and runs either way:
-the predictor each row was drawn under must equal the predictor the fitted model
-computes from the finished frame, checked per row rather than argued. That is
-what makes the ordering rule above evidence rather than a claim -- and it is what
-showed the rule VG16 had been held to was wrong (see `single_pass_is_sound`).
-
-Missingness is preserved exactly. A row contributes a simulated value only where
-the real row contributed an observed one, so the synthetic dataset carries the
-real study/age/child design and the real observation pattern — only the counts
-are the model's.
+Preserve the prepared ages, studies, child codes and missingness pattern while
+replacing observed counts. Model-generated nested counts do not reproduce source
+violations such as spoken counts exceeding comprehension. Recovery therefore
+does not test every data problem handled by the real-data loader.
 """
 
 from __future__ import annotations
@@ -159,21 +128,11 @@ def recovery_config_stem(definition, *, truth_definition=None, truth_overrides=(
 def recovery_config_name(
     definition, replicate: int, *, truth_definition=None, truth_overrides=()
 ) -> str:
-    """Config name carried by the recovery variant of a definition.
+    """Recovery config name with generating-config and truth-setting markers.
 
-    ``truth_definition`` names the definition the *data* came from, when that is
-    not the definition being fitted (issue #226). Such a run answers a different
-    question from self-recovery -- it asks whether one model's estimator is
-    biased under another's truth, rather than whether a model recovers itself --
-    and it must not be able to land in, or be scored as, a self-recovery
-    directory. The ``-under-<tag>`` marker in the name is what prevents that;
-    passing the same definition twice is not a cross-definition run and adds no
-    marker, so existing output keeps its existing names.
-
-    ``truth_overrides`` marks the name for the same reason and is the same kind
-    of thing: two cells of #297 check 4 differ only in what their truth was set
-    to, so without a marker one would land in the other's directory and be
-    scored into the other's matrix. No settings adds no marker.
+    A generating config distinct from the fitted config adds ``-under-<tag>``.
+    Truth overrides add their own token. These distinguish controlled checks
+    from self-recovery and from other settings before the replicate suffix.
     """
     stem = recovery_config_stem(
         definition, truth_definition=truth_definition, truth_overrides=truth_overrides
@@ -243,14 +202,11 @@ def _single_draw_tree(posterior: xr.Dataset) -> xr.DataTree:
 
 
 def reportable_deterministics(model: pm.Model) -> list[str]:
-    """Deterministics worth carrying in the truth record.
+    """Reported deterministics selected by recovery dimensions and exclusions.
 
-    The reported estimands (population trajectories at the query ages, the
-    association scalar, the study and child effects) are model *deterministics*,
-    not free parameters, so a truth made only of free parameters could not be
-    scored against the quantities the study publishes. Selection uses the same
-    dimension and exclusion rules as the scoring step, so what is stored is
-    exactly what will be compared.
+    Store scalars and one-dimensional query, study or child quantities. Variables
+    on other dimensions, duplicate logits and raw offsets are omitted. Derived
+    total-spread inputs follow the same selection rules.
     """
     dims_of = model.named_vars_to_dims
     keep_dims = set(compare.ELEMENTWISE_DIMS) | set(compare.AGGREGATE_DIMS)
@@ -266,11 +222,10 @@ def reportable_deterministics(model: pm.Model) -> list[str]:
 
 
 def _with_deterministics(truth: TruthDraw, model: pm.Model) -> TruthDraw:
-    """Add the reported deterministics to a truth draw, computed from the graph.
+    """Compute selected deterministics from the current graph for a truth draw.
 
-    Computed from the model as it stands rather than read from a stored trace, so
-    a truth taken from an older trace is still expressed in terms of the current
-    reporting quantities.
+    The caller must first validate any source trace against the intended fit.
+    Recomputing a deterministic alone does not establish likelihood compatibility.
     """
     names = reportable_deterministics(model)
     posterior = _as_dataset(truth.tree["posterior"])
@@ -304,18 +259,12 @@ _GOLDEN_RATIO_FRACTION = 0.6180339887498949
 
 
 def _spread_index(replicate: int, n_available: int) -> int:
-    """Pick a well-separated position for ``replicate`` among ``n_available``.
+    """Select a chain position from a golden-ratio low-discrepancy sequence.
 
-    Replicates must not sit next to each other in a Markov chain: adjacent draws
-    are autocorrelated, so they would be near-duplicate truths and the replicates
-    would not be distinct parameter settings.
-
-    The positions come from the golden-ratio (Kronecker) low-discrepancy
-    sequence, which spreads any number of replicates evenly over the chain
-    without needing to know the total in advance — replicate *r* can therefore be
-    added later without moving the draws already used. A plain arithmetic rule
-    keyed on ``replicate`` alone cannot do this: it either clusters or drifts
-    steadily towards one end of the chain.
+    The replicate number fixes the position without needing the final replicate
+    count. Spacing reduces clustering relative to adjacent selection but does
+    not establish independence, distinct values or freedom from integer-index
+    collisions on a finite chain.
     """
     if n_available <= 0:
         raise ValueError("No draws available to select a truth from.")
@@ -326,7 +275,8 @@ def _spread_index(replicate: int, n_available: int) -> int:
 
 
 def _current_source_data_hash() -> str:
-    """The raw-data fingerprint, as every other artefact consumer computes it."""
+    """Raw-data fingerprint using the shared artefact-consumer helper.
+    """
     return source_data_hash(env.DATA_DIR)
 
 
@@ -338,24 +288,12 @@ def truth_from_trace(
     definition: Any | None = None,
     source_data_hash: str | None = None,
 ) -> TruthDraw:
-    """Take replicate ``r``'s truth from a fitted model-of-record trace.
+    """Select one free-parameter draw from a stored fit, then load only that slice.
 
-    Only the free random variables are read, so a multi-gigabyte reporting-quality
-    trace costs one small slice rather than a full load. Deterministics are
-    recomputed from the model graph later, which keeps the truth consistent with
-    the code as it stands rather than as it stood when the trace was written.
-
-    **Provenance (issue #233).** That last property is a convenience and a hazard
-    at once: recomputing today's deterministics from an older trace's free
-    parameters produces a truth that no fit ever held, and nothing in the free
-    variable *names* would notice. Matching names were the only check here, and
-    names survive most definition changes -- every anchor recalibration, every
-    prior widening, the whole reporting-cap family -- so a stale or wrong-model
-    trace passed. ``definition`` and ``source_data_hash``, when given, put the
-    source fit through :func:`fit_artifacts.validate_fit_output`, which compares
-    the normalised definition, the raw-data fingerprint and the fit's lifecycle
-    state. They are optional so the unit tests can exercise the reader on a bare
-    trace, but ``simulate_replicate`` always passes them.
+    When a definition is supplied, validate recorded definition, raw and prepared
+    data fingerprints and lifecycle before selection. simulate_replicate supplies
+    these checks. They do not request an executable-signature check here.
+    Derived quantities are recomputed later from the current graph.
     """
     if not os.path.isfile(trace_path):
         raise FileNotFoundError(
@@ -417,13 +355,10 @@ def truth_from_prior(
     n_prior_draws: int,
     random_seed: int,
 ) -> TruthDraw:
-    """Draw replicate ``r``'s truth from the model's own prior.
+    """Select a free-parameter draw from a seeded prior sample.
 
-    A prior truth needs no fitted trace, which makes it the option for a model
-    that has not been fitted yet and for the harness's own smoke tests. It is
-    *not* equivalent to a posterior truth: the prior covers parameter settings
-    far from anything the data support, so a prior-truth check tests the sampler
-    over the whole prior mass rather than in the regime the study reports.
+    Needs no fitted trace. Selected prior truths can lie far from the posterior
+    region used in reports; a finite set does not cover the whole prior.
     """
     prior = pm.sample_prior_predictive(
         draws=n_prior_draws,
@@ -499,13 +434,10 @@ def _write_column(frame: pd.DataFrame, column: str, rows: np.ndarray, values: np
 
 
 def _restrict(rows: np.ndarray, mutable: np.ndarray | None) -> np.ndarray:
-    """``rows`` narrowed to the positions this round is still allowed to change.
+    """Restrict rows to those still mutable in this simulation round.
 
-    ``mutable`` is ``None`` for a single-pass simulation, where every row is in
-    play until it is drawn. Under wave-sequential simulation it is the rows of
-    the current wave and every later one: earlier waves are **final**, and
-    overwriting one would destroy the very value the current wave's predictor was
-    built from.
+    ``None`` allows every row. In a wave loop, mutable rows are the current wave
+    and later waves; earlier outcomes must remain fixed for lag predictors.
     """
     if mutable is None:
         return rows
@@ -518,18 +450,12 @@ def _neutralise_child_columns(
     pending_columns: set[str],
     mutable: np.ndarray | None = None,
 ) -> None:
-    """Make nested/marginal classification depend only on the simulated parent.
+    """Zero pending observed child counts before rebuilding nested classification.
 
-    ``nested_outcome_spec`` classifies a row as nested when the parent count is a
-    valid total *and* the child count does not exceed it. At this point the child
-    column still holds the real study value, which may exceed the freshly
-    simulated parent and would then be classified marginal — while the value the
-    simulator is about to draw for it cannot exceed the parent, so the refit would
-    classify the same row as nested. Setting the pending child counts to zero
-    where they are observed makes the classification a function of the parent
-    alone, which is the rule that holds after simulation too. The zeros are
-    placeholders: every one of them is overwritten by its simulated draw in this
-    same round.
+    Real child counts can exceed a newly simulated parent and wrongly select a
+    marginal branch. Zero placeholders let the simulated parent determine the
+    branch. Pending outcomes are then overwritten by their likelihood draws;
+    earlier waves and missing entries remain unchanged.
     """
     for link in spec.nested_links:
         if link.child_column not in pending_columns:
@@ -547,14 +473,11 @@ def _neutralise_composition_cells(
     pending_nodes: set[str],
     mutable: np.ndarray | None = None,
 ) -> None:
-    """Make pending cross-tab cells consistent with their (possibly new) total.
+    """Replace pending cross-tabs with a valid placeholder partition of their total.
 
-    The engine validates that a cross-tab's cells sum to its total before it will
-    build. Once the total has been repointed at the simulated comprehension count,
-    the real cells no longer sum to it, so the build would reject the frame. The
-    whole total is parked in the first cell — an arbitrary but valid partition —
-    and every cell is overwritten by its Dirichlet-Multinomial draw in this same
-    round.
+    Put the total in the first cell and zero the others so the engine can rebuild
+    after parent totals change. The pending likelihood draws replace these cells.
+    Earlier waves remain fixed.
     """
     for stage in spec.stages:
         for node in stage:
@@ -593,20 +516,11 @@ def _apply_parent_totals(
 
 
 def _cross_lag_state(frame: pd.DataFrame, definition, n_trials: int) -> np.ndarray:
-    """The cross-lag predictor inputs the engine derives from ``frame``.
+    """Recompute comprehension-lag inputs with the engine's frame helper.
 
-    Recomputed rather than read off the built model, because the engine bakes
-    these into the graph as plain constants rather than ``pm.Data`` containers,
-    so there is nothing to read back. It is the same pure function of the same
-    frame object the build stage reads, called with nothing changed in between,
-    so what it returns *is* what the build used -- and recording it is only
-    useful because it is then compared against the same function of the
-    **finished** frame.
-
-    Stacked as one array so the comparison is one array comparison: the prior
-    wave's index, whether a row has a lag at all, and the prior wave's logit.
-    All three matter. A row that gained or lost a lag is as much a change of
-    design matrix as one whose lag moved.
+    Lag inputs are graph constants, not readable pm.Data. Stack previous-wave
+    index, presence flag and previous logit for comparison with the finished
+    frame. Call before this round mutates the frame used to build the graph.
     """
     prev_idx, has_lag, y_prev_logit = prev_wave_lag_for_frame(
         frame, n_trials, definition
@@ -621,18 +535,10 @@ def _cross_lag_state(frame: pd.DataFrame, definition, n_trials: int) -> np.ndarr
 
 
 def _sign_cross_lag_state(frame: pd.DataFrame, definition, n_trials: int) -> np.ndarray:
-    """The sign cross-lag predictor inputs the engine derives from ``frame``.
+    """Recompute signing-lag inputs for the same coherence check as comprehension.
 
-    :func:`_cross_lag_state`'s counterpart, recomputed for the same reason and
-    compared the same way -- the engine bakes these into the graph as constants,
-    so there is nothing to read back, and what makes recording them useful is
-    the comparison against the same function of the **finished** frame.
-
-    ``n_trials`` is accepted and unused: the predictor is a ratio of two counts
-    from one administration, so the inventory cancels out of it. The parameter
-    stays because :data:`_PREDICTOR_STATE`'s readers share one signature, and a
-    reader that quietly took fewer arguments would fail at the point of use
-    rather than here.
+    ``n_trials`` is unused because the predictor is a within-administration ratio.
+    Keep it to match the common state-reader signature.
     """
     prev_idx, has_lag, r_prev_logit = prev_wave_sign_share_lag_for_frame(
         frame, definition
@@ -672,21 +578,11 @@ def _verify_predictor_coherence(
     final: np.ndarray,
     recorded: list[tuple[int, np.ndarray, np.ndarray]],
 ) -> dict[str, Any]:
-    """Assert every consuming draw used the predictor the finished frame implies.
+    """Check recorded consuming rows against their finished-frame lag inputs.
 
-    The outcome-dependent counterpart of :func:`_verify_coherence`, and the guard
-    that makes a cross-lag recovery check mean anything rather than an ordering
-    argument. A row's predictor is a function of its child's earlier waves; by the
-    time those waves are final it is fixed, so the value a row was **drawn** under
-    must equal the value the refit will **compute** for it. Where it does not, the
-    data would be generated under one design matrix and fitted under another --
-    which is a recovery failure the model did not commit.
-
-    ``recorded`` is one entry per round that drew a consuming node: the round
-    index, the rows written in it, and the predictor state at that round's build.
-    It runs whether or not the wave loop was used, so the ordering rule in
-    :func:`vocab_growth.recovery.spec.single_pass_is_sound` is checked on every
-    run instead of trusted.
+    Recorded entries contain round index, written rows and state at graph build.
+    Compare indices, presence flags and logits with absolute tolerance 1e-12.
+    This runs for both staged and wave-sequential simulation.
     """
     report: dict[str, Any] = {}
     for round_index, rows, used in recorded:
@@ -715,10 +611,7 @@ def _verify_coherence(
     frame: pd.DataFrame,
     recorded: dict[str, np.ndarray],
 ) -> dict[str, Any]:
-    """Assert a model rebuilt from the synthetic frame matches what was simulated.
-
-    This is the guard that makes the check meaningful: the generating
-    decomposition and the fitted decomposition must be the same one.
+    """Check recorded nesting arrays, count bounds and cross-tab totals after rebuild.
     """
     report: dict[str, Any] = {}
     for link in spec.nested_links:
@@ -803,11 +696,10 @@ def _prepared_context(
     target: RecoveryTarget,
     output_dir: str,
 ) -> tuple[ModelFitContext, Any]:
-    """Prepare the real design and build the model, returning the build stage too.
+    """Prepare the supplied definition's real-data design and build its graph.
 
-    Runs the engine's own preparation, prior-configuration and build stages, so
-    the design (ages, studies, children, missingness) and the model graph are
-    exactly the model of record's.
+    Run the engine's preparation, prior and build stages and return the build
+    callable for subsequent simulation stages.
     """
     os.makedirs(output_dir, exist_ok=True)
     context = ModelFitContext(
@@ -831,17 +723,10 @@ def _prepared_context(
 def available_replicates(
     definition, output_root: str | None = None, *, truth_overrides=()
 ) -> list[int]:
-    """Replicate numbers that have a written simulation, ascending.
+    """Find replicate numbers with a simulation record under this run's prefix.
 
-    The recovery matrix summarises every replicate that exists, not only the ones
-    a particular invocation asked for. Without that, re-scoring one replicate of a
-    staged run would overwrite the matrix with a single row and silently drop the
-    others.
-
-    Every replicate of *this* run, that is. ``truth_overrides`` is part of the
-    prefix, so a matrix never mixes two settings of the same truth -- which would
-    read as one record when it is two, the same failure the sampling-tier filter
-    in ``fit_recovery.py`` exists to prevent (#289 task 4.7).
+    Includes truth-setting markers, so settings do not mix. The scoring driver
+    can use every stored replicate when rescoring a subset.
     """
     root = output_root if output_root is not None else env.output_root()
     directory = os.path.join(root, "recovery")
@@ -873,24 +758,12 @@ def simulate_replicate(
     output_root: str | None = None,
     definition=None,
 ) -> SimulationResult:
-    """Simulate one synthetic dataset for ``model_key`` at a known truth.
+    """Simulate counts and write the frame, truth draw and provenance record.
 
-    Returns the simulated frame and truth draw, and writes both plus a
-    provenance record to :func:`simulation_dir`.
-
-    ``definition`` overrides the model of record so a registered sensitivity
-    variant can be simulated from its own structure; see
-    :func:`vocab_growth.recovery.refit.fit_recovery_replicate`. With
-    ``truth_source="posterior"`` the truth is then read from the *variant's* own
-    trace, which is the only coherent choice: a variant carrying parameters the
-    record does not have has nowhere else to get them.
-
-    ``truth_overrides`` sets named free variables in the selected draw before
-    anything is simulated from it, which is how a *designed* parameter setting is
-    asked for rather than whichever one the draw held
-    (:mod:`vocab_growth.recovery.truth_overrides`). They land between the draw
-    and the deterministics on purpose: every reported quantity downstream of a
-    setting is then recomputed under it.
+    ``definition`` selects the generating model or sensitivity variant. Posterior
+    truth comes from that definition's fit; prior truth needs no stored fit.
+    Apply free-variable overrides before computing the reported deterministics,
+    then draw outcomes in the required stage and wave order.
     """
     if truth_source not in {"posterior", "prior"}:
         raise ValueError("truth_source must be 'posterior' or 'prior'.")
@@ -1103,10 +976,7 @@ def simulate_replicate(
                 keep = waves[rows] == wave
                 rows, values = rows[keep], values[keep]
                 if not rows.size:
-                    # A wave this node covers no rows of. Only reachable under
-                    # the wave loop; the single-pass path keeps its original
-                    # behaviour of writing an empty slice, so that path is
-                    # unchanged by construction rather than by observation.
+                    # This node has no rows in the current wave.
                     continue
             if round_state is not None and node.rv_name in consumer_rvs:
                 predictor_recorded.append((round_index, rows.copy(), round_state))
@@ -1127,17 +997,11 @@ def simulate_replicate(
                     rows.size
                 )
 
-    # Final coherence check against a model rebuilt from the finished frame.
-    #
-    # `recorded_data` holds the *last* round's denominators, so under the wave
-    # loop this verifies the last wave's rows directly and the earlier waves'
-    # only through the frame-level checks below it (cells summing to their
-    # total, counts inside their denominator, totals tracking their parent),
-    # which do cover every row. That is sufficient for the engines registered
-    # today, because a wave's rows are final once drawn and their denominators
-    # cannot move afterwards -- but it is weaker than the per-round check the
-    # predictor guard makes, and a future engine whose denominators depend on a
-    # *later* wave would need it strengthening rather than trusting.
+    # Rebuild the final frame for coherence checks. recorded_data holds the
+    # last round's denominator arrays, not a per-round history. Earlier waves
+    # remain final and counts/totals are checked for every row. An engine whose
+    # denominators depend on later waves would need per-round denominator checks,
+    # as already used for predictors.
     context.set_model_data(context.model_data, frame)
     build_stage(context)
     coherence = _verify_coherence(context.model, spec, frame, recorded_data)
@@ -1247,15 +1111,11 @@ def _sql_literal(path: str) -> str:
 
 
 def _dtype_class(dtype) -> str:
-    """The dtype identity the round-trip guard should hold fixed.
+    """Normalise string/object dtypes for round-trip comparison.
 
-    Compared instead of the raw dtype string because pandas 3 hands back a
-    ``str`` dtype for a column of Python strings that went in as ``object``.
-    The values are unchanged -- including the case the guard exists for, where a
-    numeric-looking id like ``"001"`` must not return as the integer 1 -- so
-    failing on that pair rejects a faithful round trip. Every other dtype is
-    still compared exactly, and the value check below is unchanged, so an
-    id silently becoming numeric is still caught here: it changes the class.
+    Pandas may restore Python-string object columns as string dtype. Treat that
+    pair as equivalent while preserving numeric dtype identity, so text IDs such
+    as 001 cannot silently become integers.
     """
     if pd.api.types.is_object_dtype(dtype) or pd.api.types.is_string_dtype(dtype):
         return "string"
@@ -1263,20 +1123,11 @@ def _dtype_class(dtype) -> str:
 
 
 def _write_frame(frame: pd.DataFrame, path: str) -> dict[str, str]:
-    """Write the synthetic frame as Parquet via DuckDB, verifying the round trip.
+    """Write Parquet with DuckDB and check columns, dtypes and restored values.
 
-    DuckDB carries its own Parquet reader and writer, so this needs no
-    ``pyarrow`` Parquet support — which matters because the pinned environment
-    installs ``pyarrow-core`` (Arrow buffers only, pulled in by nutpie) and no
-    ``libparquet`` on either locked platform. DuckDB is already a declared
-    dependency and already the project's storage layer for the prepared data.
-
-    Parquet keeps dtypes, integer widths and missingness exactly, so unlike a
-    text round trip nothing has to be reconstructed from a recorded schema. The
-    schema is still recorded as provenance, and the round trip is still verified
-    here — including **dtype identity**, which a CSV round trip could not
-    guarantee — so a lossy write fails during simulation rather than surfacing as
-    an unexplained difference in the refit hours later.
+    Normalise string/object dtype equivalence. Numeric values use allclose with
+    its default tolerances and equal_nan; other values compare as strings. This
+    is not a bitwise numeric comparison. Record original dtypes as provenance.
     """
     schema = {str(column): str(dtype) for column, dtype in frame.dtypes.items()}
     with duckdb.connect() as connection:
@@ -1307,7 +1158,8 @@ def _write_frame(frame: pd.DataFrame, path: str) -> dict[str, str]:
 
 
 def _read_frame(path: str) -> pd.DataFrame:
-    """Read a synthetic frame back from Parquet, dtypes intact."""
+    """Read a synthetic Parquet frame through DuckDB.
+    """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"No synthetic frame at {path}.")
     with duckdb.connect() as connection:
@@ -1321,17 +1173,12 @@ def load_simulation(
     *,
     expected_definition: Any | None = None,
 ) -> tuple[pd.DataFrame, xr.DataTree, dict[str, Any]]:
-    """Load a written simulation's frame, truth draw and provenance record.
+    """Load a synthetic frame, truth tree and simulation record.
 
-    ``expected_definition`` compares the definition the simulation recorded
-    against the one about to consume it, and refuses a mismatch (issue #233).
-    The staged workflow is what makes this necessary: ``--simulate-only`` can be
-    hours or days ahead of ``--fit-only``, and a definition edited in between
-    leaves synthetic data generated by one model being fitted and scored by
-    another. Nothing else would catch it -- the frame carries only counts, and
-    the truth carries only parameter values under names that mostly survive a
-    definition change. Optional so a caller that genuinely wants the raw record
-    can ask for it, but every stage of ``fit_recovery.py`` passes it.
+    If ``expected_definition`` is supplied, compare the recorded generating
+    definition before consuming a staged simulation. A match does not itself
+    verify executable compatibility or output hashes; resume checkpoints make
+    those additional checks.
     """
     from vocab_growth.fit_artifacts import read_json
     from vocab_growth.models.fit_identity import definition_differences

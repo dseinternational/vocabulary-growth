@@ -1,27 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Every comprehension- or sign-derived plot must respect its reporting age cap.
+"""Check outcome-specific caps in plot functions and reporting call sites.
 
-This pins a defect class that has now recurred twice. ``report_max_age_understood``
-stops a curve where the comprehension evidence stops; ``report_max_age_signed``
-does the same for signing. Both were honoured by the *summary tables* and by
-``plot_production_rate``, but several plots drawn from the same posterior were
-never given the cap, so figures ran to the end of the plot grid while the tables
-beside them stopped at the cap.
-
-Two things made that hard to notice by reading:
-
-* The x axis is sometimes a *reparameterisation* of age (expected words
-  understood), so the cap is invisible in the plotted coordinates.
-* Where the mean is clamped above the upper slope anchor, expected comprehension
-  almost stops growing, so the reparameterised axis compresses hard and a gentle
-  drift in the extrapolated tail is drawn as a near-vertical step -- which reads
-  as a finding about vocabulary rather than an artefact of the transform.
-
-So there are two tests here. The first is behavioural: the cap actually truncates.
-The second is structural: every call site in the reporting pipelines passes it,
-which is the part a new plot would silently get wrong.
+Apply age caps before transforming age into expected vocabulary. CSVs with
+several outcomes need one shared age column and missing values after each
+series' own cap.
 """
 
 import ast
@@ -51,21 +35,10 @@ CAPPED_TRIVARIATE_CALLS = [
     "plot_comprehension_production_gap",
 ]
 
-# Which cap each call site must carry. Passing *a* cap is not enough: until
-# 2026-08-13 the trivariate sign-derived figures were passed
-# ``report_max_age_understood``, so they satisfied the "is it capped?" test above
-# while being trimmed by the wrong outcome's evidence -- and raising the
-# comprehension cap from 72 to 84 moved VG14's signed figures as a side effect.
-# The 2026-08-13 fix then over-corrected: it mapped those figures to
-# ``report_max_age_signed`` alone, and when the comprehension cap moved DOWN to
-# 72 on 2026-08-22 the signing cap stopped being the tighter one, so the
-# figures ran to 84 against a policy that says 72 (#238). The trivariate
-# pipeline now computes named cap locals from vocab_growth.reporting_ages --
-# ``ratio_cap`` for ratios of understood, ``sign_ratio_cap`` (the tighter of
-# the comprehension and signing caps) for the sign-bearing ratios -- and each
-# call site must pass the local named for its quantity. The bivariate pipeline
-# still passes the definition attribute directly; its one cap is the
-# comprehension cap, so there is no wrong attribute to pick.
+# Match each plot to its quantity's cap. Ratios involving comprehension and
+# signing need the tighter of both caps. Shared pipelines pass named cap locals;
+# bivariate pipelines pass their single comprehension cap directly.
+
 #
 # Values: ("attr", name) for an attribute access, ("name", name) for a local.
 EXPECTED_CAP = {
@@ -119,13 +92,7 @@ def test_reporting_pipeline_passes_the_age_cap(module, func_name):
     + [(common_trivariate, n) for n in CAPPED_TRIVARIATE_CALLS],
 )
 def test_each_call_site_passes_the_cap_for_its_own_outcome(module, func_name):
-    """The cap passed must belong to the outcome plotted.
-
-    A sign-derived figure trimmed by ``report_max_age_understood`` is capped, so
-    the test above passes, but it stops where *comprehension* evidence stops and
-    moves whenever a comprehension decision is taken. That is the actual defect
-    found on VG14 on 2026-08-13.
-    """
+    """Pass the cap for the plotted quantity, including both outcomes for ratios."""
     kind, expected = EXPECTED_CAP[(module, func_name)]
     for call in _call_sites(module, func_name):
         kw = next(k for k in call.keywords if k.arg == "max_age_months")
@@ -157,13 +124,7 @@ def test_capped_plot_functions_accept_the_parameter(module, func_name):
 
 
 def test_the_cap_actually_truncates_a_reparameterised_axis(tmp_path):
-    """``plot_production_rate_by_understood`` is the one that bit us.
-
-    Its x axis is expected comprehension, so a cap expressed in *months* has to be
-    applied against ``X_plot`` before the reparameterisation, not after. Build a
-    grid where comprehension keeps rising past the cap and check the saved CSV
-    stops at the right x value rather than the right row count.
-    """
+    """Trim by age before transforming the axis to expected comprehension."""
     import pandas as pd
 
     rng = np.random.default_rng(0)
@@ -215,23 +176,7 @@ def test_the_cap_actually_truncates_a_reparameterised_axis(tmp_path):
 
 
 def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
-    """The per-outcome caps must not give the CSV columns of different lengths.
-
-    A third instance of the same defect class, found the hard way: VG14's first
-    refit after per-outcome caps arrived sampled for 40 minutes and then died in
-    the plot stage with ``ValueError: All arrays must be of the same length``.
-    The CSV paired the full ``X_plot`` age column with median arrays trimmed at
-    three different caps (understood 84, signed 84, spoken 90).
-
-    Two things hid it. The figure is written *before* the CSV and draws each
-    curve against its own trimmed x, so the plot was always correct. And
-    ``modality_trajectories`` carries no outcome suffix, so it matches no stem in
-    the reporting-age policy test's map -- the same blind spot that let the
-    figure run to 115 months in the first place.
-
-    The fix keeps one shared age column and masks past each cap with NaN, so the
-    CSV says "not reported here" rather than silently realigning rows.
-    """
+    """Keep one age column and mask each series after its own cap."""
     import types
 
     import numpy as np
@@ -292,10 +237,7 @@ def test_modality_trajectory_csv_shares_one_age_grid(tmp_path):
 
 
 def test_the_age_fan_is_retired():
-    """``plot_spoken_given_understood`` drew a population rate as a straight line to
-    810 words -- E[q | U] by construction, the reading issue #233 rules out --
-    and was retired on 2026-09-02 in favour of ``plot_understood_vs_spoken``
-    carrying the observed children."""
+    """Keep the retired population-rate fan out of the observed-count relationship plot."""
     assert not hasattr(common_bivariate, "plot_spoken_given_understood")
 
 

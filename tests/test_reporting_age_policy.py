@@ -1,24 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The reporting age policy, checked against a fit's actual output.
+"""Check reporting-age policy against recognised fitted-output tables.
 
-``tests/test_reporting_age_caps.py`` checks *call sites* by AST, against a
-hand-written list of the plot functions that should be capped. That test cannot
-see an artefact nobody thought to cap: on 2026-08-14 sixteen of VG10's tables
-ran past their outcome's cap -- fourteen on the full 115-month plot grid and two
-more (``posterior_predictive_pmf``/``_cdf``) that a first audit missed entirely,
-because those carry age in their *column names* rather than in a column.
-
-So this module checks the other end. Given a fitted model directory it reads
-every table, works out which outcome each one reports from its filename, and
-asserts the ages respect the policy in :mod:`vocab_growth.reporting_ages`. A new
-uncapped artefact fails here the first time a model is fitted, without anyone
-having to remember to add it to a list.
-
-The output-directory tests need a fitted model of record and are skipped when
-there is none, so the suite still runs on a clean checkout. The policy tests
-above them always run.
+Read ages from columns and from age-labelled probability-table headers.
+Several-outcome files need per-series checks. Fit-directory tests skip absent
+fits; policy tests run on a fresh checkout. Filename mapping limits which
+artefacts this audit can classify.
 """
 
 import glob
@@ -82,14 +70,9 @@ def _cap_for(config, quantity):
         return max_age_for_sign_ratio(config)
     return max_age_for(config, quantity)
 
-# Artefacts a fitted model writes past its reporting cap, by model id, that the
-# policy check is told to excuse. Empty by design: an entry is a stale artefact
-# on disk that a fresh fit cannot reproduce, and
-# `test_known_stale_entries_are_still_needed` deletes entries the moment a refit
-# makes them unnecessary. The VG14 and VG15 84-month sign-ratio and `p_any`
-# tables (fitted 2026-08-22 in the gap before the sign-ratio cap followed the
-# understood cap) were the last entries, cleared by the 2026-09-01 reporting-
-# quality refit (#281).
+# Temporary exemptions for stale outputs, keyed by model ID. The freshness
+# check below rejects exemptions once a refit has cleared them.
+
 KNOWN_STALE: dict[str, set[str]] = {}
 
 # Not age-indexed reports: descriptive frames, diagnostics, provenance.
@@ -138,14 +121,7 @@ needs_fit = pytest.mark.skipif(not FITTED, reason="no fitted model of record on 
 
 
 def test_the_policy_is_the_one_that_was_agreed():
-    """Pin the numbers themselves, so a silent edit to the policy is visible.
-
-    These are the caps agreed on 2026-08-22: comprehension (and with it every
-    ratio of understood) at 72, signing at 84, spoken at the top of the query
-    grid. Until #238 this test pinned the pre-2026-08-22 configuration
-    (understood = 84), so it kept passing while several artefacts encoded the
-    superseded policy.
-    """
+    """Keep the declared comprehension, signing and spoken cap policy explicit."""
 
     class _DS:
         ages_query = [12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 78, 84, 90]
@@ -341,17 +317,7 @@ def test_known_stale_entries_are_still_needed(model_id, output_dir):
 @needs_fit
 @pytest.mark.parametrize(("model_id", "output_dir"), FITTED, ids=[m for m, _ in FITTED])
 def test_modality_trajectories_trims_each_series_independently(model_id, output_dir):
-    """Four outcomes, three caps — the file a single-quantity rule cannot describe.
-
-    This is the artefact the stem map could not see, and the blind spot cost twice:
-    the figure ran to 115 months above a ``p_any`` table trimmed to 84, and then
-    the fix for that shipped a CSV whose columns had three different lengths,
-    which killed VG14's first refit in the plot stage after 42 minutes of
-    sampling.
-
-    Same convention as ``joint_trajectory``: the age column runs to the widest
-    cap, and each series is NaN past its own.
-    """
+    """Retain the widest shared age column and mask each series beyond its own cap."""
     path = os.path.join(output_dir, "modality_trajectories.csv")
     if not os.path.isfile(path):
         pytest.skip("not a trivariate model")

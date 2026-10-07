@@ -1,31 +1,14 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""One way to fit a cross-validation fold, shared by the scripts that need one.
+"""Shared fitting and diagnostics for cross-validation folds.
 
-``kfold_loso.py`` and ``wave_forward_score.py`` hold different things out --
-whole children against a child's later administration waves -- and score
-different units, but the fit between those two decisions is the same one:
-validate the counts, build the model on a frame carrying a ``holdout`` column,
-sample it with the observation-level deterministics stored, and run the canonical
-diagnostics scan over every free variable element-wise.
+``kfold_loso.py`` holds out whole children; ``wave_forward_score.py`` holds out
+later administration waves. Both use a prepared frame with a ``holdout`` column,
+the definition's registered engine, observation-level deterministics for scoring
+and the full fit-pipeline diagnostics scan.
 
-The **engine** is resolved from the definition rather than hard-coded. It was
-hard-coded to the bivariate random-effect builder until VG25 needed a forward
-score, and nothing said so: a joint definition passed in would have been built
-by the wrong engine and produced a graph that is not the model.
-
-It lives here rather than in either script because the second copy was made by
-hand and was wrong within an hour: ``fold_gate_fields`` reads the energy verdict
-from ``gate["checks"]["bfmi"]``, and the copy read ``gate["bfmi_ok"]``, which is
-absent -- so every fold in the new script reported a passing energy check
-regardless of what the sampler found. Nothing in either script's output would
-have shown it.
-
-Neither caller's *policy* moves here. Which rows are held out, which are scored,
-whether a failed fold aborts the run or is recorded and flagged -- those differ
-between the two and belong with the question each is asking. What is shared is
-the mechanics.
+Callers choose held-out rows, scoring units and how to handle failed folds.
 """
 
 from __future__ import annotations
@@ -51,8 +34,7 @@ def fold_gate_fields(gate: dict) -> dict:
     """A fold's convergence verdict, flattened for a table row.
 
     ``gate`` is the payload :func:`write_diagnostics_summary` returns. The energy
-    check is nested under ``checks``, not at the top level, which is the detail a
-    hand copy of this function got wrong.
+    check is nested under ``checks``, not at the top level.
     """
     checks = gate.get("checks") or {}
     return {
@@ -73,7 +55,7 @@ def fit_holdout_fold(
     tmp_root: str,
     name_prefix: str,
 ) -> tuple[Any, dict]:
-    """prepare -> priors -> build -> sample -> diagnostics on a marked frame.
+    """Build, sample and diagnose a fold from a prepared, marked frame.
 
     ``analysis_df_with_holdout`` is a prepared frame carrying a boolean
     ``holdout`` column: those rows leave the likelihood but stay in ``obs_id``
@@ -106,20 +88,11 @@ def fit_holdout_fold(
         name_prefix=name_prefix,
     )
     reporting_cfg = context.reporting
-    # Both callers read the per-row probabilities and dispersions at every draw
-    # to score held-out rows, and the sampler otherwise no longer stores them
-    # (`fit_artifacts.sampled_variable_names`). Storing them costs the same
-    # memory as recomputing them afterwards and saves the second pass. Which
-    # names those are is the engine's business: the bivariate random-effect
-    # engine exposes `p_u_obs` / `p_s_obs` / `q_obs` / `kappa_*_obs`, and the
-    # joint engine adds `r_obs`, its third kappa and `pi_cells_obs` for the cell
-    # compositions.
+    # Scoring needs per-row probabilities, dispersions and composition
+    # probabilities. Retain these arrays to avoid a separate recomputation.
     sample(context, store_observation_deterministics=True)
 
-    # The scan's var_names are built exactly as the fit pipeline's diagnostics
-    # stage builds them: the scalar summary set plus every free RV element-wise,
-    # so the study and subject intercepts and the HSGP coefficients are screened
-    # too rather than only the scalars.
+    # Use the fit pipeline's scan, including every free-variable element.
     _summary_names, gate_var_names = diagnostics_var_names(context.model)
     gate = shared_diagnostics.write_diagnostics_summary(
         context.trace, reporting_cfg.output_dir, var_names=gate_var_names
@@ -138,9 +111,8 @@ def build_holdout_fold_context(
 ) -> ModelFitContext:
     """The prior and build stages of :func:`fit_holdout_fold`, without sampling.
 
-    Separate so that a test can inspect exactly the graph a fold samples -- which
-    rows its likelihood carries, and what its deterministics evaluate to at a
-    fixed point -- without paying for the sampler.
+    Tests can inspect the fold's likelihood rows and deterministic values
+    without sampling.
     """
     engine = engine_for_definition(definition)
     # A univariate definition names its single outcome; every other engine's
@@ -151,9 +123,8 @@ def build_holdout_fold_context(
         else "understood"
     )
     has_u = analysis_df_with_holdout[count_col].notna().to_numpy()
-    # The engines' own prepare stage validates before the cast, because NumPy
-    # truncates toward zero silently and a fold path builds its
-    # `BinomialModelData` here rather than going through the engine (#233).
+    # Validate before casting, as engine preparation does. NumPy would silently
+    # truncate fractional counts toward zero.
     require_valid_counts(
         np.asarray(analysis_df_with_holdout.loc[has_u, count_col], dtype=float),
         count_col,

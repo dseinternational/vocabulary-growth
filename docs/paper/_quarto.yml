@@ -33,11 +33,8 @@ format:
     toc: true
     code-fold: true
     theme: default
-    # Noto Sans for text, Noto Sans Mono for code and Noto Sans Math for
-    # equations. The style below sets the code font because the theme's code
-    # rules ignore Quarto's `monofont`. MathML rather than MathJax, whose own
-    # math fonts cannot be replaced: the browser typesets MathML with the font
-    # named below, using its OpenType MATH table.
+    # Set Noto fonts for text, code and native MathML equations.
+    # CSS sets code and maths fonts explicitly for the HTML theme.
     mainfont: "Noto Sans, system-ui, -apple-system, Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif"
     html-math-method: mathml
     include-in-header:
@@ -60,7 +57,7 @@ format:
     link-citations: true
     fontsize: 11pt
     # The faces are named because, with the whole Noto Sans family installed,
-    # fontspec otherwise takes ExtraBold for bold. Noto Sans Mono has no italic,
+    # fontspec can choose a different bold face. Noto Sans Mono has no italic,
     # so AutoFakeSlant slants the upright; the scale keeps code lines narrow.
     mainfont: "Noto Sans"
     mainfontoptions:

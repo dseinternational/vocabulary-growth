@@ -9,11 +9,7 @@ if (!["--check", "--write"].includes(mode)) {
   process.exit(2);
 }
 
-// `--others --exclude-standard` adds untracked-but-not-ignored files to the
-// tracked set. Without them a NEW Markdown file is invisible here until it is
-// staged, so `npm run format` and `npm run format:check` both pass locally and
-// CI then fails on the same file once the commit makes it tracked — which
-// happened twice while writing the 2026-08 notes. Ignored files stay excluded.
+// Include untracked, non-ignored Markdown so new files are checked before staging.
 const listedMarkdown = spawnSync(
   "git",
   ["ls-files", "--cached", "--others", "--exclude-standard", "--", "*.md", ":(exclude)data/**/*.md"],
@@ -39,16 +35,8 @@ if (files.length === 0) {
 
 const prettier = process.platform === "win32" ? "prettier.cmd" : "prettier";
 
-// cmd.exe caps a command line at 8191 characters, and `shell: true` -- which
-// Windows needs to run the `.cmd` shim -- routes the whole argument list
-// through it. The repository's Markdown grew past that: 177 files spell about
-// 8,390 characters, and the failure is `The syntax of the command is
-// incorrect.` from cmd itself, naming neither a length nor a file. Batching is
-// the fix rather than raising anything, because the limit is not ours to raise
-// and the next note would cross it again.
-//
-// Every batch runs even after one fails, so `--check` reports every offending
-// file rather than only those in the first failing batch.
+// Keep Windows batches below cmd.exe's 8191-character command limit. The .cmd
+// shim needs shell: true there. Run every batch so --check reports all failures.
 const BATCH_CHARS = 6000;
 
 const batches = [[]];

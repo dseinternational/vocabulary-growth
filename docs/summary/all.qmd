@@ -32,7 +32,7 @@ format:
     link-citations: true
     fontsize: 11pt
     # The faces are named because, with the whole Noto Sans family installed,
-    # fontspec otherwise takes ExtraBold for bold. Noto Sans Mono has no italic,
+    # fontspec can choose a different bold face. Noto Sans Mono has no italic,
     # so AutoFakeSlant slants the upright; the scale keeps code lines narrow.
     mainfont: "Noto Sans"
     mainfontoptions:

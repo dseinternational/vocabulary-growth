@@ -1,44 +1,20 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""One frame-checked way to read a fit back (issue #266 finding 1).
+"""Check stored fits against the current definition and prepared data.
 
-The manifest records ``data.analysis_frame_hash``, an exact hash of the prepared
-frame, and :func:`vocab_growth.analysis_frames.expected_analysis_frame_hash`
-recomputes what that hash would be today. Finding 1 asked for the comparison to
-run "for every fit consumer"; the first pass wired it into the fit pipeline and
-the publication path, which left the scripts that open a stored trace and print a
-number from it unchecked. Eleven of the sixteen were, and nine of those produce a
-reported quantity from a posterior never compared against the current loader
-rules -- rules that run in Python *after* the CSVs are read, so the raw-data
-fingerprint some of them did carry cannot see them move.
+Consumers compare the registered definition, raw-data fingerprint and exact
+prepared-frame hash before reading a trace. A frame hash detects loader-rule
+changes that the raw-data fingerprint cannot detect.
 
-The check here is deliberately the same one ``scripts/loso_compare.py`` already
-made, rather than a new policy: the registered definition, the raw-data
-fingerprint and the exact frame hash. Those three are the identity of the graph
-and of the data it was fitted to. What a consumer does *not* ask for is the
-publication apparatus -- reporting-quality sampling, a rendered report, a clean
-checkout, the executable-code signature. A script that prints a number off a
-model of record is not publishing it, and requiring the code signature would mean
-an edit to any module in the package stopped every one of these scripts from
-running, which is the reasoning ``fit_validation_kwargs`` already records for
-``render``.
+These checks do not require publication-quality sampling, a rendered report,
+a clean checkout or a matching executable signature. They therefore establish
+definition and data compatibility, not that the current likelihood code is
+unchanged or the fit is publishable. Publication uses stricter validation.
 
-Each consumer names itself, so a refusal says which script refused and what to do
-about it, and each offers ``--allow-stale-fit`` to override -- following
-``sync_report_figures.py --allow-provisional``, the established way to work
-locally with output that will not pass publication. An override prints what it
-overrode, every time: reading a superseded posterior should be a choice someone
-made rather than something that happened quietly.
-
-:data:`EXEMPT_CONSUMERS` records the two scripts that read a trace and do not go
-through this module, with the reason -- which is not the same as not validating:
-``fit_recovery.py`` makes these same three checks inside its own harness, and
-``compact_traces.py`` never reads a posterior value. A reason that is written
-down can be argued with; an absence looks like an oversight, which is what the
-other eleven turned out to be. It has to be argued with the code in view, too:
-the first version of the recovery entry claimed the opposite of what that code
-does, so ``tests/test_fit_consumers.py`` now checks both claims against it.
+``--allow-stale-fit`` prints any bypassed errors. ``EXEMPT_CONSUMERS`` documents
+scripts that use their own validation path or inspect files without reading
+posterior values.
 """
 
 from __future__ import annotations
@@ -56,14 +32,7 @@ from vocab_growth.fit_artifacts import (
 )
 from vocab_growth.models.definitions import MODEL_REGISTRY, ModelDefinition
 
-#: Trace-reading scripts that do not use this module, and why. Recorded here
-#: rather than left as an absence, the way ``fit_validation_kwargs`` records
-#: which purposes omit the executable-code signature. Neither entry is an
-#: exemption from provenance: ``fit_recovery.py`` makes the same three checks
-#: through its own harness, and ``compact_traces.py`` never reads a posterior
-#: value. ``tests/test_fit_consumers.py`` checks both claims against the code
-#: they describe, because the first version of the recovery entry asserted the
-#: opposite of what that code does and nothing caught it.
+#: Scripts with a separate validation path or no posterior-value reads.
 EXEMPT_CONSUMERS: dict[str, str] = {
     "fit_recovery.py": (
         "validates, but not here and not against the registry. The trace it "
@@ -99,8 +68,7 @@ _source_hashes: dict[str, str] = {}
 def _current_frame_hash(model_key: str, definition: ModelDefinition) -> str:
     """``expected_analysis_frame_hash``, memoised per model key.
 
-    Rebuilding a frame reloads and re-prepares the pool, so a script checking
-    eighteen models would otherwise pay for eighteen rebuilds.
+    Repeated checks of one model reuse its frame hash instead of reloading data.
     """
     key = model_key.lower()
     if key not in _frame_hashes:
@@ -148,10 +116,10 @@ def fit_errors(
     *,
     definition: ModelDefinition | None = None,
 ) -> list[str]:
-    """Every reason ``fit_dir`` is not a current fit of ``model_key``.
+    """Validation errors for ``fit_dir`` against ``model_key``'s definition and data.
 
-    Empty means the stored posterior was fitted from the registered definition
-    on the frame today's loader rules produce.
+    An empty list means the required artefacts, definition and prepared data
+    pass. This check does not compare executable signatures.
     """
     key = model_key.lower()
     if definition is None:
@@ -255,12 +223,9 @@ def contributing_fits(
 ) -> dict[str, str]:
     """Validate every fit a comparison reads, and name them for its manifest.
 
-    Returns the ``{label: output_dir}`` mapping
-    :func:`vocab_growth.comparisons_provenance.write_comparison_manifest`
-    records, so the two halves of issue #266 -- "validate what you read" and
-    "record what you read" -- are discharged by one call and cannot drift apart.
-    A comparison whose manifest lists a fit it did not check, or checks one it
-    does not list, is the exact failure the manifest exists to prevent.
+    Returns the ``{label: output_dir}`` mapping recorded by
+    :func:`vocab_growth.comparisons_provenance.write_comparison_manifest`.
+    The same call validates fits and identifies them for provenance.
     """
     contributing: dict[str, str] = {}
     # A script may name the same model twice for different roles --

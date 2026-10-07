@@ -1,12 +1,9 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""A fit must not silently replace a fit of record made under other code (#362).
+"""Protect a fit of record when development and reporting share an output root.
 
-Once a refit cycle runs from a pinned worktree and development continues in
-another checkout, both may share one output root. A model's output directory
-carries no tier and no commit, so without this guard a ``dev`` fit from the
-development checkout would replace the published model of record.
+Check compatibility before fitting and again before promoting the result.
 """
 
 from __future__ import annotations

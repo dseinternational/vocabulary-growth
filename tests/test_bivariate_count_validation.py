@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Regression tests: understood counts are validated *before* the int cast.
+"""Regression tests: validate understood counts before the integer cast.
 
 Both bivariate engines cast the understood column to ``int`` for the
 Beta-Binomial likelihood. NumPy's cast truncates toward zero silently, so a
@@ -10,9 +10,8 @@ and then pass the post-cast bounds checks (#236). These tests pin that the
 guard fires on the raw values, on both engines, before any model is built.
 Spoken counts were already validated pre-cast by ``nested_outcome_spec``.
 
-Both engines share ``require_valid_counts`` (finite, integral, in range), which
-arrived on the RE engine with the VG11-VG13 review (#240) and is applied here to
-the non-RE engine and to both engines' preparation paths as well.
+Both engines use ``require_valid_counts`` to check finite, integral counts
+within the reference inventory.
 """
 
 import os
@@ -67,7 +66,7 @@ def _context_with_frame(tmp_path, monkeypatch, definition, understood_values):
 
 def test_build_model_re_rejects_fractional_understood(tmp_path, monkeypatch):
     understood = np.round(np.linspace(50.0, 400.0, 8))
-    understood[3] = 100.5  # would silently truncate to 100 pre-#236
+    understood[3] = 100.5  # An integer cast would truncate this to 100.
     context = _context_with_frame(tmp_path, monkeypatch, VG07, understood)
     with pytest.raises(ValueError, match="understood contains 1 non-integral"):
         build_model_re(context, VG07)
@@ -90,12 +89,7 @@ def test_build_model_rejects_fractional_understood(tmp_path, monkeypatch):
 
 
 def test_both_engines_reject_out_of_range_understood(tmp_path, monkeypatch):
-    """An integral but out-of-range count fails the shared pre-cast contract.
-
-    This one was already caught, but only by the post-cast bounds check further
-    down each build; `require_valid_counts` now rejects it before the cast, so
-    both engines report it the same way.
-    """
+    """Both engines reject an integral count outside the inventory bounds."""
     for definition, build in ((VG07, build_model_re), (VG05, build_model)):
         understood = np.round(np.linspace(50.0, 400.0, 8))
         understood[5] = 811.0  # one past the 810-item reference inventory

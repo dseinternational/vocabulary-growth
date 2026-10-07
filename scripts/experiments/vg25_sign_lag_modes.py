@@ -10,7 +10,7 @@ two at -0.50, never mixing. This builds the joint engine's real graph on the rea
 frame for one of four designs -- the two baselines crossed with the two scopes --
 and samples it with nutpie using many chains (12 by default, where a rep fit has
 6), keeping only scalar parameters, then writes each chain's mean for the
-parameters that split the rep fit. Two clusters of chain means is two modes.
+parameters that split the rep fit. Separated chain means can indicate modes or incomplete convergence.
 
 It does not validate a stored trace, because it reads none: every number comes
 from the fit it runs, against the checkout it runs in. It writes only under

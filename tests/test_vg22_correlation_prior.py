@@ -1,26 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""VG22's level–level correlation has a designed prior, not an induced one.
+"""Check VG22's explicit level-correlation prior and loading-row constraints.
 
-Issue #266 finding 5. The loading rows were sampled independently and
-normalised, which left ``rho_uq`` with whatever prior the geometry happened to
-give — **exactly the arcsine**, whose density piles at the extremes.
-``P(|rho_uq| > 0.8) = 0.410`` and an 89% interval of ``[-0.985, +0.985]``,
-against ``0.056`` and ``[-0.715, +0.715]`` under the ``LKJ(2)`` VG20 places on
-the same quantity. The two models' posteriors on that quantity were therefore
-not prior-comparable, and the induced prior depended on the anchor order, which
-had been documented as a pure gauge choice.
-
-The fix is exact rather than approximate, and the geometry that caused the
-problem is what makes it so: the first anchor row is the constant ``e_0``, so
-``rho_uq`` **is** the second row's first coordinate. A prior placed there is a
-prior on the correlation.
-
-These tests are arithmetic on the construction, not on a fit. What they pin:
-the induced prior really was arcsine (so the finding is reproduced, not taken on
-trust), the designed one really is VG20's, the five other correlations are
-unmoved, and the parameter counts Gate 1 analysed are unchanged.
+At rank two, the first loading row is a fixed coordinate axis, so the next
+row's first coordinate equals ``rho_uq``. Test its Beta-transform prior against
+VG20's bivariate LKJ marginal. Reproduce the old arcsine marginal, check the
+other pairwise marginal distributions and verify unit row norms and rank counts.
+These checks do not establish that the full joint correlation prior is unchanged.
 """
 
 from __future__ import annotations
@@ -72,12 +59,7 @@ def _summary(rho):
 
 
 def test_the_designed_prior_is_vg20s_on_the_same_quantity(tmp_path):
-    """The whole point of the finding: the two must be prior-comparable.
-
-    VG23's registration gives the reason for matching VG20's eta there, and it
-    is the same reason here — a difference between two posteriors on the same
-    quantity should be a difference between models, not between priors.
-    """
+    """Match the marginal level-correlation prior, not every joint model prior."""
     drawn = _prior_draws(VG22, ["rho_uq"])
     tail, lo, hi = _summary(drawn["rho_uq"])
 
@@ -119,12 +101,7 @@ def test_the_induced_prior_really_was_arcsine():
 
 
 def test_the_other_five_correlations_are_unchanged_and_uniform(tmp_path):
-    """The reparameterisation moved rho_uq and nothing else.
-
-    The remaining rows keep the direction distributions they had, so their
-    induced marginals are the LKJ(1) they always were — flat, and stated on the
-    model page rather than left implicit.
-    """
+    """Check the five remaining pairwise marginals against a uniform distribution."""
     drawn = _prior_draws(VG22, ["subject_factor_corr"])
     corr = drawn["subject_factor_corr"].reshape(-1, 4, 4)
     for a, b in ((0, 1), (0, 3), (1, 2), (1, 3), (2, 3)):

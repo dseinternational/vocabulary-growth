@@ -1,26 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Shared blocks the model reports print, computed from the fit on disk.
+"""Report blocks derived from a fit's manifest, diagnostics and summary tables.
 
-Every model report is a Quarto template copied into its fitted output directory
-and rendered there. Blocks that were hand-written into those fifteen templates
-have drifted from the fits they describe, and a review of all fifteen found the
-same failure repeatedly: a prior stated in prose is a copy of a number that
-lives in ``definitions.py``, and when the registered value moves the prose does
-not. VG10's report described ``eta_q`` as ``HalfNormal(0.20)`` in three places
-after it was widened to 0.8; VG15 made the same error in four; VG02 quoted a
-frame size of 346 rows directly above a table rendering 987.
-
-The remedy is not to correct the copies but to stop copying. Each helper here
-reads ``fit_manifest.json`` -- which records the definition the fit actually
-used, not the one registered today -- and prints the block from it. Field
-descriptions are stable prose held in this module; every number comes from the
-file. A refit therefore updates the report, and a stale number becomes
-impossible rather than merely unlikely.
-
-All helpers are written for a report cell with ``#| output: asis``, the pattern
-:func:`vocab_growth.models.calibration.render_calibration_section` established.
+The recorded definition describes the fit that produced the report, rather than
+whatever definition is registered today. Stable descriptions live here; fitted
+values come from the recorded artefacts. Most helpers print Quarto Markdown for
+cells with ``#| output: asis``. Missing artefacts get explicit placeholders where
+appropriate; parsing policies differ by artefact type.
 """
 
 from __future__ import annotations
@@ -49,13 +36,7 @@ from vocab_growth.models.diagnostics_utils import (  # noqa: F401  (re-exported)
 MANIFEST_FILENAME = "fit_manifest.json"
 
 
-# Sampling configurations that are reporting-grade. Read from the manifest's
-# recorded name rather than inferred from chains x draws: the old templates
-# carried a hard-coded {(chains, draws): label} table, and every fit run at
-# rep-hightune (6 x 8,000 and 6 x 10,000 draws -- *more* effort than the table's
-# "reporting" entry of 6 x 6,000) fell through it to the default and published
-# the sentence "It was not fitted in reporting mode". Five models of record said
-# that about themselves: VG08, VG09, VG11, VG12 and VG13.
+# Reporting tiers come from the recorded configuration name, not draw counts.
 REPORTING_CONFIGS = frozenset({"rep", "rep-hightune", "rep-lite"})
 
 CONFIG_LABELS = {
@@ -68,28 +49,19 @@ CONFIG_LABELS = {
 
 
 class ReportArtefactError(RuntimeError):
-    """A file in a fit's output directory exists and cannot be parsed.
+    """An existing report artefact could not be parsed or read.
 
-    Distinct from a file this engine never writes, which every helper below
-    treats as "not applicable" and renders as a pending-fit placeholder. A
-    damaged file must not become that placeholder: the placeholder reads as
-    "this fit has not produced this yet", which is reassuring and wrong.
+    Missing and valid empty tables may render as pending output. Damaged files
+    must be distinguished from those states.
     """
 
 
 def _table(directory: str, name: str) -> FileRead:
-    """Read one summary CSV, keeping missing and damaged apart.
+    """Read a summary CSV, preserving missing, empty and damaged states.
 
-    :func:`dse_research_utils.report.readers.read_csv` (shared library 0.14.0)
-    returns the state; the policy is this repository's. A file that is absent
-    or that parsed to nothing is "not written by this engine". A parse, decode
-    or read failure is a defect and raises.
-
-    ``empty_document`` -- a file with no columns at all -- is deliberately on
-    the first side. Several writers here build their table with
-    ``pd.DataFrame(rows)`` and write it whatever ``rows`` contains; with no rows
-    that produces a column-less frame, and ``to_csv`` then writes a single
-    newline. That file records "there was nothing to tabulate", not damage.
+    Parse, decode and read failures raise, except ``empty_document``. A writer
+    with no rows can emit a column-less DataFrame as one newline; that records
+    no tabulated results rather than a damaged file.
     """
     read = read_csv(os.path.join(directory, f"{name}.csv"))
     if read.status == "invalid" and read.reason != "empty_document":
@@ -101,15 +73,12 @@ def _table(directory: str, name: str) -> FileRead:
 
 
 def read_manifest(directory: str = ".") -> dict:
-    """The fit manifest for a rendered report, or an empty dict when absent.
+    """Read the fit manifest, or return an empty dict if absent or unreadable.
 
-    Deliberately **not** routed through the shared strict JSON reader, unlike
-    the diagnostics payload. ``write_json_atomic`` serialises with Python's
-    default ``allow_nan``, so a definition field holding a non-finite float is
-    written as a bare ``NaN`` token; the strict reader rejects those, and every
-    manifest already on disk has to stay readable. The report's own tolerance
-    for a manifest it cannot parse is what it always was: render the fit's
-    pages without the fields the manifest would have supplied.
+    Uses Python's tolerant JSON parser because historical manifest writers allow
+    non-finite floats as bare ``NaN`` or ``Infinity`` tokens. The strict reader
+    used for diagnostics rejects those tokens. This preserves existing report
+    behaviour; an empty result does not distinguish absence from parse failure.
     """
     path = os.path.join(directory, MANIFEST_FILENAME)
     if not os.path.isfile(path):
@@ -142,12 +111,10 @@ def _trace_dimensions(directory: str) -> tuple[int | None, int | None]:
 
 
 def render_sampling_banner(directory: str = ".") -> None:
-    """Print the preliminary-output warning, naming the configuration actually used.
+    """Print the preliminary-output warning and recorded sampling configuration.
 
-    The configuration name is authoritative: it is what the fit was launched
-    with and what the publication gate checks. Chains and draws are reported
-    alongside it as corroborating detail, not as the thing the label is derived
-    from.
+    Read the configuration name from the manifest, as the publication gate does.
+    Trace-header chain and draw counts provide additional detail.
     """
     manifest = read_manifest(directory)
     config = (manifest.get("sampling") or {}).get("configuration_name")
@@ -183,19 +150,9 @@ def render_sampling_banner(directory: str = ".") -> None:
 # Priors
 # ---------------------------------------------------------------------------
 
-# Each entry maps a *fitted parameter name* to the definition fields carrying
-# its prior, plus stable prose describing it. Keying on the parameter rather
-# than the definition field is what makes the table self-gating: the definition
-# dataclass records defaults for machinery a given model does not instantiate
-# (VG05's manifest carries `tau_u_sigma` though VG05 has no study effects, and
-# every bivariate manifest carries `beta_lag_sigma` though only VG16 uses it),
-# so listing priors from the definition alone would describe parameters that do
-# not exist in the fit. The fitted parameter set is read from `diagnostics.csv`,
-# which is the gate's own record of what was sampled.
-#
-# `kind` selects the plain-scale reading: proportions get a word count against
-# the reference inventory, ratios stay on their own scale, scales get an odds
-# multiplier, and amplitudes are departures from the straight-line trend.
+# Match named diagnostics entries to recorded prior fields. Definitions include
+# defaults for effects a model may not instantiate, so fields alone are insufficient.
+# The kind selects a word-count, ratio, odds, amplitude or other scale reading.
 _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     # (parameter, description, definition field stem, kind)
     ("p_slope_low", "Expected proportion at the low age anchor", "p_slope_low", "words"),
@@ -207,9 +164,7 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ("p_slope_low_sign", "Signed ratio at the low age anchor", "p_slope_low_sign", "ratio"),
     ("p_slope_mid_sign", "Signed ratio at the peak anchor", "p_slope_mid_sign", "ratio"),
     ("p_slope_hi_sign", "Signed ratio at the high age anchor", "p_slope_hi_sign", "ratio"),
-    # The knot, not the curve maximum: the anchor heights are sampled
-    # independently and a GP departure is then added, so the fitted r(a) can
-    # peak elsewhere (#238). The full-curve peak is `signed_ratio_peak.csv`.
+    # The sampled tent knot need not be the full curve maximum after GP deviations.
     ("peak_unit_sign", "Age of the signed tent's peak anchor (knot)", "peak_unit_sign", "peak"),
     ("ell_unit", "GP length-scale", "ell_unit", "lengthscale"),
     ("ell_unit_u", "GP length-scale, understood", "ell_unit_u", "lengthscale"),
@@ -249,21 +204,14 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
         "study_age_slope_sigma",
         "study_slope",
     ),
-    # VG20's correlation had no entry here at all, so its priors table omitted
-    # the one prior the model exists to place (#233). It is a top-level scalar
-    # field rather than part of a subject-scale block, so it needs its own kind
-    # -- `_subject_scale_row` never sees it.
+    # Correlation is a scalar definition field, separate from scale-prior blocks.
     (
         "rho_uq",
         "Correlation between a child's understood and $q$ offsets $\\rho_{uq}$",
         "subject_re_correlation_eta",
         "lkj",
     ),
-    # VG24 (#296) correlates three child effects rather than two, so the same
-    # LKJ prior induces three marginals. Each gets its own row: they are not one
-    # quantity, and `rho_sign_q` is the one the model exists to estimate. The
-    # rows appear only where the parameter is present, so VG20 and VG23 still
-    # render exactly one.
+    # A three-effect correlation matrix needs a row for each named marginal.
     (
         "rho_u_sign",
         "Correlation between a child's understood and signed-ratio offsets "
@@ -286,11 +234,7 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
     ("beta_sex_sign", "Girl–boy difference, signed ratio", "sex_effect_sigma", "sex"),
     ("log_psi", "Sign–speech association $\\psi$ (log scale)", "log_psi", "log_psi"),
     ("beta_lag", "Cross-lag coefficient $\\beta$", "beta_lag", "lag"),
-    # VG25 (#297). Its own row rather than a shared one: the two lags read
-    # different predictors on different scales, and a table calling both
-    # "the cross-lag coefficient" would leave a reader of a VG25 page unable
-    # to tell which. Their priors are deliberately the same Normal(0, 0.5),
-    # which is itself a statement worth being able to read off the table.
+    # The two lag predictors differ, so their coefficients need separate rows.
     (
         "beta_sign_lag",
         "Sign $\\rightarrow$ speech cross-lag coefficient "
@@ -298,20 +242,13 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
         "beta_sign_lag",
         "lag",
     ),
-    # VG15 samples this and its own page names it a prior-sensitivity target,
-    # but the table had no row for it -- the same omission as VG22's factor
-    # block, found by the coverage check written for that one (#273).
     (
         "log_conc",
         "Dirichlet-Multinomial concentration (log scale)",
         "log_conc",
         "log_concentration",
     ),
-    # Sampled only under `spoken_fallback="separate_dispersion"`, a registered
-    # sensitivity variant -- and a variant fit renders the model of record's
-    # template, so a prior with no row shows up on a real page. One per nested
-    # outcome: the signing engines apply the treatment to their signed rows too,
-    # so VG14 and VG15 sample `log_kappa_sign_fallback` as well (#266 finding 8).
+    # Separate-dispersion fallback variants add one offset per nested outcome.
     (
         "log_kappa_s_fallback",
         "Dispersion offset, spoken rows with no usable understood count",
@@ -328,7 +265,8 @@ _PRIOR_SPECS: list[tuple[str, str, str, str]] = [
 
 
 def fitted_parameters(directory: str = ".") -> set[str]:
-    """Names of the parameters this fit actually sampled, from its diagnostics."""
+    """Named parameters and deterministics listed in this fit's diagnostics.
+    """
     read = read_csv(os.path.join(directory, "diagnostics.csv"), index_col=0)
     if read.status == "missing" or read.reason == "empty_document":
         return set()
@@ -341,15 +279,10 @@ def fitted_parameters(directory: str = ".") -> set[str]:
 
 
 def _correlated_block_size(definition: dict) -> int:
-    """How many child effects the correlated block spans: 2 (VG20/VG23) or 3 (VG24).
+    """Dimension of the correlated child-effect block, with a default of two.
 
-    Read off the ``use_subject_re_*`` flags rather than stored, because that is
-    what the engines build the block from: both refuse a definition that sets
-    ``subject_re_correlation_eta`` without every block the correlation spans, so
-    counting the set flags counts the block's dimension exactly.
-
-    Defaults to 2 for a definition that predates the joint variant, which is
-    every fit made before VG24 and the right answer for all of them.
+    Counts the enabled child-effect flags. Valid correlated definitions require
+    every spanned effect. The fallback supports older two-effect manifests.
     """
     size = sum(
         1
@@ -371,11 +304,8 @@ def _prior_row(
     anchors = definition.get("slope_anchors") or []
 
     if kind in {"vp_total", "vp_share"}:
-        # VG11 and VG12 reparameterise the child scale and the young dispersion
-        # anchor into one shared budget, so `tau_subject` becomes a deterministic
-        # function of these two and its HalfNormal prior is never used. Reporting
-        # that HalfNormal as though it governed the fit -- which this table did --
-        # describes a prior with no effect on the posterior.
+        # A variance partition makes the child scale deterministic; its scalar
+        # HalfNormal default is not a prior used by the fit.
         partition = definition.get("subject_variance_partition")
         if not partition:
             return None
@@ -401,16 +331,8 @@ def _prior_row(
         )
 
     if kind == "peak":
-        # `sign_peak_prior` is (alpha, beta) of a Beta on the peak's POSITION
-        # between the OUTER signed anchors -- not a window of ages. Reading the
-        # pair as a year range gave "uniform over 2-4 years"; it is Beta(2, 4)
-        # over 15-96 months, whose median sits above 40 months.
-        #
-        # Reported at all because VG15's report asserted the peak was "fixed at
-        # the middle anchor by construction". That was true of an earlier
-        # definition; this fit samples `peak_unit_sign`, and the fixed knot was
-        # abandoned because it made the peak's age an assertion rather than an
-        # estimate (see the field's docstring in definitions.py).
+        # Beta parameters describe a position between outer signing anchors.
+        # They are not ages or a fixed middle knot.
         params = definition.get("sign_peak_prior")
         anchors = definition.get("sign_anchor_ages")
         if not params or not anchors:
@@ -477,14 +399,7 @@ def _prior_row(
         sigma = definition.get(stem)
         if sigma is None:
             return None
-        # The subject-scale fields are overloaded. A float is the constant
-        # between-child scale every model of record carries, but VG19 puts a
-        # child intercept-and-rate block there (`SubjectSlopePriorParams`) and
-        # Proposal A1 an age-varying scale (`AgeVaryingSubjectScale`). Once the
-        # definition has been through `asdict` both arrive as mappings, and
-        # scipy then raises a bare `TypeError: '>' not supported between
-        # instances of 'dict' and 'int'` from inside `ppf` -- which surfaces as
-        # an unrenderable report page rather than as anything diagnosable.
+        # Child-slope and age-varying scale priors become mappings after asdict.
         if isinstance(sigma, Mapping):
             return _subject_scale_row(description, sigma)
         median = float(stats.halfnorm.ppf(0.5, scale=sigma))
@@ -495,13 +410,8 @@ def _prior_row(
         return description, f"HalfNormal({sigma:g})", reading
 
     if kind == "lkj":
-        # The MARGINAL of one correlation under LKJ(eta) on an n x n matrix is
-        # `(rho + 1) / 2 ~ Beta(eta + (n - 2)/2, eta + (n - 2)/2)`. At n = 2 that
-        # is Beta(eta, eta), which is how VG20 and VG23 write the block so the
-        # correlation stays a named variable; at VG24's n = 3 it is
-        # Beta(eta + 1/2, eta + 1/2), a per-correlation SD of 0.41 rather than
-        # 0.45. Small, but the table quotes 5-95% bounds, and quoting the 2x2
-        # ones against a 3x3 block would be wrong by more than the rounding.
+        # Under LKJ(eta) on an n x n matrix, (rho+1)/2 has marginal
+        # Beta(eta+(n-2)/2, eta+(n-2)/2). Dimension affects its shape.
         eta = definition.get(stem)
         if eta is None:
             return None
@@ -509,9 +419,9 @@ def _prior_row(
         shape = eta + (_correlated_block_size(definition) - 2) / 2.0
         lo = float(stats.beta.ppf(0.05, shape, shape)) * 2.0 - 1.0
         hi = float(stats.beta.ppf(0.95, shape, shape)) * 2.0 - 1.0
-        if eta == 1.0:
+        if shape == 1.0:
             emphasis = "flat over (-1, 1), so no size of correlation is favoured"
-        elif eta > 1.0:
+        elif shape > 1.0:
             emphasis = "pulled toward zero, so a correlation has to be evidenced"
         else:
             emphasis = "pushed toward ±1, which favours a strong correlation"
@@ -597,14 +507,10 @@ def _prior_row(
 
 
 def _subject_scale_row(description: str, spec: Mapping) -> tuple[str, str, str] | None:
-    """A priors-table row for a subject-scale field holding a block, not a scalar.
+    """Summarise a child-slope or age-varying scale prior stored as a mapping.
 
-    Both overloads describe the same thing -- how far children sit from the
-    population trajectory -- but neither is a single ``HalfNormal``, so the
-    scalar path cannot summarise either. Returning ``None`` would silently drop
-    the row and leave the reader thinking the model has no between-child prior
-    at all, which is worse than a crash; these rows say what was actually put on
-    the block.
+    These structures cannot be described by the scalar HalfNormal row. Unknown
+    mapping structures return ``None``.
     """
     if "tau0_sigma" in spec:
         # VG19: a child intercept and rate, correlated. `(rho + 1) / 2 ~
@@ -637,14 +543,9 @@ def _subject_scale_row(description: str, spec: Mapping) -> tuple[str, str, str] 
     return None
 
 
-#: Fitted parameters a priors table is not expected to carry a row for, and why.
-#: Checked by :func:`prior_coverage`, which is the graph-to-report contract that
-#: VG22's missing factor block escaped: a whole parameter family had no entry in
-#: :data:`_PRIOR_SPECS` and nothing said so (issue #273).
-#:
-#: Each entry is a predicate on the parameter name. The exemptions are the
-#: reparameterisation machinery and the derived quantities, never a prior a
-#: reader would want and cannot find.
+#: Diagnostics entries exempt from individual prior rows, with reasons.
+#: Non-centred deviates are described through their scales; derived quantities
+#: have no separate prior. prior_coverage checks these exemptions.
 PRIOR_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     (
         "*_raw",
@@ -688,16 +589,9 @@ _DERIVED_PREFIXES = (
     "subject_factor_corr",
     "subject_factor_loadings",
 )
-#: Unconditionally derived: no registered model places a prior on any of these.
-#:
-#: `tau_subject`, `tau_subj_u`, `tau_subj_q` and `rho_uq` are deliberately
-#: **absent**. Each is a sampled parameter in some models and a deterministic in
-#: others -- `tau_subject` becomes a function of the variance budget in VG11/VG12,
-#: the two child scales become the factor block's level scales in VG22, and
-#: `rho_uq` is sampled in VG20 and implied by the loadings in VG22 -- so an
-#: unconditional exemption would absorb the loss of a row that other models do
-#: need. They are handled by `_prior_rows`'s `inert` set instead, which is
-#: computed from the definition and is therefore right per model.
+#: Names derived in every registered model. Scales and correlations that are
+#: sampled in some models and derived in others belong in the definition-based
+#: inert set, not in this unconditional exemption.
 _DERIVED_NAMES = (
     frozenset(
         {
@@ -723,14 +617,10 @@ def _is_exempt(parameter: str) -> str | None:
 
 
 def _dispersion_parameters(present: set[str], field: str) -> list[str]:
-    """The ``kappa`` parameters one dispersion row accounts for.
+    """Names covered by one outcome's dispersion-prior row.
 
-    The definition field is ``kappa`` / ``kappa_u`` / ``kappa_s`` / ``kappa_sign``,
-    but the graph names carry the outcome as a **suffix** on several different
-    stems -- ``kappa_min_u``, ``kappa_excess_young_u``, ``a_kappa_u``,
-    ``b_kappa_mag_s``, ``kappa_old_sign`` -- so a prefix match on the field name
-    finds none of them. One dispersion row describes that whole
-    parameterisation for its outcome, which is what it is a *block* row for.
+    Graph variables use several stems with outcome suffixes, such as
+    ``kappa_min_u`` and ``a_kappa_u``. Matching only a field prefix misses them.
     """
     suffix = field.removeprefix("kappa")  # "", "_u", "_s", "_sign"
     other = {"_u", "_q", "_s", "_sign"} - {suffix}
@@ -743,17 +633,10 @@ def _dispersion_parameters(present: set[str], field: str) -> list[str]:
 
 
 def prior_coverage(directory: str = ".") -> dict[str, list[str]]:
-    """Which of this fit's parameters the priors table covers, and which it does not.
+    """Classify named diagnostics entries as rendered, exempt or uncovered.
 
-    Returns ``{"rendered": [...], "exempt": [...], "uncovered": [...]}``. A
-    non-empty ``uncovered`` means the rendered table is silently incomplete --
-    the VG22 failure, where the four factor scales, the nine loading directions
-    and the per-child factor scores had no entry in :data:`_PRIOR_SPECS` and the
-    page said only that the table "omits every prior this block adds".
-
-    Pure and cheap: it reads the same manifest and ``diagnostics.csv`` the table
-    itself reads, so it can be called from a report cell or a test without a
-    model build.
+    Reads the same manifest and diagnostics as the prior table without building
+    a model. Non-empty ``uncovered`` entries identify missing table coverage.
     """
     manifest = read_manifest(directory)
     definition = (manifest.get("model") or {}).get("definition") or {}
@@ -776,16 +659,11 @@ def prior_coverage(directory: str = ".") -> dict[str, list[str]]:
 def _factor_rows(
     definition: dict, present: set[str]
 ) -> tuple[list[str], list[tuple[str, str, str]]]:
-    """Rows for VG22's low-rank factor block, and the parameters they cover.
+    """Prior rows and covered parameter names for the low-rank child-factor block.
 
-    The block replaces the parent's two child-intercept priors with four scale
-    priors, the sampled entries of the raw loading matrix and the per-child
-    factor scores. None of them fits :data:`_PRIOR_SPECS`'s
-    one-parameter-one-definition-field shape: the loading entries are a family
-    whose size depends on ``rank``, and the two rate scales live on the factor
-    spec while the two level scales are inherited from the parent's own scalar
-    fields. Rendering them by hand in the model's prose is what left VG22's
-    table describing a model it was not fitted under.
+    The block has level and rate scales, loading directions and child scores.
+    Loading counts depend on rank; level scales come from the definition while
+    rate scales come from its factor specification.
     """
     spec = definition.get("subject_factor")
     if not isinstance(spec, Mapping):
@@ -818,9 +696,8 @@ def _factor_rows(
         rows.append((description, f"HalfNormal({sigma:g})", reading))
         covered.append(parameter)
 
-    # `rho_uq` is sampled directly since #266 finding 5: the first anchor row is
-    # exactly e_0, so the second row's first coordinate IS the correlation, and a
-    # prior there is a prior on it with no approximation.
+    # The first anchor row is e_0, so the second row's first coordinate is
+    # exactly the level correlation. Its prior needs no approximation.
     if not present or "rho_uq_raw" in present:
         eta = float(spec.get("rho_uq_eta", 2.0))
         lo = float(stats.beta.ppf(0.05, eta, eta)) * 2.0 - 1.0
@@ -856,11 +733,9 @@ def _factor_rows(
 
     loadings = sorted(p for p in present if p.startswith("subject_factor_w_"))
     if loadings or not present:
-        # What remains after the two leading anchor rows: one direction per
-        # non-anchor row, still sampled as entries and normalised. Each such row
-        # spends one parameter on a magnitude that cancels, which is stated
-        # rather than hidden -- removing them needs a chart on the sphere, and
-        # that was measured sampling far worse (#266 finding 5).
+        # Normalised non-anchor rows retain a prior-only magnitude. Keep the
+        # current parameterisation; its alternative sampled less well in the
+        # investigation recorded in issue #266, finding 5.
         anchors = sum(1 for name in loadings if name.endswith(("22", "32")))
         rows.append(
             (
@@ -942,22 +817,15 @@ def _prior_rows(
                     or name == f"log_{parameter}_ratio"
                 )
 
-    # VG24's `subject_re_corr` is the LKJ matrix the `rho_*` rows above describe:
-    # one sampled object, three reported marginals. It is covered by them rather
-    # than exempt, because a prior is genuinely stated for it -- an exemption
-    # would record the opposite. Conditioned on a row having rendered, so a
-    # future definition that samples the matrix without reporting any marginal
-    # still fails the coverage check instead of passing on this line.
+    # Named correlation rows cover the sampled LKJ matrix. Require a rendered
+    # marginal so an unreported future matrix still fails coverage.
     if "subject_re_corr" in present and any(
         name.startswith("rho_") for name in covered
     ):
         covered.append("subject_re_corr")
 
-    # Proposal A1 under the variance partition (VG11 and VG12's
-    # `a1-tau-age-varying`, #240 item 1). The partition makes the young-anchor
-    # child scale a function of the budget, so the `tau_subject` row is inert and
-    # the subject-scale block row never renders; the one prior the variant adds
-    # is the ratio, and it is stated here rather than left as a gap.
+    # A variance partition derives the young child scale but an age-varying
+    # variant still samples its old/young scale ratio.
     scale_spec = definition.get("tau_subject_sigma")
     if (
         definition.get("subject_variance_partition")
@@ -1034,14 +902,12 @@ def _prior_rows(
 
 
 def render_priors_table(directory: str = ".") -> None:
-    """Print the fitted model's priors as a table read from its own manifest.
+    """Print recognised priors from the fit's recorded definition.
 
-    Anchored proportions are given a word-count reading against the reference
-    inventory, and random-effect scales an odds-multiplier reading, because a
-    number on the logit scale is not something a reader can picture and every
-    review of these reports said so.
-
-    Only parameters this fit actually sampled appear: see :data:`_PRIOR_SPECS`.
+    Give proportion priors a reference word-count scale and random-effect scales
+    an odds reading. If diagnostics entries are available, use them to select
+    fitted parameters and warn about missing coverage. Without them, recognised
+    definition fields supply the fallback rows.
     """
     manifest = read_manifest(directory)
     definition = (manifest.get("model") or {}).get("definition") or {}
@@ -1070,11 +936,7 @@ def render_priors_table(directory: str = ".") -> None:
         caption += f" Word counts are against the {n_trials:,}-word reference inventory."
     print(caption)
 
-    # Say so on the page when the table is incomplete. VG22 fitted a factor
-    # block this table could not render, and the only record of it was a
-    # sentence someone had written by hand into that model's template -- which
-    # is the same failure mode as the copied priors this module exists to
-    # replace. A gap now announces itself wherever it occurs.
+    # Report missing prior coverage rather than silently omitting parameters.
     uncovered = sorted(
         parameter
         for parameter in present
@@ -1118,14 +980,8 @@ def render_model_at_a_glance(directory: str = ".") -> None:
     if domain:
         items.append(("Modelled age range", f"{domain[0]:g}–{domain[1]:g} months"))
 
-    # Gated on the fitted parameter set, not the definition, for the same reason
-    # the priors table is: the dataclass carries a non-None default for every
-    # scale, so VG05 -- which instantiates no study effect at all -- records
-    # `tau_u_sigma` and was announcing study random intercepts it does not have,
-    # contradicting its own prose two sections later. The univariate and joint
-    # engines also name these parameters differently (`tau` / `tau_subject`
-    # against `tau_u` / `tau_subj_u`), so a definition-field test missed the
-    # hierarchy VG11 and VG12 genuinely do have.
+    # Definition defaults can describe effects the graph never instantiates.
+    # Named diagnostics entries establish which effects this fit reports.
     present = fitted_parameters(directory)
     hierarchy = []
     study_effects = {
@@ -1210,19 +1066,8 @@ def render_model_at_a_glance(directory: str = ".") -> None:
 # Headline quantities
 # ---------------------------------------------------------------------------
 
-# Ten independent reviews of the fifteen model reports each reached the same
-# conclusion: the reports display their figures and state no results. VG10's
-# comprehension-production gap has its own section and its peak is never given;
-# VG16 never prints the cross-lag coefficient it exists to estimate.
-#
-# The remedy has to survive a refit, so these numbers are computed from the
-# summary tables the fit already writes rather than typed into the template.
-# Ages are read off the median curve and are therefore point readings, not
-# posterior medians of the crossing -- the caption says so, because the median
-# of a set of crossings is not the crossing of the median and the difference is
-# large enough to matter (see notes on the signing milestones, where the two
-# differ by months).
-
+# Derive headline quantities from the fit's tables. Crossings of median curves
+# are point readings, not medians of per-draw crossing ages; disclose that scope.
 _OUTCOME_LABELS = {
     "u": "words understood",
     "s": "words spoken",
@@ -1232,11 +1077,10 @@ _OUTCOME_LABELS = {
 
 
 def _read(directory: str, name: str):
-    """A summary CSV, or None when this engine does not write it.
+    """Read a non-empty summary table, or return ``None`` if absent or empty.
 
-    An empty table reads as absent, as it always has: a section with no rows to
-    show and a section this engine never writes both render as pending. A
-    *damaged* file raises through :func:`_table` instead.
+    Damaged files raise through :func:`_table`. Absence alone does not establish
+    whether the engine supports the artefact.
     """
     read = _table(directory, name)
     if read.status != "present":
@@ -1443,21 +1287,11 @@ def render_headline_quantities(directory: str = ".") -> None:
 
 
 def _child_slope_blocks(frame, manifest: dict) -> list[tuple[str, float, float, float]]:
-    """The (name, tau0, tau1, rho01) of each child intercept-and-rate block present.
+    """Read plug-in intercept, rate and within-outcome correlation summaries.
 
-    VG19 and VG22 keep the constant-offset names ``tau_subj_u`` / ``tau_subj_q``
-    as deterministic aliases for ``tau0`` -- the between-child scale **at the
-    reference age** -- so that every consumer written against VG10 keeps working
-    (``gp_utils.build_child_slope``, ``build_child_factor``). The cost is that a
-    table which prints the alias under the label "Between children, understood"
-    is describing one age and implying every age, which is what #233 flagged:
-    under a rate the between-child SD is age-varying by construction.
-
-    Only blocks whose within-outcome correlation is a *named scalar* qualify.
-    VG19 emits ``{name}_rho``; VG22's factor form carries the same quantity as
-    an element of the ``subject_factor_corr`` matrix, and its element naming in
-    ``diagnostics.csv`` is not relied on here -- those models get the relabelled
-    alias without the age table rather than a scale computed from a guess.
+    Child-slope traces retain reference-age scale aliases. A table must label
+    those aliases with the reference age. Only named scalar correlations are
+    supported here; factor-model matrix entries are not inferred from names.
     """
     column = next((c for c in ("mean", "Mean", "median") if c in frame.columns), None)
     if column is None:
@@ -1505,14 +1339,11 @@ def _slope_scale_ages(manifest: dict, ref_age: float) -> list[float]:
 
 
 def render_variation_table(directory: str = ".") -> None:
-    """Print the fitted random-effect scales, with an odds reading.
+    """Print random-effect scales with odds readings.
 
-    Answers the question the hierarchical models exist to answer -- how much do
-    children differ, and how much do studies -- which no report currently states.
-
-    Under a child intercept-and-rate block the between-child scale is not one
-    number, so the alias row is labelled with the age it refers to and a second
-    table gives the scale across the reported ages (#233).
+    Label child-slope aliases with their reference age. Where named slope-block
+    summaries are available, also show age-varying scales evaluated at plug-in
+    parameter summaries, without claiming posterior intervals.
     """
     read = read_csv(os.path.join(directory, "diagnostics.csv"), index_col=0)
     if read.status == "missing" or read.reason == "empty_document":
@@ -1624,20 +1455,8 @@ class HeldOutCheck(NamedTuple):
     description: str
 
 
-#: The project's held-out checks, and the registered models each can score. The
-#: leave-one-out section names only the ones that cover the model on its page.
-#:
-#: Until 2026-09-13 that section named ``kfold_loso.py`` and ``loso_compare.py``
-#: on every page whose fit samples a per-child scale, as checks "which hold out
-#: whole studies or whole children". Neither accepted a typically-developing or a
-#: joint model, and neither holds out a study for any model -- LOSO in both means
-#: leave-one-*subject*-out -- so VG11, VG12, VG21 and VG23, whose PSIS-LOO is
-#: unusable on 37% to 59% of rows, sent their readers to checks that could not run
-#: on them (``notes/202609131214-held-out-validation-for-the-td-models.md``).
-#:
-#: Each entry is pinned against the script's own model list in
-#: ``tests/test_report_cells.py``, so extending a script without updating this
-#: fails a test rather than leaving a page silent about the check.
+#: Held-out checks available for each registered model. Coverage is checked
+#: against each script's own model list by tests/test_report_cells.py.
 HELD_OUT_CHECKS: tuple[HeldOutCheck, ...] = (
     HeldOutCheck(
         "scripts/kfold_loso.py",
@@ -1729,28 +1548,16 @@ def _held_out_check_sentence(manifest: dict) -> str:
 
 
 def render_loo_section(directory: str = ".") -> None:
-    """Print the leave-one-out cross-validation result for a report cell.
+    """Render stored leave-one-out scores and their importance-sampling diagnostics.
 
-    Every fit computed this and printed it to the console only, while the
-    predictive-calibration section of every report told the reader that
-    leave-one-out is the out-of-sample counterpart to its in-sample checks. The
-    number they were sent to find was not in the output directory at all.
+    A single table row is treated as administration-level LOO. Multi-row tables
+    distinguish per-outcome likelihood terms from a summed administration score.
+    Nested expressive terms condition on observed comprehension; holding out one
+    term is therefore a different prediction question from holding out all
+    factors of an administration. Composition terms only enter the latter.
 
-    The wording above the table branches on how many rows it has, because the
-    unit being held out is not the same in the two cases (issue #266, finding
-    4). A univariate fit has one unnamed likelihood over administration rows, so
-    the estimate really is leave-one-administration-out. A multi-outcome fit has
-    one likelihood term per outcome and the engines compute a separate LOO for
-    each, so a row holds out one *term*, not an administration -- and because
-    the expressive likelihoods take the same administration's observed
-    comprehension count as their trial count, neither the held-out spoken score
-    nor the held-out understood score is free of that row's observed
-    comprehension. Printing the administration wording over such a table told
-    the reader the estimate was something it is not.
-
-    Prints an explanatory line rather than failing when the fit predates the
-    table, so the section is never silently empty -- the same contract
-    :func:`vocab_growth.models.calibration.render_calibration_section` keeps.
+    Report missing or invalid summaries explicitly. Pareto diagnostics assess
+    the approximation, not generalisation to a new child or study.
     """
     import pandas as pd
 
@@ -1954,17 +1761,8 @@ def render_loo_section(directory: str = ".") -> None:
 
 
 # ---------------------------------------------------------------------------
-# Reader-facing blocks (2026-09-02 template review)
+# Reader-facing blocks
 # ---------------------------------------------------------------------------
-#
-# A review of all twenty templates against this run's fitted output found the
-# same shape of gap on every page: the numbers a family or a practitioner would
-# use exist in the summary CSVs and are shown as raw DataFrames, the checks a
-# researcher would want are delegated to the reader ("compare each posterior
-# with its prior figure earlier in this report"), and no page says which of
-# the report's three audiences it serves. Each block below turns one of those
-# into something computed from the fit on disk. All are fail-soft: a fit that
-# predates an artefact gets a sentence saying so, never an empty section.
 
 #: How a report describes its own role. Owner decisions live in
 #: `docs/models/README.md`; a template passes the role it already states.
@@ -1988,14 +1786,11 @@ def render_reading_routes(
     recovery: bool = False,
     loo: bool = True,
 ) -> None:
-    """Print a "three ways to read this page" callout for the report's audiences.
+    """Route families, practitioners and researchers through a standalone report.
 
-    The technical report says it is written for families, practitioners and
-    researchers, and each model page renders standalone, so a reader who lands
-    on one gets no other routing. ``role`` is the page's own stated role;
-    a development step, a candidate or a superseded model routes every
-    non-research reader to the model named in ``instead`` rather than offering
-    them numbers such a page should not supply.
+    ``role`` is the page's stated reporting role. Development, candidate and
+    superseded pages direct families and practitioners to ``instead`` or the
+    model of record in the inventory.
     """
     if role not in READING_ROLES:
         raise ValueError(f"unknown reading role {role!r}; expected one of {sorted(READING_ROLES)}")
@@ -2075,12 +1870,7 @@ def render_reading_routes(
 
 
 def render_family_notes(directory: str = ".") -> None:
-    """Print the three things a non-specialist needs before reading any table.
-
-    What a count is (a parent-report checklist harmonised to the reference
-    inventory), what the spread means for one child, and that nobody is being
-    ranked. The typically-developing pages already carried the last of these
-    ("a reference, not a target"); the Down syndrome pages carried none.
+    """Explain checklist counts, predictive ranges and the sample's scope.
     """
     manifest = read_manifest(directory)
     definition = (manifest.get("model") or {}).get("definition") or {}
@@ -2100,8 +1890,8 @@ def render_family_notes(directory: str = ".") -> None:
     print(
         f"**What a count is.** Every number here is a parent- or carer-reported checklist "
         f"count, placed on {inventory} so that different studies' checklists can be "
-        "compared. No child was given that whole inventory; it is a unit of measurement, "
-        "not a test they sat."
+        "compared. Some children completed the full reference checklist; other "
+        "studies used shorter forms on the same scale."
     )
     print()
     if child:
@@ -2155,19 +1945,12 @@ def render_expectations_table(
     directory: str = ".",
     thresholds: tuple[int, ...] = (0, 10, 50),
 ) -> None:
-    """Print expected words at the reported ages in plain-language columns.
+    """Print expected counts, available ranges, threshold probabilities and support.
 
-    The summary CSVs carry up to forty columns and the templates displayed them
-    as raw DataFrames — float64 to sixteen places under ``P(Y<=5)``. This reads
-    the same file and prints the columns a reader asks for: expected words, the
-    single-child ranges, the probability of scoring at or below a threshold,
-    and the number of nearby observations from the monthly table.
-
-    ``outcome`` is the engine's suffix: ``None`` for a single-outcome fit,
-    ``"u"``, ``"s"`` or ``"sign"`` otherwise. Columns are resolved by name, so an
-    engine that writes ``Ey_u_median`` (the joint modality engine) is read the
-    same way as one that writes ``Ey_median``; a column the engine does not
-    write is left out and the caption says so.
+    ``outcome`` is ``None`` for a single outcome or ``u``, ``s`` or ``sign``.
+    Resolve columns by name and omit unavailable quantities. Predictive count
+    intervals take precedence; expected-count intervals are the disclosed
+    fallback. Nearby observation counts come from the monthly table.
     """
     suffix = "" if outcome is None else f"_{outcome}"
     summary = _read(directory, f"posterior_summary{suffix}")
@@ -2290,14 +2073,11 @@ def render_expectations_table(
 
 
 def render_diagnostic_verdict(directory: str = ".") -> None:
-    """Print the gate result as one table and one sentence.
+    """Render the recorded diagnostic thresholds, observed extremes and gate status.
 
-    The caveats block discloses exceptions and the styled table colours cells,
-    but a reader has to scan thirty rows to learn the worst R-hat, the smallest
-    effective sample size, the divergence count and the minimum BFMI, and no
-    page states the sampling effort beyond chains and draws. This reads
-    ``diagnostics_summary.json``, the manifest's sampling parameters and
-    ``diagnostics.csv`` (for which parameter set each extreme) and says it.
+    Reads ``diagnostics_summary.json`` and sampling parameters from the manifest.
+    Uses ``diagnostics.csv`` to name an extreme only when its value matches the
+    gate's recorded extreme; otherwise identifies it as an unlisted element.
     """
     # The strict shared JSON reader is safe for this file specifically: the
     # shared diagnostics writer sanitises non-finite values before writing it,
@@ -2327,11 +2107,8 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
     max_rhat = summary.get("max_rhat")
     min_ess = summary.get("min_ess")
 
-    # The gate screens every parameter, including the per-child and per-study
-    # random-effect elements the diagnostics table does not list. The table's
-    # own extreme is named only when it is the gate's extreme; otherwise the
-    # value belongs to an element the table omits, and saying so is the honest
-    # reading rather than attaching the nearest listed name.
+    # The gate also screens random-effect elements omitted from the table.
+    # Name a listed entry only when its value matches the gate's extreme.
     unlisted = "an element the table does not list"
     worst_rhat_name = best_ess_name = None
     table = _read(directory, "diagnostics")
@@ -2483,15 +2260,12 @@ def render_diagnostic_verdict(directory: str = ".") -> None:
 
 
 def render_prior_posterior_contraction(directory: str = ".") -> None:
-    """Print how much each prior was narrowed by the data, from the fit's own table.
+    """Render stored changes in marginal spread and prior-tail location.
 
-    Every template asks the reader to "compare the marginal posteriors above with
-    the prior figures earlier in this report", across fifteen to thirty
-    parameters, by eye. Where a page then states the answer it states it from
-    memory. ``scripts/prior_vs_posterior.py --table`` computes contraction
-    (1 − posterior SD / prior SD) and the prior CDF at the posterior mean from
-    the trace and the definition; this renders the copy it writes into the fit
-    directory. Fail-soft, like the LOO section.
+    ``scripts/prior_vs_posterior.py --table`` writes contraction as
+    ``1 - posterior SD / prior SD`` and the prior CDF at the posterior mean.
+    Neither summary proves that a prior binds or that the data provided no
+    information. Missing tables get an explicit instruction to generate them.
     """
     table = _read(directory, "prior_posterior_contraction")
     if table is None:
@@ -2586,13 +2360,11 @@ def _print_age_band_coverage(detail) -> None:
 
 
 def _verified_frame(manifest: dict):
-    """The fit's analysis frame rebuilt from current data, or ``None`` and a reason.
+    """Rebuild the registered model's frame and compare its recorded hash.
 
-    A block that wants more than the manifest records has to rebuild the frame,
-    and must only use it if it still hashes to the one the fit recorded -- a
-    loader-rule change since the fit would otherwise be described as if it had
-    been fitted. Shared so the frame-composition and dispersion-scope blocks
-    cannot apply that guard differently.
+    Returns ``(frame, None)`` on a match, otherwise ``(None, reason)``. A matching
+    hash checks rows, values and order. It does not verify the current likelihood
+    or make a sensitivity arm equivalent to the registered definition.
     """
     data = manifest.get("data") or {}
     try:
@@ -2616,17 +2388,13 @@ def _verified_frame(manifest: dict):
 
 
 def render_frame_composition(directory: str = ".") -> None:
-    """Print what the fitted frame is made of, exactly, from the manifest.
+    """Describe administrations, children and outcomes from recorded data metadata.
 
-    The Data section on every page was ``describe()`` with normality tests
-    appended, followed by a callout apologising for the normality tests. What a
-    reader needs is the number of children and administrations, the share of
-    children seen more than once (the quantity that decides child-effect
-    identification on every hierarchical page), and rows per study. The manifest
-    records the first three exactly; the per-study children and age spans need
-    the frame, which is rebuilt through :mod:`vocab_growth.analysis_frames` and
-    used **only if its hash matches the one the fit recorded** — otherwise the
-    manifest-only table is printed and the page says why.
+    Per-study child counts and age spans use a rebuilt frame only when its hash
+    matches the fit's recorded frame. Otherwise render available manifest totals
+    and explain why details are unavailable. Repeat visits help distinguish
+    persistent child differences from residual variation; their share alone
+    does not establish identification.
     """
     manifest = read_manifest(directory)
     data = manifest.get("data") or {}
@@ -2784,20 +2552,12 @@ def _kappa_curve_scope(suffix, n_trials) -> str:
 
 
 def render_dispersion_scope(directory: str = ".") -> None:
-    """State what each dispersion parameter is a dispersion *of*, and where it is silent.
+    """Describe each dispersion curve's denominator and available screening evidence.
 
-    The two kappa figures sit side by side on every bivariate page under headings
-    that differ by one word, which invites three readings the model does not
-    support: that the two are on one scale (they are not -- ``kappa_u`` is
-    marginal on the item pool, ``kappa_s`` is conditional on the child's own
-    understood count), that a kappa curve is comparable across models (it is
-    residual after whatever child structure that model carries, and the models
-    carry different structure), and that the whole curve is estimated (a
-    two-anchor kappa can have one end the data never informed).
-
-    Every claim here is read from this fit -- the manifest's ``n_trials`` and
-    kappa anchor ages, the diagnostics' parameter list, and the contraction
-    table's flags -- so a page cannot assert a scope its own fit contradicts.
+    Comprehension uses the item pool; nested spoken and signed outcomes use the
+    child's understood count. Concentrations depend on the model's mean and
+    random-effect structure, so their levels need not be comparable. Read scope
+    from the manifest, diagnostics and contraction table.
     """
     manifest = read_manifest(directory)
     definition = ((manifest.get("model") or {}).get("definition")) or {}
@@ -2822,12 +2582,11 @@ def render_dispersion_scope(directory: str = ".") -> None:
     if {"u", "s"} <= set(suffixes):
         count = {2: "two", 3: "three", 4: "four"}.get(len(suffixes), str(len(suffixes)))
         print(
-            f": These {count} curves sit on **different denominators** — one marginal on the "
-            "item pool, the rest conditional on each child's own understood count — so their "
-            "levels are not comparable with each other. A higher $\\kappa$ on a production "
-            "outcome than on understood at some age says nothing about which outcome is more "
-            "variable. Compare each curve with itself across age, which is what the findings "
-            "table above reports as a variance inflation factor."
+            f": These {count} curves sit on **different denominators**: one marginal on the "
+            "item pool, the rest conditional on each child's own understood count. Their "
+            "concentrations alone cannot rank the variability of their counts. Count variance "
+            "also depends on the denominator and the mean. The findings table reports "
+            "changes within each outcome across age as a variance inflation factor."
         )
         print()
 
@@ -2836,24 +2595,23 @@ def render_dispersion_scope(directory: str = ".") -> None:
 
     print()
     print(
-        "Neither curve is comparable across models. $\\kappa$ is what is left once "
-        "that model's own mean curve and child effects have taken their share, and the "
-        "models differ in how much child structure they carry — a model with child "
-        "*slopes* leaves less in $\\kappa$ than one with child intercepts alone, on the "
-        "same data. Read a $\\kappa$ curve against the same model's other ages, never "
-        "against another model's curve."
+        "$\\kappa$ describes dispersion conditional on the model's mean curve and child "
+        "effects. Changing that structure can change the fitted concentration, but adding "
+        "child slopes does not guarantee a direction. Before comparing models, check their "
+        "likelihoods, denominators and treatment of child variation. Predictive counts under "
+        "the same conditions provide a comparison of total variability."
     )
 
 
 def _print_nested_outcome_split(manifest: dict, directory: str) -> None:
-    """How many production rows enter conditionally, and how many via the fallback.
+    """Count spoken rows with usable understood denominators and fallback rows.
 
-    ``kappa_s`` is the conditional ratio's dispersion only on rows whose understood
-    count is usable as a denominator; the rest enter through the treatment named by
-    ``spoken_fallback``, where the concentration is a derived quantity rather than
-    ``kappa_s`` itself. Where that share is large the curve is a blend, and saying
-    so is the difference between reading it and over-reading it.
+    Usable rows inform the nested ratio likelihood. The definition's fallback
+    treatment governs the remaining rows. A matching rebuilt frame is required
+    before reporting these counts.
     """
+    from vocab_growth.models.likelihood_utils import SPOKEN_FALLBACK_PAIRED_ONLY
+
     treatment = ((manifest.get("model") or {}).get("definition") or {}).get("spoken_fallback")
     if not treatment:
         return
@@ -2885,13 +2643,25 @@ def _print_nested_outcome_split(manifest: dict, directory: str) -> None:
         print()
         return
 
+    if treatment == SPOKEN_FALLBACK_PAIRED_ONLY:
+        print(
+            f"Of the {total:,} production rows, **{conditional:,} ({1 - share:.0%})** carry "
+            f"a usable understood count and enter the conditional likelihood. The remaining "
+            f"**{fallback:,} ({share:.0%})** lack a usable denominator and are omitted from "
+            "the spoken likelihood by `paired_only`. Any usable understood counts remain "
+            "in the comprehension likelihood."
+        )
+        print()
+        return
+
     print(
         f"Of the {total:,} production rows, **{conditional:,} ({1 - share:.0%})** carry a usable "
         f"understood count and enter as the conditional ratio; the remaining "
-        f"**{fallback:,} ({share:.0%})** have none and enter through the `{treatment}` "
-        "treatment, whose concentration is derived from the understood dispersion and the "
-        "ratio rather than being $\\kappa_s$ itself. The curve below is therefore a blend "
-        "over those two branches, weighted as the ages of those rows fall."
+        f"**{fallback:,} ({share:.0%})** lack a usable denominator and enter through the `{treatment}` "
+        "treatment. Depending on that treatment, the fallback concentration reuses "
+        "$\\kappa_s$, multiplies it by a fitted factor, or derives it from the understood "
+        "and ratio distributions by moment matching. The displayed $\\kappa_s$ is the "
+        "conditional concentration; fallback rows can also inform its underlying parameters."
     )
     print()
 
@@ -2922,9 +2692,8 @@ def _print_kappa_identification(directory: str, definition: dict, suffixes: list
             continue
         contraction = float(row.contraction)
         cdf = float(row.prior_cdf)
-        # The two-sided test, on the numbers rather than the CSV's `flags`
-        # column: a prior acting as a floor is the same finding as one acting as
-        # a ceiling, and tables written before 2026-09-02 carry a one-sided flag.
+        # Recompute the two-sided prior-tail screen rather than relying on
+        # historical one-sided flags in the CSV.
         pressing = cdf >= 0.95 or cdf <= 0.05
         unestimated = contraction <= 0.05 and not pressing
         if not (pressing or unestimated):
@@ -2985,14 +2754,13 @@ _CONDITIONAL_PRODUCTION_LEVELS = (50, 100, 200, 300, 400, 500, 600)
 
 
 def observed_production_ratio_at_levels(frame, levels, *, tolerance: float = 0.10):
-    """Observed spoken/understood among children whose understood count is near each level.
+    """Summarise observed spoken/understood ratios near each comprehension level.
 
-    One row per level with at least ten qualifying administrations: ``level``,
-    ``n`` (administrations), ``children`` (distinct, where the frame has a child
-    key, else ``n``), ``median``, ``q25``, ``q75``, and ``median_age`` where the
-    frame has an age. Shared by the model page's conditional-production check and
-    ``compare_ds_td_re``'s comprehension-matched run so the two cannot define
-    "near" differently.
+    Include a level when at least ten administrations have usable spoken counts
+    and understood counts within ``tolerance`` of it. Return administration
+    counts, distinct ``subject_key`` counts where available, ratio median and
+    quartiles, and median age where available. Repeated visits remain separate
+    observations; these summaries mix the ages and studies in each window.
     """
     import pandas as pd
 
@@ -3029,28 +2797,13 @@ def observed_production_ratio_at_levels(frame, levels, *, tolerance: float = 0.1
 
 
 def render_conditional_production_check(directory: str = ".") -> None:
-    """Set the by-understood production curve beside the children who reached each level.
+    """Compare the reference ratio curve with observed ratios near count levels.
 
-    The figure this sits under plots the *population* ratio ``q`` against the
-    *population* expected words understood, both read off the age curves at
-    zero study and zero child effects. Its x value at a point is the median
-    child's comprehension AT SOME AGE and its y value is the median child's
-    ratio AT THAT AGE -- a developmental-stage relationship, and explicitly not
-    ``E[q | understood = U]`` (issue #233, and the plotting function's own
-    docstring). Three templates captioned it as the conditional anyway.
-
-    The two differ in a known direction and, it turns out, by a lot. Conditioning
-    on ``U`` selects every child who reached ``U`` at *any* age, and ``q`` rises
-    with age, so the selected children are younger than the age at which the
-    population median reaches ``U`` and speak a smaller share. At 300 words
-    understood the reporting-quality VG21 and VG22 curves both sit near 0.4 --
-    an apparent finding that Down syndrome and typically developing children
-    convert comprehension identically at that milestone -- while the children
-    who actually understood 300 words have median observed ratios of 0.27 and
-    0.13. The gap grows with ``U`` and is widest where comprehension grows
-    slowly, which is the Down syndrome pool. A cross-population comparison at a
-    comprehension milestone has to use the second column, and this block puts
-    it on the page from the frame the fit recorded.
+    The reference curve pairs expected comprehension and its production ratio
+    at the same age, with zero child and study effects. Observed ratios condition
+    on reported comprehension and pool ages, studies and repeated visits. These
+    are different quantities, with no fixed direction for their difference.
+    Use observations only when the rebuilt frame matches the fit's recorded hash.
     """
 
     curve = _read(directory, "production_rate_by_understood")
@@ -3066,8 +2819,9 @@ def render_conditional_production_check(directory: str = ".") -> None:
         "**not** the share of their comprehension that children who understand a given "
         "number of words actually speak: that quantity conditions on the child's own "
         "count, mixes every child who reached it at any age and every study that "
-        "contributed one, and — because the ratio rises with age — sits below the curve, "
-        "increasingly so as the level rises."
+        "contributed one. Its difference from the reference curve depends on the "
+        "selected ages, studies and child effects; no fixed direction follows "
+        "from conditioning alone."
     )
     print()
 
@@ -3126,31 +2880,22 @@ def render_conditional_production_check(directory: str = ".") -> None:
     print(
         ": Observed children are those with a usable spoken count and an understood count "
         "within ±10% of the level, rebuilt from the current data through the loader rules "
-        "the fit used and verified to hash to the frame this fit recorded. Where the two "
-        "columns disagree, the right-hand one is what the children in this data at that "
-        "level did — mixing ages and studies, and at any one level a single study can "
-        "dominate — and the curve is what the reference child does at the age it reaches "
-        "that level. **A comparison between populations at a comprehension milestone must "
-        "be made in the right-hand column**, and then only with the two groups' ages and "
-        "studies in view — the curves can agree where the children do not, and the "
-        "children can differ for reasons that are not the population's."
+        "the fit used and verified to hash to the frame this fit recorded. The observed "
+        "column describes these children near that level and mixes ages and studies. The "
+        "curve describes the reference ratio at the age its expected comprehension reaches "
+        "that level. Population comparisons must state which of these questions they ask. "
+        "Observed conditional comparisons also need to account for each group's ages, "
+        "study composition and measurement rules. Differences alone do not establish causes."
     )
 
 
 def render_reference_child_calibration(directory: str = ".") -> None:
-    """Set the reference child beside the administration-weighted child and the sample.
+    """Compare reference curves, study-weighted curves and sample medians.
 
-    Every population curve on a page is the reference child: zero study and
-    child effects, the child in the *average study*. Study effects are centred
-    over studies, not administrations, and studies are segregated by age in
-    this pool, so at a given age the reference child can sit above or below every
-    study actually sampled there -- 54 words below the Down syndrome pool's
-    median child at 38 months, 46 above the typically developing pool's at 21
-    (notes/202609021800-production-ratio-by-understood.md). This prints, at
-    three ages inside the data, the reference child, the administration-weighted
-    child (the same fit re-weighted to the studies present at each age) and the
-    sample median, so a reader knows how far "the population" is from "the
-    children in these data" before reading any milestone off the curve.
+    Select up to three ages from frame age quartiles. Study-weighted curves
+    average fitted study offsets near each age while keeping child effects at
+    zero. Sample medians also reflect child variation and count noise. Their
+    differences do not isolate study coverage or establish calibration alone.
     """
     import pandas as pd
 
@@ -3227,8 +2972,9 @@ def render_reference_child_calibration(directory: str = ".") -> None:
             f"{largest:+.0f} words. "
             if largest is not None else ""
         )
-        + "The weighted child closes the part of that gap that study coverage explains; "
-        "what remains is not study coverage. Read every milestone age on this page as the "
+        + "The weighted curve changes the study mixture while leaving child effects at "
+        "zero. It need not match the sample median or isolate the source of any "
+        "remaining gap. Read every milestone age on this page as the "
         "reference child's, and the study fans figure for where each study sits."
     )
 
@@ -3327,8 +3073,8 @@ def render_sex_section(
         print(
             ": Expected words for the reference child — zero study and child effects — as a "
             "girl and as a boy, and the difference between them, computed draw by draw. A "
-            "constant logit difference opens up in words as vocabulary grows, which is why "
-            "the gap widens with age without any age-by-sex term in the model."
+            "constant logit difference can produce an age-varying gap in expected words "
+            "without an age-by-sex term. The gap need not widen throughout the age range."
         )
         print()
 
@@ -3407,13 +3153,7 @@ def _signed_words(value, digits: int) -> str:
 
 
 def _sex_coverage_sentences(directory: str) -> str:
-    """Where this fit's frame records sex, for the section's closing callout.
-
-    Read from the frame rather than written into the callout, because the carrying
-    models span both pools and record sex differently: the Down syndrome pool by
-    whole studies, VG11's typically developing frame by one study that records none
-    and two that miss a handful of children. The frame is used only if it still
-    hashes to the one the fit recorded.
+    """Describe recorded sex using a rebuilt frame with the fit's matching hash.
     """
     frame, reason = _verified_frame(read_manifest(directory))
     if frame is None:
@@ -3422,13 +3162,11 @@ def _sex_coverage_sentences(directory: str) -> str:
 
 
 def sex_coverage_sentences(frame) -> str:
-    """Describe sex coverage by child and by study in an analysis frame.
+    """Describe sex coverage once per study and child code.
 
-    Children are counted once per study and child code. A study that records no sex
-    leans on its study effect to absorb its mix of girls and boys; a study that
-    misses some children places those children at the midpoint beside coded ones,
-    which is only sound if whether sex was recorded is unrelated to sex. The two
-    are said separately because they rest on different assumptions.
+    Distinguish wholly unrecorded studies from partially recorded ones. The model
+    places missing sex at the logit midpoint; these counts disclose its scope but
+    do not test the assumptions needed for that treatment.
     """
     if not {"study", "subject_id", "sex"} <= set(frame.columns):
         return "This fit's frame carries no per-child sex column, so its coverage is not shown."

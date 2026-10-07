@@ -1,45 +1,18 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Exploratory models. **Their output is not validatable and must not be published.**
+"""Unregistered exploratory models whose outputs must not be published.
 
-Issue #273 finding 4 asked for a decision about VG17 and VG18: either give them
-frozen definitions and a supported lifecycle, or say plainly that they are
-exploratory and mark their output accordingly. This package is the second, taken
-on 2026-08-31.
+VG17 and VG18 use a custom fitting path outside the catalogue and shared fit
+pipeline. Their directories carry an exploratory_output.json marker but lack
+registered definitions, validated provenance, staged promotion, predictive
+checks and an all-parameter convergence gate.
 
-It is what the modules already claimed about themselves -- both docstrings said
-"Exploratory", "not in ``MODEL_REGISTRY``", and that folding the covariate into
-``common_univariate_re`` "would be the productionisation step" -- made
-structural rather than left as prose. Three things follow from living here:
-
-**They are unreachable from the registered path by construction.** A registered
-model is a ``model_vgNN.py`` module beside this package, and ``fit_model.py``
-resolves exactly that name from the catalogue. Nothing in here matches, so no
-amount of forgetting can route a fit through an exploratory module.
-
-**Their output declares itself.** :func:`write_exploratory_marker` writes
-``exploratory_output.json`` into every output directory these modules produce,
-saying what the fit does *not* carry. ``sync_report_figures.py`` already skips
-them as unregistered output; the marker is for the person who finds the
-directory, who otherwise sees something shaped exactly like a publishable fit.
-
-**What they do not carry, and why that is disqualifying rather than untidy.**
-The custom fit path writes a trace and a contrast table and nothing else: no
-``fit_manifest.json``, so there is no record of the definition, the data
-fingerprint or the prepared-frame hash to validate against; no ``fit_state.json``
-and no staged promotion, so an interrupted run leaves a half-written directory
-that looks complete; no prior or posterior predictive checks; no calibration; no
-LOO; and no convergence gate -- the maximum R-hat over the three contrasts is
-printed, not enforced, and the other parameters are not screened at all. It also
-borrows VG01's dispersion prior, which was calibrated marginally, while adding
-study and child random effects that change what that prior means.
-
-Productionising either model is a **statistical** decision, not a packaging one,
-and is deliberately not taken here. ``common_univariate_re`` constrains its study
-effects to sum to zero while VG17 uses unconstrained offsets, so routing VG17
-through it would change the model rather than move it. That work belongs with
-`#266 <https://github.com/dseinternational/vocabulary-growth/issues/266>`_.
+Routing these models through a registered engine would require a statistical
+review. VG17 uses unconstrained study offsets, while common_univariate_re
+constrains study offsets to sum to zero. Moving it between those engines would
+change the model.
+See issue #266 for that work and #273 for the exploratory status decision.
 """
 
 from __future__ import annotations

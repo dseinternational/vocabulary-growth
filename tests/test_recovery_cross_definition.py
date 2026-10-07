@@ -1,16 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Simulating under one definition and refitting under another (issue #226).
+"""Check simulation under one definition and refitting under another.
 
-VG15's recovery shows ``psi`` and ``psi_study`` biased low through an
-underestimated ``tau_psi``, and the issue asks whether ``tau_psi ~
-HalfNormal(1.0)`` is a cause. The harness could not answer that: ``--variant``
-substituted one definition for *both* the simulation and the refit, so moving
-the prior moved the truth with it and the comparison was never controlled.
-These tests pin the seam that separates the two roles, and -- more importantly
--- pin that a cross-definition run cannot be mistaken for, or overwrite, a
-self-recovery one.
+Separating these definitions permits controlled prior comparisons without
+changing the simulated truth. Names and provenance must keep cross-definition
+fits separate from self-recovery fits.
 """
 
 import dataclasses

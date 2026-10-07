@@ -1,24 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""``clamp_mean_above_hi_anchor`` applies to two means, and they are separable.
+"""Check which trajectories ``clamp_mean_above_hi_anchor`` levels off.
 
-The flag levels a trajectory's mean off above the high slope anchor instead of
-extrapolating the logit-linear trend to the top of the GP domain. It was a
-single boolean applied to *both* the understood mean and the production ratio
-``q``; because spoken is ``p_U(a) * q(a)``, that compounds, and the spoken
-trajectory inherits two levelled factors.
-
-Measurement on 2026-08-14 (``notes/202608141200-clamp-q-only.md``) showed the
-saturation the flag was added for is ``q``'s alone, so ``"q_only"`` was added as
-a third value. Two things about it are easy to get wrong and are pinned here.
-
-* **It is truthy.** ``if definition.clamp_mean_above_hi_anchor:`` clamps both
-  means under ``"q_only"``, silently doing the opposite of what was asked.
-  Engines must resolve through :func:`clamp_targets`.
-* **It must not change how ``True``/``False`` serialise.** The manifest
-  fingerprints the definition with ``asdict`` and compares whole-object
-  equality, so any drift there invalidates every model of record at once.
+``True`` clamps both the understood proportion and the speech rate ``q``.
+``"q_only"`` clamps only the latter. Engines must use ``clamp_targets``
+because a bare truth test treats the string as true. Boolean values must
+also retain their serialised form for fit compatibility.
 """
 
 import dataclasses

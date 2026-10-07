@@ -1,10 +1,8 @@
 <!--
 Shared prediction body for the Down syndrome bivariate random-effects family:
 VG10, VG19, VG20 and VG22 all fit through `common_bivariate_re` and write the
-same prediction artefacts, so their reports transclude this file rather than
-each carrying a copy. VG20's page once referenced 23 of the 90 artefacts its
-fit wrote and sent the reader to VG10 -- a development step -- for every one
-it omitted. Every path here is relative to the fit's output directory, into
+same prediction artefact schema, so their reports share this include.
+Paths are relative to the fit's output directory, into
 which the report stage copies this file alongside `index.qmd`.
 
 Documentation revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-07.

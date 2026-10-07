@@ -7,10 +7,9 @@ Usage:
 
 Builds the requested variant(s) from ``vocab_growth.sensitivity.registry``
 and runs the SAME fit pipeline as the model of record (via its RE / joint runner),
-writing output to ``output/models/<model_id>-<config_name>-<suffix>/`` so the
-model of record is never touched. Defaults to the ``test`` tier — the honest
-config for a robustness claim (``dev``'s short chains under-converge the
-hierarchical models).
+writing output to ``<output-root>/models/<model_id>-<config_name>-<suffix>/``.
+Each variant has its own directory. The default ``test`` tier uses longer chains
+than ``dev``; the sampling diagnostics still determine whether a fit is usable.
 """
 
 import argparse

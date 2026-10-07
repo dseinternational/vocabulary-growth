@@ -1,13 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for parameter-recovery scoring (issue #163).
+"""Check parameter-recovery scoring without data preparation or sampling.
 
-Data-free and sampling-free, so these run in CI. The behaviour that matters most
-is the *gate*: a recovery fit that did not converge, or whose convergence was
-never recorded, must never be reported as having recovered its parameters — a
-truth sitting outside the posterior of an unconverged fit is sampler noise, not
-evidence about identifiability.
+Exclude unconverged and unassessed fits from recovery claims. Their posterior
+errors cannot reliably establish parameter identifiability.
 """
 
 import json
@@ -328,11 +325,10 @@ def _summary(label, tier, *, converged=True):
 
 
 def test_pooled_row_refuses_to_pool_across_sampling_tiers():
-    """The 2026-09-03 defect: a `rep` run's two replicates pooled with a stale
-    `test`-tier fit in the third directory, and the comparison book rendered
-    three replicates of three. The refusal keeps the POOLED prefix (so the
-    book's filter still drops it) and says "not assessed" (so its counter does
-    not count it)."""
+    """Keep replicates from different sampling tiers out of one pooled result.
+
+    Retain the POOLED label and mark the row unassessed for downstream filters.
+    """
     row = pooled_row([_summary("r01", "rep"), _summary("r02", "rep"), _summary("r03", "test")])
     assert row["replicate"].startswith("POOLED")
     assert "refused" in row["replicate"]
@@ -513,7 +509,7 @@ def test_compare_replicate_scores_the_total_spread_from_a_stored_trace(tmp_path)
     assert "total_spread_words_query" not in set(without["quantity"])
 
     # A truth on a different query grid -- same length, one age moved -- has no
-    # age at which both spreads describe the same child, so it is left out
+    # aligned grid on which both spreads can be compared, so it is left out
     # rather than derived at the fitted model's ages.
     from dataclasses import replace
 

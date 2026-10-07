@@ -1,28 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Shared dataclasses and pipeline functions for the bivariate vocabulary growth
-models.
+"""Shared configuration, prediction and reporting for bivariate models.
 
-Two things in this module have different reach, and the distinction matters when
-changing either. The **shared** half — the configuration and samples dataclasses,
-the prior configuration, the extraction, the predictive, the summary and every
-``plot_*`` function — is used by all twelve bivariate models. The PyMC graph
-builder :func:`build_model` and :func:`fit_bivariate_model` serve **VG05 alone**:
-every other bivariate model carries study-level random intercepts and is built by
-:mod:`vocab_growth.models.common_bivariate_re`, which imports the shared half
-from here. :mod:`vocab_growth.models.catalogue` is the authoritative mapping.
+The graph builder and fit_bivariate_model serve VG05. Models with study
+effects use common_bivariate_re and reuse stages from this module.
+The catalogue records the current engine mapping.
 
-Uses a production-ratio reparameterization:
-    p_U(a) = sigmoid(f_U(a))
-    q(a)   = sigmoid(h(a))       # fraction of understood words spoken
-    p_S(a) = p_U(a) * q(a)       # enforces p_S <= p_U by construction
-
-This is where the graph's ``_u`` / ``_q`` / ``_s`` suffix split comes from, and it
-is not uniform -- ``_q`` is the ratio's latent and carries no observation, while
-``_s`` covers both the derived marginal and the spoken likelihood. The legend is in
-:mod:`vocab_growth.models`; read it before touching a suffixed name.
+The model uses p_U(a) = sigmoid(f_U(a)), q(a) = sigmoid(h(a)), and
+p_S(a) = p_U(a) * q(a). q is the spoken share of understood words;
+s labels both derived spoken proportions and the spoken count likelihood.
+See vocab_growth.models for the suffix convention.
 """
 
 import os
@@ -121,13 +109,10 @@ EPSILON = math_constants.EPSILON
 
 @dataclass
 class BivariateModelConfiguration(BaseModelConfiguration):
-    """Configuration for the bivariate (understood + spoken) model.
+    """Bivariate trajectory and dispersion configuration.
 
-    Each outcome's dispersion is specified in exactly one of two ways: the
-    legacy ``kappa_min_*_dist`` / ``a_kappa_*_dist`` / ``b_kappa_mag_*_dist``
-    triple, or ``kappa_anchored_*``. The two outcomes are independent — VG13
-    anchors both, the DS joint models anchor neither — but neither may be
-    half-specified. ``__post_init__`` rejects anything else.
+    Each outcome independently selects the legacy dispersion triple or an anchored
+    configuration. __post_init__ rejects incomplete or mixed specifications.
     """
 
     # Understood (U) trajectory priors
@@ -2026,32 +2011,20 @@ def plot_production_rate_by_understood(
     filename: str | None = None,
     max_age_months: float | None = None,
 ):
-    """Plot population production ratio q against population expected words understood.
+    """Plot the zero-effect production ratio against expected words understood.
 
-    **What this is, and what it is not (issue #233).** Both axes are read off the
-    *population* curves at zero study and zero child effects: ``p_u_plot`` and
-    ``q_plot``. The x value at a plotted point is the population median expected
-    comprehension AT SOME AGE, and the y value is the population conversion ratio
-    AT THAT SAME AGE. The curve therefore describes how the two population
-    trajectories move together as children get older -- a developmental-stage
-    relationship -- and NOT the conditional quantity ``E[q | understood = U]``
-    for a child who happens to understand U words.
+    At each age, the x coordinate is the posterior median expected comprehension
+    and the y coordinate is the posterior median production ratio. Both curves
+    set study and child effects to zero. The plot does not condition a child's
+    ratio on their observed understood count.
 
-    The two can differ when children vary. A count above the reference curve
-    can reflect child or study effects and observation noise; it does not fix
-    the sign of a child's latent effect. Nothing here conditions the
-    child effects on observed comprehension or uses ``rho_uq`` at all. Computing
-    the conditional version means integrating the joint child-effect posterior
-    through the understood Beta-Binomial likelihood, which is a separate output.
+    Computing that conditional quantity would require the joint child-effect
+    posterior and the understood-count likelihood. The reference curve does not
+    use rho_uq for that purpose.
 
-    ``max_age_months`` is essential here rather than cosmetic. The x axis is age
-    *reparameterised* by expected comprehension, so without the cap the curve
-    silently extends past ``report_max_age_understood`` -- the age at which the
-    age-space plot of the same quantity stops. Worse, the mean is clamped above
-    the upper slope anchor, so expected understood almost stops growing there and
-    the x axis compresses hard: a gentle drift in ``q`` over the extrapolated tail
-    is then drawn as a near-vertical step, which reads as a discovery about
-    vocabulary rather than an artefact of the transform.
+    max_age_months keeps the transformed curve within the reporting age window.
+    Near a flat understood curve, a small age change can produce a large vertical
+    movement on this transformed plot.
     """
     p_u_plot = samples.p_u_plot  # (n_plot, n_samples)
     q_plot = samples.q_plot  # (n_plot, n_samples)
@@ -2087,7 +2060,7 @@ def plot_production_rate_by_understood(
     )
     ax.plot(
         x_words, q_median, lw=3,
-        label="Population ratio at the age the median child reaches this level",
+        label="Reference ratio at the same age",
     )
     _draw_age_markers(ax, X_plot_kept, x_words, q_median)
 
@@ -2584,13 +2557,11 @@ def study_marginal_inputs(context):
 
 
 def administration_weights(frame, X_plot, *, bandwidth=_STUDY_WEIGHT_BANDWIDTH_MONTHS):
-    """Share of administrations from each study at each plot age: ``(n_plot, K)``.
+    """Study shares near each plot age, returned as (n_plot, K).
 
-    A Gaussian kernel in age, so the weights are smooth and never empty. The
-    reference child is the average *study*; these weights make the average
-    *administration at that age*, which is the child the sample medians describe
-    -- and at ages covered by only one or two studies the two can sit far apart
-    (notes/202609021800-production-ratio-by-understood.md).
+    A Gaussian kernel weights observed administrations by distance in age.
+    The weights mix study-specific reference curves with child effects set to zero.
+    They do not integrate over child effects or predict an observed sample median.
     """
     codes = frame["study_code"].to_numpy(dtype=int)
     ages = frame["age"].to_numpy(dtype=float)
@@ -2656,17 +2627,11 @@ def write_weighted_monthly_summaries(context, n_trials, *, max_age_months_unders
 
 def plot_study_fans(context, n_trials, *, output_dir=None, filename=None,
                     max_age_months_understood=None, max_age_months_spoken=None):
-    """One curve per study over its own ages, beside the reference child.
+    """Study-specific reference curves over each study's observed age range.
 
-    The population curve on every page is the reference child -- zero study and
-    child effects, the child in the *average study*. Studies are segregated by
-    age in this pool, so at any one age the average study may not be among those
-    sampled there: at 38 months the three studies present in the Down syndrome
-    pool all sit above the reference child, at 21 months the one study present in
-    the typically developing pool sits below it. This figure shows where each
-    study sits, over the ages it actually covers, with the administration-weighted
-    child dashed. It is the visible form of the trend-versus-study split that the
-    model has to make wherever studies do not overlap in age.
+    Compare them with the zero-study-effect curve and the administration-weighted
+    mixture. Study and age coverage differ, so this plot helps inspect how the
+    model allocates variation between its age trend and study offsets.
     """
     inputs = study_marginal_inputs(context)
     if inputs is None:
@@ -2746,13 +2711,9 @@ def run_bivariate_joint_plots(
     context: BivariateContext,
     definition: BivariateModelDefinition,
 ):
-    """Run the joint bivariate plots and per-outcome plots.
+    """Run joint and per-outcome plots for both bivariate engines.
 
-    This is the plot stage of all twelve bivariate models: VG05 through this
-    module's own stage list, and VG07-VG10, VG13, VG16 and VG19-VG23 through
-    :mod:`vocab_growth.models.common_bivariate_re`, which imports it. It is
-    declared to the catalogue by name, so a rename must update
-    :mod:`vocab_growth.models.catalogue` too.
+    The catalogue declares this shared plot hook by name.
     """
     samples = context.model_samples
     analysis_df = context.analysis_df

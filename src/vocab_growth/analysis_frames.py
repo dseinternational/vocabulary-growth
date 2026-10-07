@@ -1,33 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Pure analysis-frame builders and the exact prepared-frame hash.
+"""Rebuild and hash prepared analysis frames without running a fit.
 
-Every fit manifest records ``data.analysis_frame_hash`` — a hash of the exact
-prepared analysis frame (schema, values, index and row order). Until issue
-#266 nothing ever read it back: validation compared only the raw-CSV
-fingerprint, so a change to the loader's *rules* (masking, exclusions,
-harmonisation) silently left stale posteriors accepted as current. Closing
-that gap needs the prepared frame to be recomputable outside a fit, which the
-engines' ``prepare_*_data`` stage functions cannot do — they print tables and
-write descriptive CSVs into a fit's output directory.
+The hash records schema, values, index and row order. Validation can therefore
+detect changes to masking, exclusions or harmonisation even when the raw CSVs
+are unchanged. Pure engine builders produce the same frames as fitting stages
+without writing descriptive outputs.
 
-Each engine therefore exposes a pure ``build_*_analysis_frame(definition)``
-function containing exactly the frame construction its prepare stage runs, and
-every registered model is mapped to its engine's builder so a validator can ask
-"what would this definition's frame hash be today?". The mapping is by model key
-because the engine choice lives in each ``model_vgNN`` module, not in the
-definition class (VG05 and VG07 share a definition class on different engines).
-
-Since issue #273 that mapping is **derived** from
-:mod:`vocab_growth.models.catalogue` rather than restated here. It was one of
-five hand-maintained copies of the same engine assignment, and the copy in
-``scripts/prior_predictive_audit.py`` had gone stale for six models without
-anything failing. ``tests/test_analysis_frames.py`` pins every registered key to
-a builder and pins a fitted manifest's recorded hash to the recomputed one, and
-``tests/test_model_catalogue.py`` pins each catalogue engine against what the
-model's own wrapper module imports, so a model moved between engines cannot
-silently drift.
+The model catalogue supplies each registered model's builder. The definition
+class alone does not identify the engine: VG05 and VG07 share a definition class
+but use different engines.
 """
 
 from __future__ import annotations
@@ -43,10 +26,7 @@ from vocab_growth.models.catalogue import CATALOGUE
 from vocab_growth.models.definitions import ModelDefinition
 
 #: Engine frame builder for every registered model, as ``module:function``.
-#: Derived from the catalogue, so a model's frame builder and the engine that
-#: actually fits it cannot disagree. Kept as strings, and as a module-level
-#: mapping, because importing this module must stay light -- the engines pull in
-#: PyMC and the validators that need a frame hash must not.
+#: String targets defer engine imports, including PyMC, until a frame is needed.
 FRAME_BUILDERS: dict[str, str] = {
     key: f"{model.engine.module}:{model.engine.frame_builder}"
     for key, model in CATALOGUE.items()

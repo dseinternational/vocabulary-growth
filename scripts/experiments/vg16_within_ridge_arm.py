@@ -1,41 +1,22 @@
 #!/usr/bin/env python
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Is VG16's within-child cross-lag anomaly a joint-estimation ridge? Fit and see.
+"""Test VG16's joint within-child lag estimator on simulated data.
 
-`vg16_within_lag_bias.py` established that the within-child baseline's strongly
-negative `dev`-tier estimate (`beta` ~ -0.60) is **not** the short-T /
-errors-in-variables artefact the VG16 report attributed it to: a two-step
-estimator of the same quantity, on simulated data with a known `beta_lag`, is
-unbiased at every truth tested, and an oracle-intercept variant rules out
-estimation error in the child's understood intercept specifically.
-
-That two-step design severs one thing the real model has: in VG16 the child
-understood intercept `delta_subj_u` is estimated **jointly** with `beta_lag`, so
-the spoken likelihood feeds back onto the intercept through `x_lag`. A ridge
-between the two is the leading remaining explanation, and this arm is its direct
-test — it fits the *actual* PyMC model, with `lag_baseline="within"`, to data
-simulated at a known `beta_lag`.
-
-Reading the result:
-
-* `beta_lag` recovered near truth -> the ridge hypothesis is refuted too, and the
-  -0.60 belongs to the real data or to `dev`-tier non-convergence.
-* `beta_lag` strongly negative where the two-step estimator was unbiased -> the
-  ridge is confirmed, and a decoupled estimator is the remedy.
-
-Run the `truth-zero` arm first: a large negative estimate when the truth is
-exactly zero is the cleanest possible demonstration.
+The two-step experiment in ``vg16_within_lag_bias.py`` does not reproduce joint
+estimation of the child comprehension effect and lag coefficient. This arm fits
+the PyMC graph to data generated at a stated coefficient. Compare its recovery
+with the two-step results while checking sampling quality. Poor recovery can
+support a joint-estimation concern but does not isolate a particular cause.
+Good recovery at selected truths does not rule out problems elsewhere.
 
 Usage::
 
     python scripts/experiments/vg16_within_ridge_arm.py truth-zero --output-dir /scratch/vg16-ridge
     python scripts/experiments/vg16_within_ridge_arm.py truth-plus --output-dir /scratch/vg16-ridge
 
-`--config` defaults to ``test``, not ``dev``: the -0.60 is a `dev` figure and the
-project holds that `dev` under-converges the hierarchical models, so a `dev` arm
-could not separate the ridge from non-convergence. Writes to its own output root
-so no model of record can be touched.
+``--config`` defaults to ``test``. Use a separate output root and check the
+convergence diagnostics before interpreting recovery.
 """
 
 from __future__ import annotations
@@ -49,9 +30,7 @@ from multiprocessing import freeze_support
 import numpy as np
 import pandas as pd
 
-#: Truth values the simulated arms use. ``real`` fits the actual data instead,
-#: which is the only arm that can show whether the -0.60 belongs to the data
-#: rather than to the estimator.
+#: ``real`` fits the observed data; the other arms simulate at stated truths.
 ARMS = {"truth-zero": 0.0, "truth-plus": 0.203, "real": None}
 
 
