@@ -54,12 +54,7 @@ PER_FIT_CONTRACTION_FILENAME = "prior_posterior_contraction.csv"
 PRIOR_COLOUR = plot_styles.CHART_COLOURS[0]
 POSTERIOR_COLOUR = plot_styles.CHART_COLOURS[2]
 
-# Registry-derived: every registered model. Trivariate (VG14) and joint (VG15)
-# were excluded until 2026-08-06 because their signed-ratio, psi and
-# concentration priors were not reconstructed here. That exclusion hid a real
-# defect -- VG14's `b_kappa_mag_s` sits 4 sigma beyond its prior, on a parameter
-# the sweep could already build. `signing_priors` closes the gap; see
-# `model_priors` for the dispatch.
+# Select models from the registry so new definitions join the audit.
 MODEL_LABELS = {
     d.model_id: (f"{d.model_id}-{d.config_name}", d)
     for d in MODEL_REGISTRY.values()
@@ -67,12 +62,11 @@ MODEL_LABELS = {
 
 
 def kappa_priors(kp, suffix: str = "") -> dict[str, pz.distributions.distributions.Continuous]:
-    """Priors for whichever kappa parameterisation `kp` is.
+    """Return the explicitly specified concentration priors.
 
-    Only the *free* parameters appear. Under the two-anchor form ``a_kappa`` and
-    ``b_kappa`` are derived, so they are in the trace but have no prior to plot
-    against — including them would invite a comparison against a distribution
-    that was never specified.
+    Derived ``a_kappa`` and ``b_kappa`` have induced priors under the two-anchor
+    form, not the legacy Normal and HalfNormal priors. This builder plots the
+    free anchor parameters instead of reconstructing those induced priors.
     """
     priors = {
         f"kappa_min{suffix}": pz.LogNormal(mu=kp.kappa_min_mu, sigma=kp.kappa_min_sigma)
@@ -98,18 +92,14 @@ def univariate_priors(d: UnivariateModelDefinition) -> dict[str, pz.distribution
         "p_slope_hi": pz.Beta(alpha=d.p_slope_hi_alpha, beta=d.p_slope_hi_beta),
         **kappa_priors(d.kappa),
     }
-    # The random-effect models carry scale priors the base univariate models do
-    # not. Omitting them left `tau` — VG12's worst-mixing parameter before the
-    # study block was centred — with no prior check at all.
+    # Include the study scale when this definition has study effects.
     if getattr(d, "tau_study_sigma", None) is not None and getattr(
         d, "min_study_observations", None
     ) is not None:
         priors["tau"] = pz.HalfNormal(sigma=d.tau_study_sigma)
     partition = getattr(d, "subject_variance_partition", None)
     if partition is not None:
-        # Under the variance partition `tau_subject` is a Deterministic with no
-        # prior of its own; the budget and the split are what carry one. Checking
-        # the derived quantity against the prior it no longer has would be wrong.
+        # The budget and share induce the scale prior; no HalfNormal is specified.
         priors["v_total"] = pz.LogNormal(mu=partition.total_mu, sigma=partition.total_sigma)
         priors["subject_variance_share"] = pz.Beta(
             alpha=partition.share_alpha, beta=partition.share_beta
@@ -120,18 +110,12 @@ def univariate_priors(d: UnivariateModelDefinition) -> dict[str, pz.distribution
 
 
 def subject_scale_priors(value, name: str) -> dict:
-    """Priors for a subject-effect scale, whichever form the field carries.
+    """Return free scale priors for constant, A1 or affine child effects.
 
-    Under Proposal A1 the scalar is replaced by an
-    :class:`AgeVaryingSubjectScale`, and the parameter that carries a prior is no
-    longer ``{name}`` (a Deterministic there) but the young anchor and the log
-    ratio. Plotting ``{name}`` against a HalfNormal it no longer has would be the
-    same error the variance partition already documents just above.
+    A1's derived scale has an induced prior from its young anchor and log ratio.
+    Use those free priors rather than the constant-scale HalfNormal family.
     """
-    # VG19 puts a child intercept-and-rate block (`SubjectSlopePriorParams`)
-    # in the same field; the sampled scales are then `{name}_0` and `{name}_1`
-    # and the field itself is a deterministic alias. Passing the block to
-    # HalfNormal raised inside preliz and killed the whole registry sweep.
+    # Affine effects have separate intercept and slope scale priors.
     if getattr(value, "tau0_sigma", None) is not None:
         return {
             f"{name}_0": pz.HalfNormal(sigma=float(value.tau0_sigma)),
@@ -156,12 +140,7 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
         "p_slope_hi_u": pz.Beta(alpha=d.p_slope_hi_u_alpha, beta=d.p_slope_hi_u_beta),
         "p_slope_low_q": pz.Beta(alpha=d.p_slope_low_q_alpha, beta=d.p_slope_low_q_beta),
         "p_slope_hi_q": pz.Beta(alpha=d.p_slope_hi_q_alpha, beta=d.p_slope_hi_q_beta),
-        # Dispatched per outcome, because a definition may carry a different
-        # dispersion form on each: `validate_kappa_fields` checks the two blocks
-        # independently and permits a mixed pair. Every registered bivariate
-        # model happens to anchor both, so calling `kappa_priors` once would
-        # currently give the same answer — but it would be right by coincidence,
-        # and would start mis-plotting the moment one outcome migrated alone.
+        # Each outcome may use a different dispersion parameterisation.
         **kappa_priors(d.kappa_u, "_u"),
         **kappa_priors(d.kappa_s, "_s"),
     }
@@ -176,15 +155,9 @@ def bivariate_priors(d: BivariateModelDefinition) -> dict[str, pz.distributions.
 
 
 def signing_priors(d) -> dict[str, pz.distributions.distributions.Continuous]:
-    """The extra priors the signing models carry beyond the bivariate set.
+    """Add signing GP, three-anchor mean and concentration priors.
 
-    VG14 and VG15 add a third outcome with its own GP and a **three-anchor** mean
-    (low / mid / high) rather than the two-anchor form the other outcomes use, and
-    VG15 adds the sign-speech association and the Dirichlet-Multinomial
-    concentration. These were the reason the two models were excluded from the
-    sweep entirely — which is how VG14's 4-sigma `b_kappa_mag_s` conflict went
-    unseen, since that parameter is part of the *shared* bivariate set the sweep
-    could already reconstruct.
+    Joint models also specify log association and Dirichlet concentration priors.
     """
     priors: dict = {
         "ell_unit_sign": pz.Beta(alpha=d.ell_unit_sign_alpha, beta=d.ell_unit_sign_beta),
@@ -214,7 +187,7 @@ def signing_priors(d) -> dict[str, pz.distributions.distributions.Continuous]:
 
 
 def model_priors(d) -> dict[str, pz.distributions.distributions.Continuous]:
-    """Every prior this definition specifies, whichever family it belongs to."""
+    """Return the analytic prior families this overlay builder supports."""
     if isinstance(d, (TrivariateModelDefinition, JointModelDefinition)):
         # Both carry the full bivariate understood/spoken block plus a sign block.
         return {**bivariate_priors(d), **signing_priors(d)}
@@ -344,19 +317,7 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
     trace_path = os.path.join(MODELS_DIR, label, "trace.nc")
     if not os.path.isfile(trace_path):
         return []
-    # A trace fitted under a different definition must not be scored against the
-    # current priors: the result looks like a prior-data conflict but is only a
-    # mismatch. This bit the sweep's own first run — VG12's eta showed prior CDF
-    # 0.991 with contraction -0.670, which was an eta=1.0 posterior being read
-    # against the eta=0.5 prior it had just been reverted to.
-    #
-    # The guard used to compare the stored definition payload to the current one
-    # as raw dictionaries. That is the pre-#273 comparison: it cannot tell a
-    # graph change from a reporting one, and it has no ``BACKFILL_DEFAULTS``, so
-    # a fit predating a field whose default reproduces what it did was skipped
-    # as stale when it was not. ``fit_errors`` makes the same check through the
-    # classified payload, and adds the exact prepared-frame hash the raw
-    # comparison could not see at all (issue #266 finding 1).
+    # Check definition and prepared-frame compatibility before comparing priors.
     stale = fit_errors(short.lower(), os.path.join(MODELS_DIR, label))
     if stale:
         print(f"  {short}: SKIPPED — {'; '.join(stale)}")
@@ -400,11 +361,7 @@ def conflict_table(short: str, label: str, definition) -> list[dict]:
                 flags="+".join(flags),
             )
         )
-    # The same rows, written into the fit's own directory so its report can
-    # render them: every template tells the reader to compare each posterior
-    # with its prior figure by eye, across twenty-odd parameters, and states the
-    # answer from memory where it states one at all. `render_prior_posterior_
-    # contraction` reads this file fail-soft, the way `loo_summary.csv` is read.
+    # Store per-fit rows for the report contraction block.
     if rows:
         import csv
 

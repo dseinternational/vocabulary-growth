@@ -87,14 +87,10 @@ def iter_subject_age_waves(subject, age):
 
 
 def wave_index(subject, age):
-    """0 for each child's first administration wave, 1 for the next, and so on.
+    """Number each child's administration waves from zero.
 
-    The per-row counterpart of :func:`iter_subject_age_waves`, built on it so
-    every row at one recorded age takes the same index: a child measured on two
-    forms on one day has one wave, not two, which is the wave definition issue
-    #242 settled. ``kfold_loso.py`` and ``wave_forward_score.py`` both read it
-    and each carried a verbatim copy until the 2026-09-09 refit window, because
-    adding a function here moves the executable-code signature.
+    Every row at the same recorded age receives the same index. These are recorded
+    age groups, which need not identify the exact visit date.
     """
     subject = np.asarray(subject)
     age = np.asarray(age, dtype=float)
@@ -112,35 +108,16 @@ def wave_index(subject, age):
 
 
 def _assign_prev_wave_sources(subject, age, usable, rank_keys):
-    """Point every row at its child's most recent strictly earlier usable wave.
+    """Point each row at its child's most recent strictly earlier usable wave.
 
-    The walk both lags share. ``usable`` marks the rows that can *serve* as a
-    source; ``rank_keys`` is a tuple of arrays, highest priority first, maximised
-    lexicographically to choose between several usable measurements inside one
-    source wave.
+    usable marks valid source rows. rank_keys is maximised lexicographically to
+    choose among measurements in one source wave. The first key selects the largest
+    understood count. Later keys must include other quantities read from the selected
+    row so ties cannot make the result depend on input order.
 
-    The **first** key is the least-truncated-measurement rule in both cases --
-    the largest understood count for VG16's count lag, and the largest
-    comprehension denominator for VG25's ratio lag, which is the same thing said
-    of a ratio. The keys **after** it are what make the choice independent of the
-    input row order, and the rule for them is: *every quantity the caller reads
-    off the selected row must appear in this tuple*. Two rows tied on all of them
-    are interchangeable in the result; two rows tied on only the first are not,
-    and a plain ``argmax`` would then hand the answer to whichever the frame
-    happened to list first. VG16 reads the source's understood count (its own
-    first key) and, under ``same_form_only``, its form ceiling; VG25 reads the
-    source's signed count as well as its denominator.
-
-    Nothing on the current frame exercises this: no wave that serves as a source
-    offers more than one usable measurement, for either lag. Ten waves *do* carry
-    two usable comprehension measurements, so one further administration for any
-    of those children would make one a source -- which is why the rule is stated
-    and keyed rather than left to the row order the loader happens to produce.
-
-    Returns ``(prev_idx, has_lag_f)``: the selected source row (0 where absent,
-    gated by ``has_lag_f``) and 1.0/0.0 for whether one exists at all. The state
-    advances only once a whole wave is assigned, so no row can take a same-age
-    source.
+    Return the selected source index, with zero as a gated placeholder when absent,
+    and a 1.0/0.0 source flag. Update source state only after assigning the whole
+    current wave, so a same-age row cannot become its source.
     """
     subject = np.asarray(subject, dtype=int)
     age = np.asarray(age, dtype=float)
@@ -171,12 +148,10 @@ def _assign_prev_wave_sources(subject, age, usable, rank_keys):
 
 
 def _apply_gap_ceiling(prev_idx, has_lag_f, age, max_gap_months):
-    """Drop -- not the row -- every lag reaching further back than the ceiling.
+    """Disable lags beyond the gap limit while retaining the observations.
 
-    Applied after the source is chosen, so which wave is the source never
-    depends on the ceiling; only whether that source is used. The observation
-    still enters every likelihood it did before, it simply stops informing the
-    coefficient.
+    Choose the source first, then apply the limit. An excluded source is not replaced
+    with an older one.
     """
     if max_gap_months is None:
         return prev_idx, has_lag_f
@@ -196,60 +171,27 @@ def prev_wave_lag(
     form_ceiling=None,
     same_form_only: bool = False,
 ):
-    """Per-observation prior-wave understood lag source for the VG16 cross-lag.
+    """Return each row's prior-wave understood-count source and logit predictor.
 
-    The unit is an **administration wave**: every row a child carries at one
-    recorded age, processed as a complete group (issue #242).
+    A wave groups all of a child's rows at one recorded age. All rows use the most
+    recent strictly earlier wave with usable comprehension. Within a source wave,
+    select the largest count, then the ceiling if the restriction reads it. This
+    selection uses the project's common reference-scale assumption; a larger count
+    does not establish that two forms measured the same words.
 
-    * Every row in a wave receives the same source — the child's most recent
-      strictly earlier wave with at least one usable understood count,
-      skipping earlier waves without one.
-    * The source state advances only after a whole wave is assigned, so a row
-      can never receive a same-age source and the result is invariant to the
-      input row order. The row-by-row walk this replaced advanced state
-      immediately after each row, so which of two same-recorded-age rows
-      (two checklist forms) carried the lag depended on arbitrary tie order —
-      66 spoken observations from 46 children lost their lag to it on the
-      2026-08 frame.
-    * Where a source wave carries several understood measurements (two forms
-      at one recorded age), the largest count is selected: every count is
-      scored against the same ``n_trials`` inventory under the project's
-      difficulty-ordering harmonisation, and a shorter form right-truncates
-      it, so the largest observed count is the least-truncated measurement
-      available. On the current frame no wave that serves as a source carries
-      more than one understood measurement, so the rule is registered ahead of
-      need — though ten waves do carry two, and one further administration for
-      any of those children would make one a source. Under ``same_form_only``
-      the source's **form ceiling** is read as well as its count, so it is a
-      selection key too: without it, two same-age forms tied on the count but
-      differing in length would hand the lag to whichever the frame listed
-      first. Everything else about a row is shared across its wave (child,
-      study, recorded age), so only the quantities read off the selected row
-      can move the likelihood.
+    same_form_only requires equal, known form ceilings for source and target. This
+    checks inventory size, not item identity. A failed restriction removes the lag
+    without removing the row or searching an older wave.
 
-    ``same_form_only`` (with ``form_ceiling``) keeps only lags whose source and
-    target waves were scored against the same checklist, which is the review's
-    own measurement check: the predictor is a logit of ``understood /
-    n_trials``, so a source scored on a shorter form enters it already
-    deflated, and a study intercept cannot absorb a *within*-study form
-    transition. Like the gap ceiling it drops the lag, not the row.
-
-    Returns ``(prev_idx, has_lag_f, y_u_prev_logit)`` as per-observation
-    arrays: ``has_lag_f`` is 1.0 where a source wave exists and 0.0 otherwise
-    (a child's first wave, or when every earlier wave lacks comprehension);
-    ``prev_idx`` points at the selected source row (0 where absent, gated by
-    ``has_lag_f``); ``y_u_prev_logit`` is the logit of the source understood
-    proportion (clipped away from 0/1), and 0.0 where there is no lag source.
+    Return (prev_idx, has_lag_f, y_u_prev_logit). An absent source has index zero and
+    predictor zero, gated by has_lag_f. Boundary treatment follows zero_handling.
     """
     subject = np.asarray(subject, dtype=int)
     age = np.asarray(age, dtype=float)
     understood = np.asarray(understood, dtype=float)
     n = len(subject)
-    # Both ceilings must be known -- an unknown one cannot certify that the two
-    # waves used the same checklist -- and the ceiling is validated *before* the
-    # walk because under ``same_form_only`` it is read off the selected source
-    # row, which makes it a selection key (see ``_assign_prev_wave_sources``).
-    # An unrecorded ceiling ranks last: such a source would lose the lag anyway.
+    # The restriction compares known inventory sizes, not checklist item sets.
+    # Include size in source ranking because the restriction reads that row.
     ceiling = None
     if same_form_only:
         if form_ceiling is None:
@@ -302,18 +244,10 @@ def prev_wave_lag(
 
 
 def prev_wave_lag_for_frame(analysis_df, n_trials: int, definition):
-    """The supported entry point: :func:`prev_wave_lag` over an analysis frame.
+    """Build understood-count lags with the definition's settings.
 
-    Call this, not :func:`prev_wave_lag`, wherever an analysis frame is in hand.
-    It reads the three settings that change the result off ``definition``, so a
-    caller cannot silently get the registered defaults for a variant that moved
-    them -- which is what ``definition=None`` used to allow, and what two of the
-    three out-of-module callers were doing.
-
-    ``definition`` is required for that reason: every caller has one. An array-only
-    caller (a trace-reconstruction script) calls :func:`prev_wave_lag` directly and
-    passes the same three settings itself -- and, for the same-form restriction,
-    the form identity this function reads off the frame.
+    Read the gap limit, boundary treatment and optional ceiling restriction from
+    definition. Array-only callers must pass the same settings directly.
     """
     same_form_only = bool(getattr(definition, "lag_same_form_only", False))
     form_ceiling = None
@@ -495,16 +429,8 @@ def prev_wave_sign_share_lag(
     # neither branch can divide by a NaN.
     signed_prev = np.where(has_lag_f > 0, signed[prev_idx], 0.5)
     understood_prev = np.where(has_lag_f > 0, understood[prev_idx], 1.0)
-    # A numerator above its own denominator is a share above 1, which the clip
-    # absorbs and the continuity correction does NOT: (k + 0.5) / (n + 1) stays
-    # above 1, and `log(1 - r)` of it is a silent NaN that would propagate into
-    # the log density. It cannot happen on the frames registered today -- the
-    # loader masks a comprehension count that falls below the child's recorded
-    # production union, and a cross-tab's cells sum to its own total by
-    # construction, so `signed <= understood` on all 562 rows carrying a share.
-    # It becomes reachable the moment that mask is reinstated for a sensitivity,
-    # which is one field away. Clipped here rather than guarded at the call site
-    # so both treatments see a well-defined share, and a no-op on valid data.
+    # Clip to a valid share before either boundary treatment. A sensitivity
+    # that retains comprehension below production can supply signed > understood.
     signed_prev = np.clip(signed_prev, 0.0, understood_prev)
     if zero_handling == LAG_ZERO_CONTINUITY:
         r_prev = (signed_prev + 0.5) / (understood_prev + 1.0)
@@ -530,15 +456,10 @@ def sign_lag_same_form_only(definition) -> bool:
 
 
 def prev_wave_sign_share_lag_for_frame(analysis_df, definition):
-    """The supported entry point: :func:`prev_wave_sign_share_lag` over a frame.
+    """Build signed-share lags with the definition's settings.
 
-    Call this, not the primitive, wherever an analysis frame is in hand, for the
-    reason :func:`prev_wave_lag_for_frame` gives: the two settings that change
-    the result live on the definition, and a caller reaching past this function
-    has to pass them itself.
-
-    Inventory size cancels from the ratio's arithmetic. Checklist item selection
-    can still change the ratio, so the optional form restriction is separate.
+    Inventory size cancels in signed/understood, but item selection can change the
+    ratio. The optional restriction checks equal, known inventory ceilings.
     """
     same_form_only = sign_lag_same_form_only(definition)
     if same_form_only and "survey_vocab_max" not in analysis_df:
@@ -631,12 +552,7 @@ def cross_lag_audit_frame(
 def report_cross_lag_support(
     output_dir: str, audit: pd.DataFrame, n_obs: int
 ) -> None:
-    """Write ``cross_lag_audit.csv`` and print the support summary (issue #242).
-
-    Takes the directory rather than the fit context: it is the only write in this
-    module, and passing a whole ``ModelFitContext`` for one path was what kept the
-    block in the engine.
-    """
+    """Write cross_lag_audit.csv and print the coefficient's source support."""
     audit.to_csv(os.path.join(output_dir, "cross_lag_audit.csv"), index=False)
     supporting = audit[audit["spoken_branch"] != ""]
     gaps = supporting["gap_months"]

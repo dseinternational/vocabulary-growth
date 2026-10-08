@@ -1,24 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Guard the optional centred parameterisation of the study random intercepts.
+"""Check the optional centred study-intercept parameterisation.
 
-``UnivariateModelDefinition.centred_study_re`` switches the study block from the
-non-centred form of issue #65 (``delta = tau * delta_raw``) to sampling ``delta``
-directly as ``ZeroSumNormal(sigma=tau * sqrt(K/(K-1)))``. Three things need
-pinning:
-
-1. the flag defaults to off, and with it off the graph is exactly the one every
-   existing fit was produced under -- this is what keeps the registered models'
-   manifests valid;
-2. with it on, ``delta`` becomes a free RV and ``delta_raw`` disappears; and
-3. the two branches induce the **same prior** on ``delta``, so the switch is a
-   change of sampling coordinates rather than of the model.
-
-(3) is the load-bearing claim: it is why enabling the flag cannot move a
-posterior except through the sampler's efficiency. See
-``notes/202608050900-td-hierarchical-geometry.md`` §§2-3 for why it is expected
-to help ``tau``'s ESS and *not* the energy BFMI.
+The non-centred form samples ``delta_raw`` and sets ``delta = tau * delta_raw``.
+The centred form samples ``delta`` directly with the same zero-sum prior.
+Tests check graph structure and prior agreement. The sampling coordinates
+can affect sampler efficiency without changing the statistical model.
 """
 
 import dataclasses
@@ -55,11 +43,8 @@ def _build(definition, tmp_path):
     return context.model
 
 
-# A cheap stand-in for VG12: same engine and study block, a tenth of the rows.
-# Only the graph's *structure* is under test, so the subsample is immaterial.
-# Both geometry options are switched off explicitly, because VG12 now ships with
-# them on -- this fixture is the *pre-change* graph, which several tests below
-# need in order to show that the flag-off path is untouched.
+# Build a smaller VG12 frame with both geometry options disabled to check the
+# non-centred path against the centred variant.
 SMALL = dataclasses.replace(
     VG12,
     sample_fraction=0.1,
@@ -76,18 +61,10 @@ def _require_data():
 
 
 def test_only_the_re_models_carry_the_geometry_fields():
-    """The load-bearing invariant of the subclass refactor.
+    """Keep random-effect geometry fields off plain univariate definitions.
 
-    A fit is validated by comparing ``dataclasses.asdict`` of its definition
-    against the registered one, field for field, so a definition class that gains
-    a field invalidates every existing fit of that class -- including models that
-    never set it. The two geometry options therefore live on
-    ``UnivariateREModelDefinition`` and not on the shared base: VG01-VG04 have no
-    random effects at all, and putting the fields on the base would have made four
-    published models of record stale for no modelling reason.
-
-    If this test fails because a plain univariate model became a subclass
-    instance, that model needs a refit before it can be published again.
+    Fit validation compares serialised definitions field by field. Adding a
+    field to the shared base would change definitions that have no use for it.
     """
     from vocab_growth.models.definitions import (
         MODEL_REGISTRY,
@@ -110,7 +87,7 @@ def test_only_the_re_models_carry_the_geometry_fields():
 
 
 def test_the_re_models_enable_centring():
-    """VG11 and VG12 ship with it on, per the VG12 trial (22x ESS on tau)."""
+    """VG11 and VG12 use centred study intercepts."""
     from vocab_growth.models.definitions import VG11, VG12
 
     assert VG11.centred_study_re is True
@@ -169,10 +146,9 @@ def test_the_two_branches_induce_the_same_prior(n_studies):
         centred = pm.ZeroSumNormal("d", sigma=tau * zsn_sigma, shape=n_studies)
         b = pm.draw(centred, draws=draws, random_seed=11)
 
-    # Marginal per-study SD matches, and equals tau's own scale (the sqrt(K/(K-1))
-    # rescaling is exactly what preserves it).
+    # Compare marginal per-study SDs after the zero-sum variance correction.
     assert a.std() == pytest.approx(b.std(), rel=0.05)
-    # Whole distribution matches, not just its second moment.
+    # Also compare quantiles, beyond the second moment.
     qs = np.linspace(0.01, 0.99, 99)
     assert np.allclose(
         np.quantile(a.ravel(), qs), np.quantile(b.ravel(), qs), atol=0.02

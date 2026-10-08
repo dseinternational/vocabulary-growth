@@ -126,10 +126,10 @@ def test_the_scored_set_is_the_same_under_both_units():
 
 
 def test_a_first_wave_is_never_scored():
-    """It carries no lag, so both arms give it the identical density.
+    """Exclude first waves from this later-visit prediction target.
 
-    Scoring it would add a row that cannot move the difference but does move the
-    paired standard error.
+    Their direct lag term is zero. Their predictions can still change after
+    separate refits through shared parameter posteriors.
     """
     fold = np.array([3])  # a singleton child
     assert len(wf.scored_rows(FOLD_FRAME, fold)) == 0
@@ -158,13 +158,7 @@ def _registered_frame():
 
 @pytest.mark.slow
 def test_no_first_wave_carries_a_lag_on_the_registered_frame():
-    """The two wave notions must coincide, or the scored set is the wrong one.
-
-    ``wave_index`` walks the frame here; ``prev_wave_lag_for_frame`` walks it in
-    the engine. They are separate implementations of "a child's administration
-    waves in age order", and a disagreement would show up as a first wave with a
-    lag source — a same-age or backwards prediction.
-    """
+    """Check that first waves have no source under the shared lag convention."""
     frame, definition = _registered_frame()
     lagged, _source = wf.lag_source(frame, definition)
     assert not lagged[wf.wave_index(frame) == 0].any()
@@ -172,20 +166,10 @@ def test_no_first_wave_carries_a_lag_on_the_registered_frame():
 
 @pytest.mark.slow
 def test_the_lagged_scored_rows_are_the_coefficients_own_support():
-    """Cross-check against the count the #242 audit reached independently.
+    """Check the fixed frame count of lagged rows carrying a spoken observation.
 
-    The audit says the coefficient rests on 473 administrations. That is exactly
-    the lagged rows carrying a spoken observation, so if this script's scored set
-    disagreed with it, one of the two would be describing a different model.
-
-    501 since 2026-09-14: correcting uk_01's comprehension count to include the
-    words produced (#320) restored 42 uk_01 comprehension values, and 28 uk_01
-    later waves gained a lag source from them (22 -> 50 supporting rows there;
-    every other study unchanged). The audit's 473 describes the frame before it.
-
-    500 since 2026-09-15: ie_02's recorded 476-word ceiling lets the form-ceiling
-    guard drop one administration whose comprehension count of 477 exceeds it,
-    and that administration was the lag source for its child's later wave.
+    This count depends on the prepared data and exclusion rules. Recheck the
+    source evidence when either changes rather than accepting a new count alone.
     """
     frame, definition = _registered_frame()
     lagged, _source = wf.lag_source(frame, definition)
@@ -195,14 +179,7 @@ def test_the_lagged_scored_rows_are_the_coefficients_own_support():
 
 @pytest.mark.slow
 def test_the_audits_unlagged_later_wave_count_is_reproduced():
-    """125 later rows whose every earlier wave lacked comprehension.
-
-    The third number the available-case audit reached independently. Together
-    with the 975 first waves it accounts for every row the coefficient cannot
-    reach, so agreement here means the two are describing the same frame. The
-    audit counted 153; the 2026-09-14 uk_01 comprehension correction (#320) gave
-    28 of them a lag source, all uk_01 (58 -> 30), and moved no first wave.
-    """
+    """Check the fixed count of later rows without an eligible lag source."""
     frame, definition = _registered_frame()
     lagged, _source = wf.lag_source(frame, definition)
     later = wf.wave_index(frame) > 0
@@ -582,13 +559,10 @@ def test_a_marginal_row_is_scored_on_its_marginals_and_has_no_composition():
 
 
 def test_the_composition_is_found_from_the_frame_not_the_training_mask():
-    """The defect the first end-to-end run hit, pinned.
+    """Find held-out compositions from frame columns, not likelihood masks.
 
-    ``obs_cells_mask`` marks the cross-tab rows **in the likelihood**, and a
-    fold's held-out rows are excluded from it by construction -- so every row
-    this scores is absent from that mask and reading it scored no composition at
-    all. The run got as far as pivoting an all-missing column away and then
-    failed on its absence, several minutes of fold fitting later.
+    Training masks exclude the rows being scored and cannot identify their
+    observation type.
     """
     frame = _joint_frame()
     scored = _score_joint(frame)
@@ -641,12 +615,7 @@ def _long(**outcomes) -> pd.DataFrame:
 
 
 def test_the_wide_table_has_one_row_per_scored_row():
-    """`dropna=False` fabricated six rows out of two, and was tried first.
-
-    A cross-tab row scores a composition and no spoken marginal, so the frame
-    genuinely holds missing values in every run; the fix for a vanished column
-    must not invent rows to keep one.
-    """
+    """Retain each observed row without expanding the index-level Cartesian product."""
     long = _long(
         elpd_spoken=[np.nan, -3.0, np.nan, -3.1],
         elpd_cells=[-9.0, np.nan, -9.1, np.nan],

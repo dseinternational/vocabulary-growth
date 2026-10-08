@@ -1,37 +1,17 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""One record per registered model, outside its statistical definition.
+"""Engine and reporting declarations for every registered model.
 
-A model is more than the definition ``definitions.py`` holds. It also has an
-engine, a wrapper module, an analysis-frame builder, a prior-predictive hook, a
-plot hook and a report template -- and until this module existed each of those
-lived in a separate hand-maintained table: the engine in every ``model_vgNN``
-import, again in :data:`vocab_growth.analysis_frames.FRAME_BUILDERS`, again in
-``scripts/regenerate_plots.py``, again in ``scripts/prior_predictive_audit.py``
-and again in several test dispatch tables. Drift guards over some of the copies
-are not enough. The audit script's copy was stale for six of the twenty
-registered models (VG16 and VG19-VG23, all of which use ``common_bivariate_re``
-while the script routed them through the plain ``common_bivariate``), and it
-still produced plots -- so an audit of the wrong graph looked like a valid prior
-check (issue #273).
+The catalogue records each model's engine, hooks, template and reporting role.
+Engine choice cannot be inferred from the definition class: VG05 and VG07
+share a class but use different engines. Tests check the declarations against
+wrappers, the registry and the documented roles.
 
-The record is deliberately **not** part of the serialised statistical
-definition. A fit is validated by comparing the manifest's recorded definition
-field for field, so adding a field to a definition dataclass invalidates every
-existing fit of that class. Reporting hooks remain outside that definition.
-A separate executable-code signature now checks implementation changes, including
-engine changes, before a fit is reused.
-
-**Engine identity is not inferred from the definition class.** VG05 and VG07
-share ``BivariateModelDefinition`` and run on different engines, so the class
-cannot decide. It is declared here once, and
-``tests/test_model_catalogue.py`` pins each declaration against what the
-model's own wrapper module imports.
-
-Everything is held as **strings resolved on demand**, so importing this module
-costs nothing: the engines pull in PyMC, and the validators that need a frame
-builder (``sync_report_figures``, ``compare_models``) must not.
+These declarations stay outside the serialised statistical definition.
+Executable signatures separately detect changes to engines and other package
+code. Hooks are named as strings and imported on demand, so reading the
+catalogue does not import the PyMC engines.
 """
 
 from __future__ import annotations
@@ -51,20 +31,17 @@ from vocab_growth.models.definitions import MODEL_REGISTRY, ModelDefinition
 
 @dataclass(frozen=True)
 class EngineAdapter:
-    """How one fitting engine's pipeline stages are named and called.
+    """Names and calling conventions for one fitting engine.
 
-    Every field but ``name`` is an attribute of :attr:`module`, resolved on
-    demand. The ``*_call`` fields record a **calling convention** rather than a
-    signature, because the stages genuinely differ in what they need beyond the
-    context and passing the wrong one raises only when that stage is reached --
-    which, for a script that runs a single stage, is at the point of use.
+    Hook fields name module attributes resolved on demand. The *_call fields
+    describe how to invoke those hooks; name and explanatory fields are metadata.
     """
 
     name: str
     """Stable engine key, used in messages and in derived dispatch tables."""
 
     module: str
-    """Dotted path of the engine module every other field is an attribute of."""
+    """Dotted module path used to resolve the declared hooks."""
 
     prepare: str
     """Data-preparation stage; called ``f(context, definition)``."""
@@ -79,18 +56,11 @@ class EngineAdapter:
     """Prior-predictive stage."""
 
     prior_checks_call: str
-    """How :attr:`prior_checks` is invoked, matching the engine's own fit pipeline.
+    """Calling convention for the prior-predictive hook.
 
-    ``"outcome"`` passes the outcome column and label positionally (the
-    single-outcome stage is shared across models plotting different outcomes);
-    ``"definition"`` passes the definition, which is what adds
-    :mod:`vocab_growth.models.prior_child_checks`'s unseen-child figures; and
-    ``"context"`` passes nothing further.
-
-    The two bivariate engines differ here, and that difference is the point:
-    ``common_bivariate_re`` passes the definition so a child-effect model's
-    prior figures contain a child (issue #233), while the plain engine, which
-    has no child effects, does not.
+    outcome passes an outcome column and label; definition passes the model
+    definition; context passes only the context. Both bivariate engines use
+    definition, so child checks can read the selected effect structure.
     """
 
     frame_builder: str
@@ -124,22 +94,12 @@ class EngineAdapter:
     """
 
     samples_extractor: str | None = None
-    """Pure ``f(trace) -> samples`` for a replot, or ``None`` to re-sample instead.
+    """Stored-draw extractor for a replot, or None to rerun predictions.
 
-    Declared rather than probed. ``regenerate_plots.py`` used to decide this with
-    ``getattr(engine_module, "extract_model_samples", None)``, which made the branch
-    a function of an engine module's **import list**: ``common_bivariate_re`` imports
-    the shared predictive but not the shared extractor, so its eleven models silently
-    took the re-sampling path while the surrounding comment said the bivariate engines
-    reused stored draws. Adding that name for an unrelated reason would have flipped
-    eleven models' replot behaviour with nothing to notice.
-
-    ``None`` means the replot re-runs :attr:`posterior_predictive`, which is seeded
-    from the sampling configuration. That reproduces the stored draws only on the
-    fit's own numerical stack, so ``regenerate_plots.py`` compares the re-run draws
-    with the stored ones and refuses a model whose draws have moved. Whether an
-    engine that could expose an extractor *should* is a separate decision; these
-    declarations record what each engine does today.
+    The choice is declared rather than inferred from imports. Without an extractor,
+    the predictive stage uses the recorded sampling seed. Replot checks the rerun
+    draws against stored draws because seeds alone do not guarantee reproduction
+    across numerical environments.
     """
 
     posterior_predictive: str | None = None
@@ -176,17 +136,11 @@ class EngineAdapter:
         return self.plots is not None
 
     def resolve(self, attribute: str) -> Any:
-        """The callable this adapter names in ``attribute``.
+        """Resolve the hook named by attribute.
 
-        Raises ``AttributeError`` naming both the engine and the field, rather
-        than returning ``None`` for a caller to trip over later -- but only for a
-        hook this engine declares as absent. A field name *misspelt by the caller*
-        raises from the ``getattr`` below with only that name, and a declared hook
-        the module does not actually define raises from ``getattr`` on the module,
-        naming the module rather than the engine. Both are pinned by
-        ``tests/test_model_catalogue.py``, which is what makes the declarations
-        trustworthy enough for this to return ``Any``: the return type cannot be
-        narrowed while the hooks have five different signatures.
+        Raise AttributeError when the field or declared hook is absent. Missing hook
+        messages identify the engine and field or module. Hook return types remain
+        Any because the declared stages have different signatures.
         """
         name = getattr(self, attribute)
         if name is None:
@@ -233,12 +187,8 @@ ENGINES: dict[str, EngineAdapter] = {
             frame_builder="build_univariate_re_analysis_frame",
             fit="fit_univariate_re_model",
             stages="univariate_re_stages",
-            # No replot path. The engine re-exports `run_standard_plots` and
-            # `extract_model_samples` from `common`, so one is within reach, but
-            # its posterior-predictive stage is this engine's own
-            # (`sample_posterior_predictive_re`) and redrawing VG11/VG12 out of
-            # a fit has never been exercised. Claiming support that has not been
-            # run would turn a refusal into a wrong figure.
+            # Replotting this engine has not been validated. Its declared
+            # posterior-predictive stage differs from the common extractor.
             replot_note=(
                 "no exercised replot path for the univariate random-effect "
                 "engine; VG11/VG12 figures come from a refit"
@@ -251,12 +201,6 @@ ENGINES: dict[str, EngineAdapter] = {
             priors="configure_bivariate_priors",
             build="build_model",
             prior_checks="prior_predictive_checks",
-            # "definition", like the RE engine: the stage's `definition` parameter
-            # used to default to None so VG05 could omit it, and this convention
-            # recorded that. VG05 has no child effects, so `prior_child_checks`
-            # adds nothing for it and passing the definition is byte-identical --
-            # one convention fewer, and no optional parameter pretending a caller
-            # might not have one.
             prior_checks_call="definition",
             frame_builder="build_bivariate_analysis_frame",
             fit="fit_bivariate_model",
@@ -277,10 +221,7 @@ ENGINES: dict[str, EngineAdapter] = {
             stages="bivariate_re_stages",
             plots="run_bivariate_joint_plots",
             plots_call="definition",
-            # This engine imports the shared predictive from `common_bivariate` but
-            # not the shared extractor, so its eleven models re-run the predictive
-            # on replot. Declared, not inferred: the old `getattr` probe made the
-            # branch depend on this module's import list.
+            # This engine regenerates predictions when redrawing figures.
             posterior_predictive="sample_posterior_predictive",
         ),
         EngineAdapter(
@@ -325,22 +266,10 @@ ENGINES: dict[str, EngineAdapter] = {
 
 
 class ModelRole(enum.Enum):
-    """What a model is *for*, and therefore whether it must be refit-current.
+    """Declared reporting purpose and the publication checks it requires.
 
-    The taxonomy is not new. ``methods-workflow.qmd`` defined it and the roles
-    table in ``docs/models/README.md`` assigns it; what was missing is any way
-    for code to read it, so every registered model was treated identically by
-    the refit driver and by publication validation. One stale development rung
-    could therefore block publishing the models of record, and a correction
-    touching two models that carry a reported number invalidated all twenty
-    (#301, recorded on #281).
-
-    Roles are **declared, not inferred**, for the reason engine identity is:
-    nothing about a definition says whether its estimates are the ones the
-    findings quote. That is a study-owner decision, and
-    ``tests/test_model_catalogue.py`` pins these against the documented table
-    so the prose and the code cannot drift apart the way the engine assignment
-    did (#273).
+    Roles follow docs/models/README.md and study-owner decisions. Registration
+    alone does not establish a role. An unclassified model retains full checks.
     """
 
     MODEL_OF_RECORD = "model-of-record"
@@ -476,24 +405,13 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg10": ModelRole.DEVELOPMENT_STEP,
         "vg14": ModelRole.DEVELOPMENT_STEP,
         "vg16": ModelRole.DEVELOPMENT_STEP,
-        # Study-owner decisions of 2026-09-09, recorded in
-        # ``notes/202609091600-model-roles-settled.md`` and in the roles
-        # table, which ``tests/test_model_catalogue.py`` now pins in both
-        # directions for every role.
-        #
-        # VG24 is the only model that estimates ``rho_sign_q``, the
-        # sign-speech child correlation it was registered to deliver (#296);
-        # VG15 keeps the signing trajectories. Whether VG24 takes the rest of
-        # VG15's role is an open promotion question, not decided here.
+        # Role decisions are recorded in notes/202609091600-model-roles-settled.md.
+        # VG24 supplies rho_sign_q; VG15 retains the signing-trajectory role.
         "vg24": ModelRole.MODEL_OF_RECORD,
-        # The typically-developing side of the between-child correlation
-        # contrast (``rho_uq`` 0.127 against VG20's 0.433); nothing else
-        # estimates it.
+        # TD reference for the between-child understood/production correlation.
         "vg23": ModelRole.TD_REFERENCE,
-        # Replaced as the TD joint comparator by VG21 on 2026-09-02, when both
-        # ``compare_ds_td_*`` scripts moved ``TD_KEY``: its support ends at
-        # about 221 understood words. Still VG23's exact nested null, which a
-        # ``-Scope all`` run refits with it.
+        # VG21 replaced this narrow-window TD comparator. The zero-correlation
+        # child block matches VG23, but VG23 also adds a sex term.
         "vg13": ModelRole.SUPERSEDED,
         # The single-outcome, single-level baselines each lineage was built
         # on: VG20 carries VG01 and VG02's estimands, VG11 and VG12 are VG03
@@ -502,28 +420,12 @@ def _catalogue() -> dict[str, RegisteredModel]:
         "vg02": ModelRole.DEVELOPMENT_STEP,
         "vg03": ModelRole.DEVELOPMENT_STEP,
         "vg04": ModelRole.DEVELOPMENT_STEP,
-        # Each contributes a finding and no number: VG19 the level/rate
-        # dissociation (reporting decision of 2026-08-22), VG22 the sign of the
-        # level-to-rate coupling, whose magnitude the pool's follow-up cannot
-        # identify (``notes/202609091400-is-vg22-the-better-description.md``).
-        # Neither is a promotion candidate; VG20 keeps the DS joint role.
+        # Retained for child level/rate structure checks; VG20 keeps the DS role.
         "vg19": ModelRole.DEVELOPMENT_STEP,
         "vg22": ModelRole.DEVELOPMENT_STEP,
     }
-    # VG26 (#240) is absent for the same reason, and one more. It is registered
-    # to supersede VG21 (and with it VG13), but VG21 keeps its TD-reference role
-    # until VG26 has a fit and the checks recorded above its definition have been
-    # read, so neither role changes on registration alone.
-    #
-    # VG25 (#297) is deliberately absent, and so is its row in the roles table.
-    # Its role is a study-owner decision taken with #190's other scope questions
-    # (#297 check 7), and until it is taken UNCLASSIFIED is the right answer
-    # rather than a placeholder: it keeps full publication strictness and puts
-    # the model in the default refit scope, which is what a model with no fit at
-    # all needs. Classifying it is then one edit here and one row there.
-    #
-    # Fails closed: anything the record does not classify keeps full
-    # publication strictness rather than silently relaxing.
+    # VG25 and VG26 have no declared role. Keep full publication checks until
+    # the study owner records and assigns one.
     role_of.update(
         {key: ModelRole.UNCLASSIFIED for key in MODEL_REGISTRY if key not in role_of}
     )
@@ -558,14 +460,8 @@ def _catalogue() -> dict[str, RegisteredModel]:
 #: Every registered model, in ``MODEL_REGISTRY`` order.
 CATALOGUE: dict[str, RegisteredModel] = _catalogue()
 
-# The exploratory sign-group modules (VG17, VG18) are deliberately absent. They
-# are not in MODEL_REGISTRY and carry a custom fit path that bypasses the shared
-# manifest, staged promotion and convergence gate, so a catalogue entry would
-# assert a supported lifecycle they do not have. Issue #273 finding 4 asked for
-# that to be decided rather than left implicit; it was, on 2026-08-31, in favour
-# of "explicitly exploratory and non-validatable" -- they now live in
-# `vocab_growth.models.exploratory`, outside the `model_vgNN` naming convention
-# `fit_model.py` resolves, so they are unreachable from here by construction.
+# Exploratory VG17/VG18 bypass the shared manifest, staged promotion and
+# convergence gate. They stay outside the registered catalogue and CLI dispatch.
 # Productionising either remains a statistical decision for #266.
 
 
@@ -617,16 +513,10 @@ def engine_for_definition(definition) -> EngineAdapter:
 
 
 def publication_models() -> list[str]:
-    """Registry keys whose role requires a refit-current, publication-valid fit.
+    """Registry keys whose roles require current, publication-valid fits.
 
-    The refit driver's default scope. ``run_replication.ps1`` used to derive its
-    list from ``MODEL_REGISTRY``, so a full run refitted every registered model
-    whether or not it supplies a reported number -- 15-25 hours of sampling, of
-    which the development steps buy nothing publishable. This is the same list
-    ``sync_report_figures.py`` refuses to publish without.
-
-    Includes ``UNCLASSIFIED`` by way of :attr:`ModelRole.publication_required`,
-    so an undecided model is still refitted rather than quietly dropped.
+    This is the replication driver's default scope. It includes unclassified
+    models until the study owner assigns their reporting roles.
     """
     return [key for key, model in CATALOGUE.items() if model.role.publication_required]
 

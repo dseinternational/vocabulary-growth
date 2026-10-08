@@ -33,10 +33,11 @@ reported as beyond the window rather than as a number, and where more than
 (1-X) of a draw's cohort never reach the target inside the grid the percentile
 itself is censored.
 
-The latent proportion is the estimand, not a simulated questionnaire score: the
-Beta-Binomial observation noise (``kappa``) is measurement scatter around a
-child's own trajectory, so including it would answer "what would this child
-score on one administration", not "has this child learned N words".
+The target is a child's modelled expected checklist count. It is not a known
+number of words learned or a simulated questionnaire score. Beta-Binomial
+variation describes count scatter around the trajectory; it does not isolate
+measurement error. Including it would answer a question about a reported count
+on one administration rather than about the expected-count curve.
 """
 
 from __future__ import annotations

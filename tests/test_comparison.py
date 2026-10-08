@@ -139,15 +139,15 @@ def test_comprehension_equivalent_age_uses_first_crossing_for_nonmonotone_refere
 
 
 def test_milestone_table_is_median_of_crossings():
-    # Three draws with different linear slopes; each reaches 100 words at a known
-    # age. milestone_table must report the median-of-crossings (age 10 here), NOT
-    # the crossing of the median count curve.
-    ages = np.array([0.0, 10.0, 20.0, 30.0])
+    # First crossings are 5, 10 and 20. The first draw then falls below 100,
+    # so the median count curve first crosses at 20, rather than 10.
+    ages = np.array([0.0, 5.0, 10.0, 20.0, 30.0])
     W = np.array([
-        [0.0, 200.0, 400.0, 600.0],  # crosses 100 at age 5
-        [0.0, 100.0, 200.0, 300.0],  # crosses 100 at age 10
-        [0.0, 50.0, 100.0, 150.0],   # crosses 100 at age 20
+        [0.0, 100.0, 0.0, 0.0, 0.0],
+        [0.0, 50.0, 100.0, 200.0, 300.0],
+        [0.0, 25.0, 50.0, 100.0, 150.0],
     ])
+    assert comparison.first_crossing(ages, np.median(W, axis=0), 100.0) == 20.0
     tbl = comparison.milestone_table(W, ages, targets=[100], ci_prob=0.89)
     row = tbl.iloc[0]
     assert row["target_words"] == 100
@@ -159,8 +159,8 @@ def test_milestone_table_is_median_of_crossings():
 def test_milestone_table_flags_unreached_and_below_support():
     ages = np.array([8.0, 12.0, 16.0])
     # Draw 0 never reaches 400 on the grid; draw 1 is already above 400 at the
-    # youngest age (crossing below support) — both are excluded from the age
-    # summary and counted in prop_reaching.
+    # youngest age (crossing below support). Neither has an identified crossing,
+    # so neither contributes to the age summary or prop_reaching.
     W = np.array([
         [10.0, 50.0, 120.0],   # never reaches 400
         [500.0, 600.0, 700.0],  # already > 400 at age 8 → unidentified
@@ -194,8 +194,7 @@ def test_dq_contrast_facts_missing_or_empty_is_none():
 
 
 def test_dq_contrast_facts_extents_peak_and_direction():
-    # Rises from a non-credible negative point, through zero, to a credible
-    # positive plateau — the shape the current DS/TD fits produce.
+    # Medians rise through zero; only two intervals exclude zero above it.
     facts = comparison.dq_contrast_facts(_dq_frame([
         (30, -0.014, -0.033, +0.001, 1.0),
         (50, -0.001, -0.018, +0.014, 1.0),
@@ -312,9 +311,7 @@ def test_child_spread_product_correlated_matches_monte_carlo():
 
 
 def test_child_spread_product_rho_zero_is_the_independent_case_exactly():
-    # `rho=None` is not a separate approximation, it is the rho = 0 branch. Every
-    # model before VG20 goes down the None path, so this equality is what lets the
-    # correlation be added without restating any published uncorrelated number.
+    # `rho=None` must preserve the independent-case result at rho = 0.
     f_u = np.array([[-3.0, -1.0, 0.5], [-2.5, -0.5, 1.0]])
     h = np.array([[-2.0, -0.5, 0.5], [-1.5, 0.0, 0.8]])
     tau_u, tau_q = np.array([0.8, 0.9]), np.array([1.3, 1.2])
@@ -327,10 +324,8 @@ def test_child_spread_product_rho_zero_is_the_independent_case_exactly():
 
 
 def test_child_spread_product_positive_rho_widens_and_negative_narrows():
-    # The direction is the whole reason the parameter has to be carried:
-    # log p_S = log p_U + log q gains 2 Cov, so the independent-draw derivation
-    # understates the spoken spread whenever the correlation is positive. VG20
-    # puts it at +0.368, so the published DS spoken tau was biased low.
+    # Check the direction of the spread change for these selected logits,
+    # scales and correlations.
     f_u = np.array([[-3.0, -1.0, 0.5]])
     h = np.array([[-2.0, -0.5, 0.5]])
     tau_u, tau_q = np.array([0.79]), np.array([1.28])
@@ -375,9 +370,7 @@ def test_child_spread_product_tau_varies_with_age_at_constant_scales():
 
 
 def test_child_spread_product_quadrature_has_converged_at_the_default_node_count():
-    # Monte Carlo cannot referee the far lower tail (see above), so the tail is
-    # checked for node convergence instead: the shipped default must already agree
-    # with a far finer grid on the most extreme scales the DS fits could produce.
+    # Check the default quadrature against more nodes at large selected scales.
     f_u = np.array([[-12.0, -6.0, -2.0]])
     h = np.array([[-10.0, -4.0, -1.0]])
     tau_u, tau_q = np.array([3.0]), np.array([3.0])
@@ -436,11 +429,10 @@ def _sign_speech_trace(tmp_path, ages, p_u, q, r, pi):
 
 
 def test_sign_speech_cells_are_scaled_by_comprehension(tmp_path):
-    """The pi_* cells are conditional on understood, so they scale by p_u.
+    """Convert cell shares within understood vocabulary to inventory-wide counts.
 
-    Treating them as unconditional inflates every cell by 1/p_u, which at the
-    youngest modelled ages is a factor of fifty — the difference between "a
-    2-year-old has 28 sign-only words" and "197".
+    Each count is ``n_trials * p_u * pi_cell``. Omitting ``p_u`` inflates it by
+    ``1 / p_u``.
     """
     ages = [12.0, 24.0, 36.0]
     p_u = [0.02, 0.10, 0.30]
@@ -678,12 +670,10 @@ def _slope_fixture(tmp_path, monkeypatch):
 def test_subject_heterogeneity_reads_the_rate_not_just_the_reference_age_spread(
     tmp_path, monkeypatch
 ):
-    """VG19's between-child spread is a curve; reading `tau_subj_u` gives a line.
+    """Read the age-varying spread rather than repeating the reference-age scale.
 
-    A slope model still emits `tau_subj_u` as a Deterministic equal to `tau0`, so
-    a loader that reads it succeeds and silently reports the 36-month spread at
-    every age -- discarding `tau1` and `rho01`. This is the #224 defect class: a
-    fitted parameter thrown away by the derived quantity that exists to use it.
+    The slope model also stores ``tau_subj_u = tau0``. Reading only that node
+    would discard the slope scale and intercept-slope correlation.
     """
     ages, f_u, _h, tu, _tq = _slope_fixture(tmp_path, monkeypatch)
     _, tau_logit, _, _ = comparison.subject_heterogeneity("vg19", "understood")
@@ -700,11 +690,10 @@ def test_subject_heterogeneity_reads_the_rate_not_just_the_reference_age_spread(
 
 
 def test_subject_heterogeneity_slope_scale_follows_the_caller_grid(tmp_path, monkeypatch):
-    """The scale is a function of age, so it is built on the grid actually reported.
+    """Evaluate the child scale at the reported ages.
 
-    Interpolating it from the model's native grid would be a different quantity:
-    the curve is a square root of a quadratic, not a smooth the interpolator can
-    stand in for.
+    The scale is a square root of a quadratic. Interpolating native-grid
+    values generally differs from evaluating that function at the target age.
     """
     _ages, _f_u, _h, tu, _tq = _slope_fixture(tmp_path, monkeypatch)
     want_at = np.array([18.0, 30.0, 42.0])
@@ -814,10 +803,7 @@ def _weighted_fixture():
 
 
 def test_univariate_weighted_child_follows_the_studies_present_at_each_age(tmp_path):
-    """VG11/VG12 had no weighted loader, so the weighted attainment delay was
-    read against the joint comparator and stopped at its window (#289 4.5).
-    The single-outcome loader must weight the study offsets by who is sampled
-    at each age, exactly as the joint loader does."""
+    """Weight each study's expected counts by its administrations near each age."""
     import xarray as xr
     from scipy.special import expit
 
@@ -848,8 +834,7 @@ def test_univariate_weighted_child_follows_the_studies_present_at_each_age(tmp_p
 
 
 def test_joint_weighted_child_matches_the_univariate_construction(tmp_path):
-    """The joint loader shares the study weights with the single-outcome one,
-    so the two sides of a weighted contrast mean the same child."""
+    """Use the same study-weight policy in joint and single-outcome loaders."""
     import xarray as xr
     from scipy.special import expit
 

@@ -2,12 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Model VG09: Joint model of words understood and spoken with study + subject
-random intercepts on BOTH the understood trajectory and the production ratio
-- children with Down syndrome.
+VG09 jointly models understood and spoken vocabulary in Down syndrome.
 
-Extends VG08 by adding non-centered subject-level random intercepts on the
-production ratio q in addition to the existing subject REs on understood.
+It adds child random intercepts on the spoken share ``q`` to VG08's child
+intercepts on comprehension. It also uses two-anchor dispersion priors.
 """
 
 from vocab_growth.models.common_bivariate_re import (

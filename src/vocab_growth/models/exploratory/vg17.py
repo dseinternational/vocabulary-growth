@@ -1,49 +1,23 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Model VG17: study-adjusted contrast of DS *spoken* vocabulary by sign-group.
+"""Exploratory spoken-vocabulary comparison by recorded signing group.
 
-**EXPLORATORY. Its output is not validatable and must not be published.** See
-:mod:`vocab_growth.models.exploratory` for what a `fit()` here does not produce.
+This unregistered model's output must not be published. See
+vocab_growth.models.exploratory for the missing validation and fit artefacts.
 
-A single-outcome (words spoken) DS model on the logit scale:
+The outcome logit combines an age trend and GP, study and child intercepts,
+and a three-level signing-group coefficient. Unknown signing status is the
+reference. The model uses VG01's trajectory and dispersion priors and ages
+12-66 months.
 
-    f(a, s, c, g) = mean_trend(a) + gp(a) + delta[s] + delta_subj[c] + beta_sign[g]
-    delta[s]      ~ Normal(0, tau)       study (dataset) random intercepts
-    delta_subj[c] ~ Normal(0, tau_subj)  child random intercepts
-    beta_sign[g] : g in {unknown (ref, 0), non-signer, signer}
+The group contrasts are observational. Signing status may vary between a
+child's visits, while unknown status may be confounded with study. Study and
+child adjustment does not establish a causal effect or guarantee that a
+contrast is identified.
 
-restricted to ages 12-66 months (the dense window). Data is loaded through the
-canonical `load_combined_data`, so the DS pool's cleaning rules all apply; see
-`_prepare`. The study random intercepts absorb between-cohort level differences
-and the child intercepts absorb the repeated-measures correlation (most
-observations come from children with more than one visit, and some change sign
-group between visits), so `beta_sign` estimates the *residual* sign-group
-difference after cohort and child adjustment. Because sign data was collected
-almost entirely at the study level (only uk_02 has both sign and no-sign rows),
-the **recorded-vs-unknown** contrast is largely confounded with study and is only
-weakly identified once study REs are present; the **signer-vs-non-signer**
-contrast varies *within* the sign-recorded studies and is the cleanly identified
-one. Both are reported.
-
-Reuses the family's HSGP trend + age-varying Beta-Binomial machinery
-(`gp_utils`, `build_utils`); the sign-group covariate and the study/child
-intercepts are the structural additions.
-
-**Exploratory. Its output is not validatable and must not be published.** It is
-self-contained -- not routed through a shared engine, not in `MODEL_REGISTRY`,
-not in the model inventory -- so it cannot perturb the model family, and since
-issue #273 it lives in `vocab_growth.models.exploratory`, whose docstring lists
-what its `fit()` does not produce (no manifest, no staged promotion, no
-predictive checks, no calibration, no LOO, no convergence gate). Every output
-directory it writes carries an `exploratory_output.json` saying so.
-
-Folding the covariate into `common_univariate_re` would be the productionisation
-step, and it is a **statistical** decision rather than a packaging one: that
-engine constrains its study effects to sum to zero while this model uses
-unconstrained offsets, so routing it through would change the model rather than
-move it. That work belongs with #266.
+The fitting path uses unconstrained study offsets. Registering it through the
+zero-sum random-effect engine would change its statistical specification.
 """
 
 import os
@@ -86,41 +60,26 @@ TAU_SUBJECT_SIGMA = 1.5
 
 
 def _prepare(outcome="spoken", studies=None):
-    """Load DS `outcome` data, 12-66 mo, with study, child and sign-group codes.
+    """Prepare ages 12-66 months with study, child and signing-group codes.
 
-    Data comes from the canonical loader, so every DS-pool cleaning rule the rest
-    of the family applies is applied here too (ceiling-only children, below-form-
-    floor administrations, duplicate administrations, partial administrations,
-    duplicated outcome columns, implausible production, comprehension below
-    production). ``include_produced=True`` retains the ``produced`` union column
-    that VG18 uses as its outcome; it is the only reason this module ever read the
-    view directly, and reading it directly silently skipped five of the seven
-    rules (issue #266 finding 6).
+    The canonical loader applies the pool's cleaning rules. The signing-source
+    mask then excludes fields that cannot represent total signing. For a produced
+    outcome, drop_ungroupable_produced_unions also removes the configured sources
+    whose signing component cannot be assigned to a group.
 
-    :func:`~vocab_growth.data_utils.mask_incomparable_signed_outcomes` is applied
-    on top, and deliberately here rather than in the loader: it is specific to the
-    signing models, and the canonical loader leaves ``signed`` alone. For the
-    ``produced`` outcome,
-    :func:`~vocab_growth.data_utils.drop_ungroupable_produced_unions` is applied
-    as well, for the same reason and on the same principle.
-
-    ``studies`` (optional) restricts to a subset, e.g. ("uk_02", "nz_01", "es_01")
-    for the de-duplicated-union total-expressive analysis (see model_vg18 docstring).
+    studies optionally restricts the source set. See exploratory.vg18 for the
+    different definitions of produced and its partly mechanical group contrast.
     """
     df = vocab_data_utils.load_combined_data(include_produced=True)
     df = df[df[outcome].notna() & df["age"].between(AGE_LO, AGE_HI)].copy()
     if studies is not None:
         df = df[df["study"].isin(list(studies))].copy()
-    # Classify sign groups only from sources whose field represents total sign
-    # use.  uk_01 is signed-only and uk_06 is not source-verified; both remain in
-    # the outcome model as the explicit "unknown" reference group.
+    # Classify groups only from total-signing fields. uk_01's signed-only
+    # field is masked, so its observations remain in the unknown group.
     df, _ = vocab_data_utils.mask_incomparable_signed_outcomes(df)
     if outcome == "produced":
-        # A source whose produced union hides its own sign component cannot be
-        # placed in a sign group: it would land in `unknown` while its outcome
-        # contains the exposure. See PRODUCED_UNION_WITHOUT_SIGN_DETAIL. Only
-        # the produced outcome is affected -- `spoken` does not contain `signed`,
-        # which is the whole reason VG17 is the interpretable contrast.
+        # Drop configured produced-union sources with no signing detail.
+        # Otherwise their signing group would be unknown by construction.
         df, _ = vocab_data_utils.drop_ungroupable_produced_unions(df)
     # sign group: unknown (no sign data) / non-signer (signed==0) / signer (signed>0)
     sg = np.where(df["signed"].isna(), 0, np.where(df["signed"] > 0, 2, 1))

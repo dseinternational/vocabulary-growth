@@ -1,20 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Which models share each DS-joint prior group, pinned rather than described.
+"""Check which registered models share DS-joint prior and reporting settings.
 
-Seven registrations restated the same eleven trajectory-prior and reporting field
-values, each above its own verbatim copy of the rationale — 386 lines of literal
-repetition, whose prose carried model counts that had gone stale in four separate
-places ("all seventeen models" against twenty registered; "six models of record"
-for a class tree holding twelve). Those counts *are* the argument a maintainer
-weighs when deciding whether a new field is affordable, so they are asserted here
-instead of written out: a count in a comment drifts silently, a count in a test
-fails.
-
-The values are now splatted from three module-level dicts. That keeps every
-serialised field value byte-identical, so no fit is invalidated — this file's job
-is to make the *next* divergence visible.
+Shared dictionaries and inherited prior objects avoid repeated values.
+These tests make changes to their coverage explicit.
 """
 
 from __future__ import annotations
@@ -67,12 +57,7 @@ def test_every_ds_joint_model_carries_the_group_verbatim(group):
 
 @pytest.mark.parametrize("group", sorted(_GROUPS))
 def test_the_td_bivariate_models_do_not_share_the_group(group):
-    """The TD models are the contrast case, and must stay one.
-
-    If a TD model ever matched the DS group on every field, the group would be a
-    class default rather than a shared constant, and this file would be describing
-    a distinction that no longer exists.
-    """
+    """Keep the TD bivariate settings distinct from each DS-joint group."""
     fields = _GROUPS[group]
     for key in sorted(_TD_BIVARIATE_MODELS):
         definition = MODEL_REGISTRY[key]
@@ -84,13 +69,10 @@ def test_the_td_bivariate_models_do_not_share_the_group(group):
 
 
 def test_the_ds_joint_model_set_is_exactly_the_models_sharing_the_kappa_block():
-    """The anchor groups and the kappa block should cover the same family.
+    """Check that models sharing the concentration block also share the anchors.
 
-    They are separate constants, so nothing forces it; a divergence means one
-    recalibration reached a model the other did not, which is exactly what
-    deriving-rather-than-restating exists to prevent. The kappa block is the
-    narrower of the two — VG05, VG07 and VG08 predate it — so this asserts
-    containment rather than equality, and names the difference.
+    The concentration block covers a subset of the anchor group. Assert the
+    exceptions so a change to one shared group cannot silently miss the other.
     """
     kappa_sharers = {
         key
@@ -113,12 +95,7 @@ def test_the_ds_joint_model_set_is_exactly_the_models_sharing_the_kappa_block():
 
 
 def test_the_bivariate_class_tree_size():
-    """`definitions.py` said "six models of record" for this tree; it holds thirteen.
-
-    The number matters because it is the refit bill for adding a field to
-    `BivariateModelDefinition`, and a maintainer reading the old comment would have
-    budgeted half of it.
-    """
+    """Check the registered models affected by changes to the bivariate base class."""
     tree = sorted(
         k for k, d in MODEL_REGISTRY.items()
         if isinstance(d, D.BivariateModelDefinition)
@@ -142,14 +119,7 @@ def test_the_bivariate_class_tree_size():
 
 
 def test_the_mean_clamp_field_is_declared_by_seventeen_of_the_twenty_three():
-    """`clamp_targets`' docstring gives this as the refit bill for widening it.
-
-    It was written as "fifteen", then briefly as "all twenty" -- which is the reach
-    of `report_max_age_understood` (the test below), not of this field -- and went
-    stale a third time when VG25 registered, which is why this asserts the list and
-    carries the count only in its name. The six univariate models do not declare it,
-    which is why `common_univariate_re` reads it through `getattr`.
-    """
+    """Check which registered models declare the mean-clamp field."""
     declaring = sorted(
         k for k, d in MODEL_REGISTRY.items()
         if "clamp_mean_above_hi_anchor" in {f.name for f in dataclasses.fields(d)}
@@ -174,12 +144,7 @@ def test_the_mean_clamp_field_is_declared_by_seventeen_of_the_twenty_three():
 
 
 def test_every_registered_class_declares_the_comprehension_cap_field():
-    """The cap comment said giving `q` its own field would invalidate "seventeen".
-
-    It is every registered model, because every definition class declares
-    `report_max_age_understood`. Stated as a rule here so the number cannot go
-    stale again.
-    """
+    """Every registered definition class declares the comprehension reporting cap."""
     without = sorted(
         k for k, d in MODEL_REGISTRY.items()
         if "report_max_age_understood" not in {f.name for f in dataclasses.fields(d)}
@@ -189,7 +154,7 @@ def test_every_registered_class_declares_the_comprehension_cap_field():
 
 
 def test_the_shared_kappa_block_covers_eight_definitions():
-    """Two comments in `definitions.py` said "four" and then listed six."""
+    """Check the models that share the understood concentration-prior object."""
     sharers = sorted(
         k for k, d in MODEL_REGISTRY.items()
         if getattr(d, "kappa_u", None) is D._DS_JOINT_UNDERSTOOD_KAPPA_RE

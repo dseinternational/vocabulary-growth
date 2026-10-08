@@ -6,10 +6,11 @@ Reads the arms `marginal_arm.py` writes into a throwaway output root and prints
 the three things the bench has to answer
 (notes/202608231745-singleton-marginalisation.md §7):
 
-1. **equivalence** -- the marginalisation is exact, so `tau_subject`, `kappa` and
+1. **equivalence** -- the arms target the same marginal posterior, so `tau_subject`, `kappa` and
    the reported trajectory must agree with the explicit arm within Monte Carlo
-   error. The printed z is the difference in posterior means over the combined
-   Monte Carlo standard error, so |z| above about 3 is a bug rather than noise.
+   and quadrature error. The printed z divides the difference in posterior means
+   by the combined Monte Carlo standard error. Large |z| warrants investigation;
+   it is not proof of a bug, especially when many quantities are compared.
 2. **geometry** -- energy BFMI, divergences, max R-hat, minimum ESS, and the
    `tau_subject`/`kappa_young` ridge correlation, comparable with the four arms
    of notes/202608050900-td-hierarchical-geometry.md §9.

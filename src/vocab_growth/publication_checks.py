@@ -1,38 +1,18 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Checks that a published page actually resolves (#289 task 4.10).
+"""Check local report assets, upload inventories and published HTTP responses.
 
-A rendered report references its figures by relative path, and an upload that
-carries ``index.html`` without them publishes a page whose every image is
-broken -- which is indistinguishable from a healthy one if only the page's own
-URL is checked. That happened to the comparison book on 2026-09-03
-(``scripts/publish_comparison.py`` records it), and nothing in the model-report
-upload path checked for it either. These helpers are shared by both.
+Both model and comparison publishers use the shared
+``dse_research_utils.report.assets`` parser. Navigation links count as required
+assets because reports offer CSV downloads through ordinary links. Missing
+files, paths outside the publication root and unsupported reference forms fail
+validation. Inspection does not follow linked pages; these publishers upload
+one rendered page and its assets.
 
-Since the shared library's 0.14.0 release the three steps are
-:mod:`dse_research_utils.report.assets`, which parses the HTML rather than
-matching quoted strings and reports each reference's state instead of dropping
-the ones it cannot use. What stays here is the publication policy:
-
-* **Navigation counts.** ``include_navigation=True`` is deliberate. These pages
-  offer their summary tables as ordinary download links (``<a href="...csv">``),
-  which the current checks already treat as required, and a link that 404s is
-  the same broken publication as a missing image.
-* **A missing reference is a failure, not an omission.** The previous scanner
-  dropped any target that did not exist on disk, on the grounds that the render
-  should have complained -- so a page referencing a figure that was never
-  written published silently. :func:`local_failures` names it instead.
-* **Pages are not followed.** Both publishers here upload a single rendered
-  page and its assets, so ``follow_pages`` would only inspect pages nothing
-  publishes as entry points. A multi-page book would need it.
-
-Two encoding rules the previous scanner had wrong are now enforced by the
-shared parser and are worth knowing before writing an artefact filename: an
-``href`` is URL-decoded once, so a file literally named ``50%20.csv`` has to be
-written ``50%2520.csv`` in the HTML (``50%20.csv`` asks the browser for
-``50 .csv``); and ``base href``/``srcset``, which change what a browser
-actually loads, are reported as unsupported rather than certified.
+HTML paths are URL-decoded once. A file literally named ``50%20.csv`` therefore
+needs ``50%2520.csv`` in its ``href``. ``base href`` and ``srcset`` references are
+reported as unsupported because they change how browsers resolve assets.
 """
 
 from __future__ import annotations
@@ -107,7 +87,7 @@ def upload_failures(
 ) -> tuple[AssetFailure, ...]:
     """Local failures plus required files this upload left out.
 
-    ``published`` carries the uploader's **raw** relative filenames -- not URLs
+    ``published`` carries the uploader's raw relative filenames, not URLs
     and not URL-encoded paths. Either separator is accepted: an uploader
     walking a Windows directory yields backslashes whatever platform later
     checks the record. Callers that also need the inspection should call

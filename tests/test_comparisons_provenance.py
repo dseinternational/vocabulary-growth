@@ -1,15 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Provenance for cross-model comparison outputs (issue #266 finding 1).
+"""Validate the contributing fits and data of comparison outputs.
 
-Comparison figures and tables are derived from fitted output, but carried no
-record of which fits they came from: ``sync_report_figures.py`` validated every
-model directory it copied and then copied the comparisons directory wholesale,
-so a comparison generated from a since-replaced fit synced as though it were
-current. These tests pin the two properties that close that hole — a refitted
-contributor is detected, and a comparison whose provenance was never recorded
-is reported rather than passed over in silence.
+A replaced fit must invalidate the recorded comparison. Outputs without
+recorded provenance must also be reported rather than silently accepted.
 """
 
 from __future__ import annotations
@@ -180,11 +175,9 @@ def test_a_vanished_contributor_is_an_error(dirs):
 
 
 def test_an_unclaimed_comparison_file_is_reported_not_ignored(dirs):
-    """Coverage is ratcheted: scripts adopt the manifest one at a time.
+    """Warn about unclaimed outputs during ordinary validation.
 
-    An unrecorded file must be visible, but must not block the comparisons
-    whose provenance *is* recorded — otherwise the first script to adopt the
-    manifest breaks the sync for every other one.
+    Strict publication checks reject them, as tested separately above.
     """
     models_dir, comparisons_dir = dirs
     fit = _write_fit(models_dir, "VG10-x", created="2026-08-01T00:00:00Z")
@@ -217,13 +210,7 @@ def test_a_missing_manifest_is_an_error_naming_the_remedy(dirs):
 
 
 def test_a_source_file_is_recorded_and_a_change_to_it_is_an_error(dirs, tmp_path):
-    """A script with no contributing fit records its raw input instead (#289 4.9).
-
-    `compare_matched_designs.py` reads one CSV and no posterior, so its four
-    tables had no provenance at all and the sync warned on every one. The
-    source file is fingerprinted like a fit manifest: a change stales the
-    comparison, and a missing file is an error rather than a pass.
-    """
+    """Fingerprint raw inputs when a comparison reads data rather than a fit."""
     models_dir, comparisons_dir = dirs
     models_dir.mkdir()
     source = tmp_path / "data" / "vocab_data_es_01.csv"
@@ -306,13 +293,7 @@ def test_several_scripts_merge_into_one_manifest(dirs):
 
 
 def test_a_pool_derived_comparison_records_the_raw_data_hash(dirs):
-    """Some comparisons have no contributing fit, and that must not read as none.
-
-    ``pool_descriptives.py`` describes the data itself and ``kfold_loso.py``
-    fits its own folds; neither reads a model of record. Recording nothing would
-    make them indistinguishable from a script that was never wired up, which is
-    the state finding 1 was about.
-    """
+    """Record a pool-wide data hash when no stored reporting fit contributes."""
     models_dir, comparisons_dir = dirs
     models_dir.mkdir(parents=True)
     (comparisons_dir / "pool_descriptives.csv").write_text("a,b\n1,2\n")
@@ -338,7 +319,7 @@ def test_a_pool_derived_comparison_records_the_raw_data_hash(dirs):
 
 
 def test_a_pool_hash_is_not_checked_when_the_caller_supplies_none(dirs):
-    """``None`` is *not checked*, as everywhere else in this codebase."""
+    """Skip the raw-data hash comparison when the caller supplies no hash."""
     models_dir, comparisons_dir = dirs
     models_dir.mkdir(parents=True)
     (comparisons_dir / "pool_descriptives.csv").write_text("a\n1\n")

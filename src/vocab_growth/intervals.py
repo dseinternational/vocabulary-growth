@@ -1,46 +1,25 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Project-wide credible-interval reporting policy — the single source of truth.
+"""Default credible-interval policy for reports, plots and summary tables.
 
-Every ``vocab_growth`` report, plot, and summary table routes its interval
-computation through this module so the convention cannot drift between the
-tables, plots, and diagnostics.
+Report posterior medians with 50% inner and 89% outer intervals. Equal-tailed
+intervals (ETIs) are the default; named quantities in ``HDI_ESTIMANDS`` use
+highest-density intervals (HDIs). Either interval type is a probability summary
+under the model, not a decision threshold.
 
-Convention
-----------
-Report the posterior **median** with a **50%** (inner) and an **89%** (outer)
-credible interval, alongside the full posterior. Intervals are **equal-tailed
-(ETI, percentile-based) by default**; a named short-list of strongly skewed or
-boundary-censored estimands (:data:`HDI_ESTIMANDS`) is reported with
-**highest-density intervals (HDI)** instead, where an equal-tailed interval
-would misrepresent the credible region.
-
-Why 89% (not 95%)? 89% is a deliberately non-special width: it carries no more
-authority than any other, which is the point — it discourages reading an
-interval as a hypothesis test. Its 5.5th/94.5th-percentile limits are also more
-stable to estimate from a finite MCMC sample than the 2.5th/97.5th limits of a
-95% interval at the same effective sample size. See McElreath, *Statistical
-Rethinking* (2020) and Kruschke, *Bayesian Analysis Reporting Guidelines*
-(Nat. Hum. Behav. 2021), and ``docs/models/README.md`` (Interval reporting
-convention).
-
-The interval *mechanics* — the kind dispatcher, the per-grid bands, and the
-tidy two-band summary — live in :mod:`dse_research_utils.statistics.intervals`
-(v0.12.0) together with the shared masses (:data:`DEFAULT_CI_PROB` 0.89,
-:data:`INNER_CI_PROB` 0.50), re-exported here. What stays local is the
-*policy*: which named estimands report with HDI (:data:`HDI_ESTIMANDS` /
-:func:`interval_kind_for`) and the ``age_months`` grid naming. This project
-passes ``interval_kind="eti"`` explicitly on its
-:class:`~dse_research_utils.statistics.models.reporting.ReportingConfiguration`
-(the shared default is ``"hdi"``).
+The shared ``dse_research_utils.statistics.intervals`` module computes intervals.
+This module supplies the named-quantity policy and ``age_months`` grid label.
+Reporting configurations explicitly select ``"eti"`` because the shared default
+is ``"hdi"``. Crossing-age outputs have separate censoring rules documented in
+``docs/models/README.md``.
 """
 
 import numpy as np
 import pandas as pd
 from dse_research_utils.statistics.intervals import (
-    DEFAULT_CI_PROB,  # noqa: F401 — re-exported: the outer 89% house mass
-    INNER_CI_PROB,  # noqa: F401 — re-exported: the inner 50% house mass
+    DEFAULT_CI_PROB,  # noqa: F401 - re-exported outer interval probability (89%)
+    INNER_CI_PROB,  # noqa: F401 - re-exported inner interval probability (50%)
     IntervalKind,
 )
 from dse_research_utils.statistics.intervals import bands as _shared_bands
@@ -49,9 +28,7 @@ from dse_research_utils.statistics.intervals import (
     summarise_bands as _shared_summarise_bands,
 )
 
-# Estimands reported with HDI rather than the ETI default, because their
-# posteriors are strongly skewed or boundary-censored so an equal-tailed
-# interval would misrepresent the credible region:
+# Named quantities using HDIs because skew or boundary effects matter:
 #   psi            - sign-speech association (ratio-like, positive, right-skewed)
 #   conc / kappa   - Beta-Binomial concentration / dispersion (positive, right-skewed)
 #   peak_age       - trajectory peak age (piles up against the modelled age-grid edge)

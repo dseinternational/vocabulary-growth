@@ -298,7 +298,7 @@ def report_level_gradient(cells: pd.DataFrame) -> None:
 
 
 def report_uk07_trial_arm(cells: pd.DataFrame) -> None:
-    """Whether uk_07's intervention explains its association. It does not."""
+    """Compare descriptive uk_07 association by recorded trial arm."""
     heading("uk_07 trial arm")
     source = pd.read_csv("./data/vocab_data_uk_07.csv")
     source = source[source["understood"] >= source["produced"]]

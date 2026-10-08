@@ -72,44 +72,29 @@ US01_WS_VOCAB_MAX = 680
 """Native vocabulary ceiling of the us_01 Words & Sentences form."""
 
 TD_POOL_EXCLUDED_DATASETS = ("Edgin",)
-"""Wordbank datasets barred from the typically-developing reference pool.
+"""Wordbank datasets excluded from the typically developing reference pool.
 
-``Edgin`` supplies the ``us_01`` Down syndrome subset. Two of its 435 rows also
-satisfy the typically-developing filter (``typically_developing`` true, no health
-condition recorded) — it is the only clinical cohort in the export that leaks this
-way, contributing 0.5% of its rows against at least 10% for every other dataset.
-One of the two is a Words & Sentences record at exactly the 680-word ceiling,
-inside the run of 21 consecutive ceiling records that
-``notes/202607261245-edgin-duplicated-outcome-records.md`` §13 identifies as a
-preparation artefact.
+``Edgin`` supplies the ``us_01`` Down syndrome source. The July export audit
+found two rows meeting the TD filter despite cohort and preparation concerns,
+including a Words & Sentences ceiling record in a suspect batch. Excluding the
+dataset keeps these records out of the reference used to assess DS exclusions.
+The small row count alone does not establish that estimates are unchanged.
 
-The cost is two rows of 15,379, so this changes no estimate. It is done because
-the reference pool is what the Down syndrome exclusions are benchmarked against,
-and a dataset whose preparation we have established to be defective — and which,
-the source team having confirmed the original files are no longer available,
-cannot be repaired at source — should not sit on both sides of that comparison.
+``us_01`` now uses item-level contributor files rather than this export. See
+``data/vocab_data_us_01.md`` and
+``notes/202607261245-edgin-duplicated-outcome-records.md`` section 13.
 """
 
 TD_POOL_AGE_MONTHS = (8, 30)
-"""Age window, in months, of the typically-developing reference pool.
+"""Age window, in months, of the typically developing reference pool.
 
-The upper bound was already implicit — the loader defaulted to 30 — and the lower
-bound was implicit too, because every English CDI form in Wordbank starts at 8
-months. Widening the pool beyond English made the lower bound matter: Italian Words &
-Gestures is registered from **7** months, and five Italian administrations at 7 months
-sit below the floor of the typically-developing models' GP domain
-(``_TD_GP_DOMAIN_MONTHS = (8, 30)``), which ``build_utils`` rightly refuses.
+The window keeps admitted forms inside the TD models' shared 8-30-month GP
+domain. Italian Words & Gestures starts at 7 months, but extending the shared
+domain for its few younger records would change existing model definitions.
 
-Bounding the pool is the right fix rather than widening that domain: the GP domain is
-shared with VG03/VG04, so widening it would make those models stale for the sake of
-five observations at the least informative end of the range — where a
-typically-developing child knows almost no words. Stating the window here keeps the
-pool inside the GP domain whichever languages are admitted, instead of leaving that
-invariant to depend on which forms happen to be in scope.
-
-``max_age_months`` still overrides the upper bound per model (VG13 uses 18). There is
-deliberately no per-model override for the lower bound: no model has wanted one, and
-a model that did would be asking to sit outside its own GP domain.
+``max_age_months`` overrides the upper bound per model. The lower bound has no
+per-model override. Outcome-specific form restrictions and reporting caps can
+narrow this window further, particularly for comprehension.
 """
 
 
@@ -202,51 +187,25 @@ as such.
 DUPLICATED_OUTCOME_MAX_AGE_MONTHS = 18
 DUPLICATED_OUTCOME_MIN_UNDERSTOOD = 100
 DUPLICATED_OUTCOME_RATIO = 0.75
-"""Signature of an administration whose two outcome columns collapsed onto one value.
+"""Screening rule for infant administrations with unusually similar outcomes.
 
-An infant recorded as *saying* almost every word they understand has an internally
-inconsistent administration: comprehension leading production is the most robust
-finding in the early-vocabulary literature, and is the structural premise of the
-joint models' ``p_S = p_U * q`` decomposition. Where that pattern appears in
-infancy together with a substantial comprehension count, the likeliest explanation
-is that one outcome column was written over the other at data preparation.
+Mask when ``spoken >= DUPLICATED_OUTCOME_RATIO * understood``,
+``understood >= DUPLICATED_OUTCOME_MIN_UNDERSTOOD`` and
+``age <= DUPLICATED_OUTCOME_MAX_AGE_MONTHS``. All conditions are required;
+similar outcome counts at older ages are not flagged by this rule.
 
-Detected as ``spoken >= DUPLICATED_OUTCOME_RATIO * understood`` with
-``understood >= DUPLICATED_OUTCOME_MIN_UNDERSTOOD`` at
-``age <= DUPLICATED_OUTCOME_MAX_AGE_MONTHS``. All three conditions are needed. The
-same ratio at older ages is ordinary — a child who says most of what they
-understand — so the rule is **age-conditioned rather than study-scoped**: of the
-paired rows in the current pool matching the ratio and count conditions, those at
-37 months or older are legitimate. Below 19 months it matches 8 rows, all in
-``us_01``.
+The July ``us_01`` audit found a separate high-ratio cluster. The 0.75 threshold
+falls in the observed gap between ratios of about 0.55 and 0.86; it is a
+sample-specific screening choice, not a developmental limit. External DS counts
+and the same children's other administrations added concern, but cannot prove
+which response column is wrong or that every flagged record is defective.
 
-The ratio is set from the measured gap rather than chosen: among ``us_01`` Words &
-Gestures administrations with comprehension >= 100, the ratios descend
-1.00, 1.00, 0.99, 0.98, 0.94, 0.91, 0.90, 0.86 and then fall to 0.55 — a gap of
-0.306, the largest in the distribution, so any cut inside it separates the cluster
-identically. An earlier 0.9 threshold cut through the middle of that cluster and
-missed two records; ``scripts/audit_edgin_subset.py`` recomputes the gap.
-
-Three independent lines of evidence support masking these (see
-``notes/202607261245-edgin-duplicated-outcome-records.md``):
-
-- The pattern is rare where it can be checked against a large reference sample:
-  among 2,480 typically-developing Words & Gestures administrations with
-  comprehension >= 100, only 0.69% have production >= 0.9 * comprehension.
-- The implied production levels — 134 to 396 words between 11 and 18 months — are
-  impossible against the independent Berglund et al. (2001) Down syndrome cohort,
-  which puts median spoken vocabulary near zero at 12 months and about 10 words at
-  24 months. This is an external benchmark, not an in-sample one.
-- Every affected child with a second administration shows an ordinary
-  comprehension-production gap in that other record (ratios 0.08-0.13 against
-  0.86-1.00 in the flagged one).
-
-Deliberately *not* caught: administrations with a high comprehension count but a
-normal production gap. Two such ``us_01`` records (comprehension 213 and 217 at 18
-months, production 31 and 22) sit at the 48th and 50th typically-developing
-percentile for comprehension and are retained, on the study owner's judgement that
-they are clinically unusual but should not be excluded. They are a sensitivity
-target, not a defect.
+The rule masks understood, spoken and produced counts because aggregate totals
+cannot identify a reliable column. High-comprehension records with an ordinary
+production gap are retained. ``include_duplicated_outcomes=True`` reinstates
+flagged values for sensitivity analysis. See
+``notes/202607261245-edgin-duplicated-outcome-records.md`` and the current
+``data/vocab_data_us_01.md`` source record.
 """
 
 
@@ -379,38 +338,18 @@ def drop_uk01_withheld_subjects(
 IE02_WITHHELD_ADMINISTRATIONS: tuple[tuple[str, str], ...] = (
     ("ID_62C63BE2B3B627E6", "t2"),
 )
-"""ie_02 administrations withheld as internally contradictory.
+"""ie_02 administrations withheld pending source clarification.
 
-Keyed by ``(subject_id, timepoint)``. One administration is listed: at 48
-months (t2) this child records 442 words understood, 3 spoken and 301 signed,
-against 111 understood, 72 spoken and 64 signed three months earlier at t1.
-Read together, the two administrations assert a 331-word comprehension surge,
-a 237-word signing surge and a 96% collapse in speech within the same three
-months. The comprehension gain rate (110 words/month) is the largest in the
-Down syndrome pool and sits beyond the typically-developing pool's own 99th
-percentile for within-child comprehension gains (90 words/month), and
-vocabulary does not shrink — let alone by 96% while comprehension quadruples.
+Keyed by ``(subject_id, timepoint)``. The listed t2 record reports 442 words
+understood, 3 spoken and 301 signed at 48 months, against 111 understood,
+72 spoken and 64 signed three months earlier. The combined changes raised
+concern about differing checklist completion. Aggregate counts cannot establish
+whether the changes are real or which column is reliable, so the whole t2
+administration is withheld; t1 remains.
 
-The spoken collapse (72 → 3) is the "ie_02 record at 45 months" that
-:data:`COLLAPSE_FACTOR`'s age scope deliberately left for separate
-investigation. That investigation
-(``notes/202608311830-steep-within-child-gains.md``) found the whole t2
-administration anomalous, not just its spoken value: every count moves
-implausibly at once, in the pattern of a checklist completed differently
-between waves — the DSE checklists record "understands and signs" and "says"
-as separate per-word columns, so words ticked under signing at t2 that t1
-recorded as said would produce exactly this signature. Which columns are
-trustworthy cannot be recovered from the aggregate counts, so the
-administration is withheld whole, pending clarification with the source team,
-rather than half-masked.
-
-Applied at CSV load in ``scripts/prepare_data.py``, so the row is absent from
-the ``vocab_ie_02`` table, the ``vocab_combined`` view and
-``vocab_data_merged.csv`` alike — the same treatment as
-:data:`UK07_WITHHELD_ADMINISTRATIONS`, and the same study-level precedent as
-the ie_02 subject already excluded at load in ``prepare_data.py``. Removing
-the entry from this tuple and re-running ``scripts/prepare_data.py``
-reinstates it.
+``scripts/prepare_data.py`` drops the row at CSV load, before the database,
+merged CSV and joint-model paths. Remove the tuple entry and rebuild prepared
+data to reinstate it. See ``notes/202608311830-steep-within-child-gains.md``.
 """
 
 
@@ -563,26 +502,13 @@ def mask_duplicated_outcome_administrations(
     *,
     include_duplicated: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, int]]:
-    """Mask infant administrations whose outcome columns appear to be duplicates.
+    """Mask infant administrations matching the similar-outcome screening rule.
 
-    Applies the signature documented on :data:`DUPLICATED_OUTCOME_RATIO`. Both
-    counts are masked rather than one, because in the affected records neither
-    value is defensible: the production figures are impossible against the
-    independent Down syndrome cohort benchmark, and in the two cases where the
-    child's other administration also disagrees on comprehension it falls by 355
-    and 209 words. Which column was overwritten cannot be recovered from the
-    aggregate data, so the administration is treated as unusable rather than
-    half-repaired. The row is retained, so age coverage and provenance stay
-    auditable.
-
-    The returned counts report how many observed values were masked per study, for
-    the fit log. Pass ``include_duplicated=True`` to reintroduce them as a
-    sensitivity.
-
-    Item-level responses would settle the mechanism definitively — a duplicated
-    column appears as two identical response vectors — so this rule is stated as a
-    signature with a stated false-positive rate, to be confirmed or refuted when
-    the item-level data are ingested.
+    The rule is documented on ``DUPLICATED_OUTCOME_RATIO``. Understood, spoken
+    and produced values are masked because aggregate counts cannot identify a
+    reliable column. The rule does not prove that columns were duplicated.
+    Rows remain for provenance, and returned counts record masked values per
+    study. ``include_duplicated=True`` reinstates values for sensitivity analysis.
     """
     required = {"age", "understood", "spoken"}
     missing = required - set(df.columns)
@@ -626,88 +552,27 @@ def mask_duplicated_outcome_administrations(
 
 
 COMPREHENSION_BELOW_PRODUCTION_STUDIES: tuple[str, ...] = ("ie_01", "it_01", "uk_02")
-"""Studies carrying a comprehension count below the child's own production count.
+"""Studies with documented comprehension-below-production records.
 
-An inclusive comprehension field cannot be exceeded by production: a word the
-child says is a word the child understands, so ``understood >= produced`` holds
-by construction on any form where comprehension is asked inclusively. Nine
-administrations violate it -- seven in ``ie_01``, one in ``it_01`` and one in
-``uk_02`` -- and the violations are not marginal: one ``ie_01`` child records 13
-words understood against 366 spoken, and two record 0 understood against 83
-spoken.
+Inclusive comprehension should contain the words produced. The masking function
+checks every row against ``max(produced, spoken)``, with missing values skipped;
+this tuple documents affected studies rather than restricting the function.
+Only comprehension is masked, and equality is retained.
 
-``uk_01`` held two more until 2026-09-14, and they were a coding error rather
-than a defect of the records. Its source marks each word "understands",
-"understands and says" or "signs" -- one response per word -- and the prepared
-``understood`` had summed the "understands" column alone, so every ``uk_01``
-comprehension count excluded the words the child also produced, and the two
-children producing most were caught here. The source's own inclusive total
-(``UNDERST == WORDSUND + WORDS`` on all 224 rows) settled it, and the count was
-corrected where the CSV is built (``prepare/uk_01_edg.py`` in
-``research-data-analysis``, issue #320). The same correction retired an upstream
-rule that had emptied 41 of uk_01's 70 Words and Gestures comprehension counts,
-so ``uk_01`` now contributes 69 rather than 27.
+Use the maximum, never ``spoken + signed``: speech and signing can overlap.
+``produced`` is a union in some sources and speech alone in others. ``signed``
+is omitted from this bound because its relation to ``produced`` varies by source.
 
-**The comparison is against the greatest recorded lower bound on production**,
-``max(produced, spoken)``, with a missing value treated as absent. Until
-2026-09-13 it was against ``produced`` alone, and the guard required that column
-to be present, so a row whose union was never recorded could not be tested at
-all. One such row is the ``uk_02`` one above: a child at 48 months recording 347
-words understood against 387 spoken (and 254 signed) with no ``produced`` value.
-``spoken`` alone already exceeds ``understood`` there, and a child who says 387
-words produces at least 387, so the record is contradictory on its face and
-needed no question to the source (#236). The same child at 47 months reads 393
-understood, 351 spoken and 388 produced, which is consistent. No recorded
-``produced`` falls below ``spoken``, so the widened rule caught exactly the ten
-it caught before plus that one (eleven, until the ``uk_01`` correction took two).
+The ie_01 comprehension field has documented source concerns. A uk_01 coding
+error once caused this signature but was corrected upstream on 2026-09-14,
+so uk_01 is no longer listed. The uk_02 record lacks a produced union, but its
+spoken count alone exceeds comprehension. Retaining usable production while
+masking comprehension is the study's handling decision, not proof that every
+retained production count is correct.
 
-``signed`` is **not** a term of the bound, although the proposal on #236 named
-it. ``produced`` is the modality union in some sources and the spoken count
-alone in others -- ``ie_02``, ``uk_04``, ``uk_05`` and ``uk_06`` record it equal
-to ``spoken``, and ``signed`` exceeds it on 132 of their rows -- so what a
-signed count bounds depends on the source's convention. No administration
-records ``understood < signed``, so including it would change nothing on the
-2026-09-13 pool; leaving it out keeps the rule's meaning the same in every
-source.
-
-**The comprehension count is what gets masked, not the production count.** The
-production figure is corroborated by two columns that agree (``spoken`` and
-``signed`` sum to the recorded ``produced``), and in both studies with a
-diagnosis the fault was localised to comprehension: ``uk_01``'s ``understood``
-turned out to *exclude* words the child also produces (corrected at source, see
-above), and ``ie_01``'s seven rows sit in the
-wave whose Checklist 1 comprehension field is already known to be unreliable
-(pooled comprehension *falls* between waves while the mean understood total
-rises). Masking the row wholesale would discard production counts that are not
-in question.
-
-A maximum is the right bound and ``spoken + signed`` is not. In the
-signing studies the two columns overlap -- a child who both says and signs a word
-is counted in each -- so their sum overstates distinct words produced, badly:
-``uk_07`` has ``produced < spoken + signed`` on 77 of 82 rows and ``nz_01`` on
-101 of 111. Reconstructing production as the sum would flag 85 administrations
-instead of 9, almost all of them bimodal children penalised for double counting.
-A maximum cannot overstate production, because each of its terms is contained in
-it.
-
-Equality is **kept**. ``understood`` equal to the bound is a child who produces
-everything they understand, which is legitimate; 45 administrations met it when
-the rule compared against ``produced`` alone, of
-which 18 are ``0 == 0`` and most of the rest sit at the 396-item Words &
-Gestures ceiling, where both counts are censored rather than equal. Those belong
-to the ceiling and administration rules, not to this one.
-
-Related, and deliberately not merged into this rule:
-:data:`UK07_WITHHELD_ADMINISTRATIONS` withholds a single ``uk_07`` row with the
-same signature (191 understood against 489 produced) at CSV load, because that
-one is an open question with a reachable source team rather than a closed
-property of the data. It never reaches ``vocab_combined``, so this rule never
-sees it. Its docstring previously contrasted itself with ``ie_01``'s seven
-"retained-and-flagged" records; as of 2026-08-25 those are masked here instead,
-on the study owner's ruling.
-
-Set ``include_comprehension_below_production=True`` to reinstate the nine
-comprehension counts for sensitivity analysis.
+``UK07_WITHHELD_ADMINISTRATIONS`` separately removes an open source-query record
+before this rule sees it. ``include_comprehension_below_production=True``
+reinstates values masked here for sensitivity analysis.
 """
 
 
@@ -891,75 +756,30 @@ IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION = 0.9
 IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS = 30
 COLLAPSE_FACTOR = 5.0
 COLLAPSE_MIN_VALUE = 50
-"""Two signatures of a production count that cannot be a real measurement.
+"""Screening rules for near-ceiling counts and large recorded declines.
 
-Both are scoped to ``age <= IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS``, the window in
-which the independent Berglund et al. (2001) Down syndrome cohort puts median
-spoken vocabulary near zero at 12 months and about 10 words at 24, and in which its
-single most able child of 330 had not yet approached the counts in question — that
-child reached 668 words at 48 months.
+Both require the earlier or near-ceiling administration to have
+``age <= IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS``. The age scope reflects the
+source audit and external DS benchmark. A benchmark distribution does not
+establish an impossible count or a universal developmental threshold.
 
-That age scope is load-bearing and deliberately **not** relaxed. Above it a
-near-ceiling count is ordinary rather than suspect, and removing the bound would mask
-19 apparently legitimate records across six studies — a uk_01 child at 115 months with
-658 of 680 words, an ie_01 child at 69 months with 741 of 810, an es_01 child at 54
-months with 637 of 651. Age and count together therefore cannot separate a legitimate
-able older child from the Edgin ceiling batch; that batch is identified on its
-provenance instead, by :data:`CEILING_ONLY_CHILD_STUDIES`, which runs first and leaves
-nothing above 30 months for this rule to find.
+Near-ceiling screening uses
+``spoken >= IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION * survey_vocab_max``.
+The collapse rule flags a spoken count of at least ``COLLAPSE_MIN_VALUE`` when
+an entry later in the child's age-sorted records is at most that count divided
+by ``COLLAPSE_FACTOR``. The floor avoids flagging small absolute differences.
+Recorded vocabulary can fall because of reporting, form changes or real loss;
+the screening rule alone cannot identify the reason.
 
-**Near-ceiling saturation.** ``spoken >= IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION *
-survey_vocab_max``. Within the scoped window this now matches 8 ``us_01``
-administrations, down from 21, because :func:`exclude_ceiling_only_children` runs first
-and removes the batch children wholesale rather than masking their counts one at a
-time. What reaches this rule are ceiling counts from children who *do* have other,
-non-ceiling records. For scale, no typically-developing child of 1,469 aged 16-19
-months reaches the Words & Sentences ceiling, and their maximum is 643.
+These rules mask spoken and produced, retaining comprehension. They follow
+child-level ceiling and below-form-floor exclusions, and precede the separate
+same-day-disagreement rule. Reinstating one rule's values may leave them masked
+by another. ``count_reinstated_implausible_production`` measures the net change.
 
-The batch signature that first identified these is recorded in
-``notes/202607261245-edgin-duplicated-outcome-records.md`` §13: thirteen records in a
-contiguous Wordbank ``child_id`` block, every one at exactly 680, no child with any
-other administration, and an 81-id gap to the next id present. Those ids are no
-longer this repository's identifiers — ``us_01`` now keys on the study's own subject
-id (see :data:`CEILING_ONLY_CHILD_STUDIES` and ``scripts/build_us01_source.py``), because
-Wordbank issued a **separate child_id per form**, so the 119 apparent children were
-53 Words & Gestures records plus 66 Words & Sentences records with no child linked
-across the two. They are 71 children, 46 of whom took both forms. The note's
-reasoning stands; only the identifiers it cites are historical.
-
-**Where the ceiling records are concentrated.** Every Words & Gestures record at or
-near the 396-item ceiling — 25 of them, including all six of the oldest at 61, 62,
-63, 73, 84 and 173 months — sits *outside* the form's age window, as do all 62 Words
-& Sentences records above 30 months, of which 61 are at exactly 680. Those are held
-back by :func:`exclude_ceiling_only_children` before this rule is reached, which is
-why the near-ceiling count here is lower than the whole cohort's would suggest.
-
-**Longitudinal collapse.** A count of at least ``COLLAPSE_MIN_VALUE`` that exceeds
-the same child's later count by a factor of ``COLLAPSE_FACTOR`` or more. Vocabulary
-does not shrink, so this is unambiguous — 656 words at 17 months against 12 at 23
-months is not measurement noise. The floor matters: without it the rule fires on
-trivial pairs such as 5 understood words falling to 1. The age scope matters too:
-at older ages a decline can arise from a form change or from noise in large counts,
-and two such records outside ``us_01`` (a uk_01 record at 76 months, an ie_02
-record at 45) were deliberately left for separate investigation rather than masked
-by a rule whose justification is developmental. Both investigations have since
-concluded (2026-08-31): the uk_01 record was two same-named children fused under
-one name-derived id, resolved by :data:`UK01_WITHHELD_SUBJECTS`, and the ie_02
-record's whole follow-up administration proved internally contradictory, resolved
-by :data:`IE02_WITHHELD_ADMINISTRATIONS`. Leaving them out of this rule was the
-right call in both cases — neither was a developmental collapse.
-
-Within the scoped window the two signatures together mask 11 ``us_01`` spoken counts
-and nothing in any other study. That is fewer than the 30 masked before the source
-change, and the reason is not that less is caught but that
-:func:`exclude_ceiling_only_children` removes the ceiling batch as whole children
-first, so those counts never reach this rule. A Words & Sentences record of 406 words
-at 23 months was long retained here as extreme against the external benchmark but
-lacking a positive defect signature — no later administration contradicted it. Its
-*same-day* Words & Gestures administration does contradict it (50 words), which is
-now its own signature: :data:`SAME_DAY_DISAGREEMENT_FACTOR` masks that record and
-one other. The high-comprehension records described on
-:data:`DUPLICATED_OUTCOME_RATIO` remain retained sensitivity targets.
+Older suspect profiles were investigated separately through
+``UK01_WITHHELD_SUBJECTS`` and ``IE02_WITHHELD_ADMINISTRATIONS``. Read
+``notes/202607261245-edgin-duplicated-outcome-records.md`` and the current
+``data/vocab_data_us_01.md`` source record before changing scope or thresholds.
 """
 
 
@@ -1078,60 +898,27 @@ def mask_implausible_production_administrations(
 SAME_DAY_DISAGREEMENT_STUDIES: tuple[str, ...] = ("us_01",)
 SAME_DAY_DISAGREEMENT_FACTOR = 5.0
 SAME_DAY_DISAGREEMENT_MIN_VALUE = 100
-"""Signature of a production count contradicted by a same-day count on another form.
+"""Screening rule for large same-age production disagreements in us_01.
 
-46 of the ``us_01`` children took Words & Gestures and Words & Sentences at the
-same visit, giving two same-day measurements of the same construct — the forms
-share the MacArthur core vocabulary, so two same-day production counts cannot
-legitimately be far apart. The pool's same-age pairs bear this out: all but two
-agree closely, and the largest disagreement among the rest is 10 against 71, at
-counts where a handful of ticks moves the ratio.
-
-The two violations are stark. At 23 months one child records 11 words spoken on
-Words & Gestures against **385** on Words & Sentences the same day; another
-records 50 against **406**. 385 and 406 words spoken at 23 months are
-impossible against the independent Berglund et al. (2001) Down syndrome
-benchmark (median spoken vocabulary near 10 words at 24 months; the single most
-able child of 330 reached 668 words at 48 months). The 406 record is the one
-:data:`COLLAPSE_FACTOR`'s docstring long retained as extreme-but-uncontradicted
-— the same-day Words & Gestures administration *is* the contradiction, which is
-why this rule now exists.
-
-Detected within a ``(study, subject, age)`` group holding two or more observed
-production counts: the group is flagged when its largest count is at least
+Within a ``(study, subject, age)`` group with at least two observed spoken
+counts, mask a count if it is strictly above the group's minimum, at least
 ``SAME_DAY_DISAGREEMENT_MIN_VALUE`` and at least
-``SAME_DAY_DISAGREEMENT_FACTOR`` times its smallest. **Only the larger side is
-masked.** The smaller count is corroborated twice over — by the external
-benchmark and, in both flagged cases, by the child's independently measured
-Words & Gestures comprehension-production gap (comprehension 279 and 89 against
-production 11 and 50) — so discarding it would throw away a defensible
-measurement. This differs from :data:`DUPLICATED_OUTCOME_RATIO`, which masks
-both columns because there neither is defensible. The floor keeps small-count
-noise out (10 against 71 is untouched); the factor matches
-:data:`COLLAPSE_FACTOR`.
+``SAME_DAY_DISAGREEMENT_FACTOR`` times that minimum. The code groups by recorded
+age, not a date or form identifier. Current source pairs are same-visit WG/WS
+administrations; the rule does not itself verify that provenance.
 
-The rule runs **after** the other production rules, deliberately: several
-same-day pairs in the ceiling region at 17-18 months would also match this
-signature, but the near-ceiling, collapse and duplicated-outcome rules already
-mask them, so running last keeps those rules' documented counts unchanged and
-makes this rule's catch exactly the counts nothing else explains — within the
-current pool, the two Words & Sentences counts above and nothing else. The net
-masking is order-independent. One interaction follows from the overlap: under
-the ``include_implausible_production`` sensitivity this rule still sees the
-reinstated ceiling-region pairs and independently re-masks those with an
-observed same-day partner, so that sensitivity's net reinstatement is smaller
-than the implausible rule's own catch —
-:func:`count_reinstated_implausible_production` reports the true figure.
+The audit found counts of 385 versus 11 and 406 versus 50 at 23 months.
+The external benchmark and paired WG profiles motivated retaining the lower
+counts, but do not prove that the larger counts are impossible. The minimum
+count guards against large ratios of small counts.
 
-Study-scoped to ``us_01`` deliberately. uk_01's six same-day WG/WS pairs agree
-closely, so there is nothing to catch; uk_02's same-day pairs are Oxford (416)
-against DSE (810) counts, whose inventories differ enough that a factor-two
-disagreement is mechanical rather than contradictory — a cross-inventory
-version of this rule would need the dual-form crosswalk, not a threshold.
+The rule is study-scoped because comparisons between other inventories need
+source-specific checks. It runs after the other production masks, so its
+reported catch excludes already-masked values. An implausible-production
+reinstatement may still be masked here; use both flags for the combined arm.
 
-Both rows are retained and only ``spoken``/``produced`` masked, so age coverage
-and provenance stay auditable. Set ``include_same_day_disagreements=True`` to
-reinstate the masked counts for sensitivity analysis. See
+Rows remain, with only spoken and produced masked.
+``include_same_day_disagreements=True`` reinstates the values. See
 ``notes/202608311830-steep-within-child-gains.md``.
 """
 
@@ -1273,36 +1060,13 @@ what :func:`restrict_to_dse_native_administrations` is for.
 def restrict_to_dse_native_administrations(
     df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, int]:
-    """Keep only administrations recorded natively on the 810-item DSE Checklists.
+    """Keep administrations with a recorded 810-item DSE form ceiling.
 
-    A sensitivity-analysis transformation, not a primary inclusion rule. It
-    answers what the trajectories look like when no count has been carried onto
-    a denominator its form did not use: 166 of the loader's 1,799 Down syndrome
-    rows survive, from 129 children across ie_01 (its 810 wave only), uk_02 (DSE
-    form only) and uk_06 -- 139 understood, 152 spoken and 106 signed
-    observations. Every other source is on a shorter form and drops out entirely,
-    es_01, ie_02, nz_01, uk_07, us_01 and us_03 among them.
-
-    Re-measured 2026-09-15, when ie_02 left the native set. Its administrations
-    omitted DSE Checklist 3 and now carry their own 476-word ceiling
-    (:data:`DSE_SHORT_FORM_CEILINGS`), which took 111 rows and 65 children out of
-    the variant -- the largest signing source among them, so the joint models'
-    native arm now rests on uk_02 and uk_06 for signing. The paragraph below
-    describes the set before that.
-
-    Re-measured 2026-09-08, after the ``us_03`` ingestion. The surviving subset
-    is **unchanged** -- same 277 rows, same 194 children, same four studies --
-    because ``us_03`` is a 396-item form and contributes no native row at all.
-    What moved is the pool it is a subset of (1,516 -> 1,920 rows), so the
-    native *share* fell without the native evidence shrinking. Understood went
-    251 -> 258; the arithmetic previously recorded here for that figure (259
-    before :func:`mask_comprehension_below_production`, 252 before the withheld
-    ie_02 administration, :data:`IE02_WITHHELD_ADMINISTRATIONS`) describes the
-    pre-ingestion pool and has not been re-derived.
-
-    Rows whose ceiling is unrecorded are dropped rather than kept: an unknown
-    form cannot be shown to be the native one, and the point of the variant is
-    to admit only what is known to need no harmonisation.
+    This sensitivity restricts measurement provenance rather than testing whether
+    shorter forms are nested. It also changes the studies and children represented.
+    The retained sources are ie_01's full follow-up wave, uk_02's DSE form and
+    uk_06. ie_02 is a 476-item short form and is excluded; see
+    ``DSE_SHORT_FORM_CEILINGS``. Rows with an unknown ceiling are excluded.
     """
     required = {"survey_vocab_max"}
     missing = required - set(df.columns)
@@ -1321,85 +1085,40 @@ def restrict_to_dse_native_administrations(
 FORM_AGE_FLOORS: dict[str, dict[int, int]] = {
     "us_01": {396: 8, 680: 16},
 }
-"""Lowest age, in months, at which each source form may be administered.
+"""Study-specific lower admission ages, keyed by native form ceiling.
 
-Keyed by study and form ceiling. Wordbank registers an ``age_min``/``age_max`` per
-instrument -- English (American) Words & Gestures 8-18 months, Words & Sentences 16-30
--- and its by-child download page silently drops every administration outside that
-window. ``scripts/build_us01_source.py`` reads the item-level contributor files
-instead, so ``us_01`` now carries the administrations the export never showed.
+``us_01`` now uses item-level contributor files that include records outside
+Wordbank's registered norming windows. The study retains administrations above
+the windows because an early-vocabulary form can be appropriate for older DS
+children. Those visits also supply comprehension absent from WS forms.
 
-**Only the floor is enforced.** Administrations *above* a form's window are admitted:
-for a Down syndrome cohort, giving an early-vocabulary form to a chronologically older
-child is developmentally appropriate rather than an error, and the age window governs
-whether Wordbank's *percentile norms* apply -- which this project does not use. Every
-model scores raw counts against the 810-item reference with a per-form ceiling guard,
-and a raw count is a raw count at any age.
+The lower floor is a separate source-handling decision. The below-floor block
+contains very high infant speech counts and large recorded comprehension
+changes. Misrecorded ages are one possible cause; aggregate totals do not prove
+it. ``include_below_form_floor=True`` reinstates these records for sensitivity.
 
-Excluding them would also have been the more biased choice, not the safer one. A child
-still on Words & Gestures at 25 months is plausibly lower-ability than one who had
-moved to Words & Sentences, so dropping the whole out-of-window block removes
-observations non-randomly with respect to ability. Concretely, ``us_01`` contributes 58
-administrations between 19 and 27 months and every one is Words & Sentences, whose
-comprehension is a production proxy discarded by :data:`WORDBANK_BIVARIATE_FORMS` --
-so before these rows were admitted the study contributed **no comprehension
-observations at all** in that band. The 50 Words & Gestures administrations admitted
-there are its only ones, and all 47 contributing children are already in the pool, so
-they are repeat visits carrying within-child information rather than new children.
-
-The floor is enforced because it is a different case. 16 ``us_01`` administrations sit
-below their form's floor, at 5-7 months, and three of them are physically impossible:
-236, 364 and 368 words *spoken*, which no 6-month-old in any population produces. Two
-more of the same children show comprehension collapsing from 247-371 words at 6 months
-to 5-19 by 11-12 months. The block is unreliable, most likely mis-keyed ages, and the
-remaining rows in it are near-zero counts that carry almost no information anyway.
-
-The genuinely defective out-of-window administrations are handled on their own
-evidence, not by age: see :data:`CEILING_ONLY_CHILD_STUDIES`.
+Age alone does not identify suspect older records. Child-level ceiling concerns
+use ``CEILING_ONLY_CHILD_STUDIES`` instead. See ``data/vocab_data_us_01.md``.
 """
 
 
 CEILING_ONLY_CHILD_STUDIES = ("us_01",)
-"""Studies in which a child recorded only at the form ceiling is a preparation artefact.
+"""Studies with a documented concern about children recorded only near ceilings.
 
-``notes/202607261245-edgin-duplicated-outcome-records.md`` §13 identified a batch
-signature in the Edgin subset: a run of records at exactly the form ceiling in which no
-affected child has any other administration. With the full source now ingested that
-signature resolves 64 children and 98 administrations -- 23 Words & Gestures at 39-173
-months, all at exactly 396 spoken; 62 Words & Sentences at 31-88 months, 61 at exactly
-680; and 13 Words & Sentences at 24-30 months whose counts every other rule already
-masks, so removing them changes no estimate.
+The Edgin audit identified batches of ceiling-level records with no alternative
+count from the same child. This study-scoped rule removes children whose every
+raw spoken count is at least ``IMPLAUSIBLE_PRODUCTION_CEILING_FRACTION`` of its
+form ceiling. A missing count or ceiling prevents that row meeting the test.
+The rule runs before masking, so it does not depend on earlier outcome masks.
 
-**An outcome-dependent exclusion motivated by source concerns.** A near-ceiling count is a defect
-signature only in infancy, where the Berglund benchmark rules it out. At older ages it
-is ordinary: an eight-year-old with Down syndrome knowing 658 of 680 words is expected.
-Removing the age scope from :data:`IMPLAUSIBLE_PRODUCTION_MAX_AGE_MONTHS` would
-therefore mask 19 apparently legitimate records across six other studies (uk_01 at 115
-months with 658 of 680, ie_01 at 69 with 741 of 810, es_01 at 54 with 637 of 651, and
-so on). Age and count together cannot separate the Edgin batch from those. What does
-separate them is that **the batch children have no non-ceiling record of their own** --
-a criterion defined by the observed outcomes. It is therefore selection on the
-outcome, even though source concerns motivate it. Retain this documented primary
-rule and use ``include_ceiling_only_children=True`` to assess sensitivity; the
-primary result alone cannot establish that genuine ceiling-level children are unaffected.
+This is an outcome-dependent exclusion. It can remove genuine high-vocabulary
+children and usable comprehension values as well as suspect production counts.
+Neither older age nor a ceiling count establishes a preparation error.
+``include_ceiling_only_children=True`` tests dependence on the exclusion; it
+does not establish which source records are defective.
 
-**Why it is study-scoped where the duplicated-outcome rule deliberately is not.** That
-rule's evidence is developmental and so applies to any study. This one's evidence is a
-specific, documented failure of one dataset's preparation, whose source team has
-confirmed the original files no longer exist. Applying it elsewhere would assert a
-defect for which there is no evidence.
-
-**What it costs, stated plainly.** The rule is not free: 23 of the removed
-administrations carry a live comprehension value, all at exactly 396 on the 396-item
-Words & Gestures form between 39 and 173 months. A child recorded as understanding every
-word *and* saying every word at 173 months is the artefact rather than a measurement, so
-they go with the rest of their record — but the 23 are a real loss, not bookkeeping.
-
-Because the criterion is applied to raw source counts before any masking, it also removes
-14 children who were previously in the pool as *phantoms*: every one of their counts was
-already masked by another rule, so they contributed a subject random effect informed only
-by its prior. Of the 71 children the previous ``us_01`` pool reported, 57 had at least one
-live observation; the figure after this rule is 58.
+See ``notes/202607261245-edgin-duplicated-outcome-records.md`` section 13 and
+``data/vocab_data_us_01.md`` for the source history and recorded losses.
 """
 
 
@@ -1609,37 +1328,20 @@ def vocab_combined_view_sql() -> str:
     """Return the ``CREATE VIEW vocab_combined`` statement.
 
     The view unions the per-study tables built by ``scripts/prepare_data.py``
-    into the single DS analysis relation read by :func:`load_combined_data`.
-    It is defined here rather than inline in the script so the per-study
-    transformations — in particular the us_01/Edgin Wordbank form guard,
-    which must stay in lockstep with the TD guard in :func:`load_data` — are
-    importable and regression-tested (see ``tests/test_data_utils.py``).
+    into the DS analysis relation read by :func:`load_combined_data`.
+    The comprehension-form guard matches the TD guard in :func:`load_data`.
+    ``tests/test_data_utils.py`` checks the per-study transformations. Source
+    records in ``data/vocab_data_<study>.md`` explain measurement conventions.
 
     The DS (Edgin) subset comes from ``vocab_us_01``, which is derived from the
     English (American) item-level contributor files and so is English by
-    construction — it no longer needs the :data:`ENGLISH_LANGUAGES` filter the
+    construction. It no longer needs the :data:`ENGLISH_LANGUAGES` filter the
     ``wordbank_child`` export required. That constant still scopes the TD loader.
     """
     bivariate_forms_sql_list = _sql_string_list(WORDBANK_BIVARIATE_FORMS)
     return f"""
     CREATE VIEW vocab_combined AS
     SELECT * FROM (
-    -- `sex` in the per-source CSVs is the canonical 1 = male / 2 = female
-    -- coding (research-data-analysis prepare/readme.md, "Sex coding"). It is
-    -- decoded to M/F here, which is the representation this view has always
-    -- exposed and which `us_01` — built in this repo by scripts/build_us01_source.py
-    -- — already produces. Before that standardisation each source arrived in its
-    -- own coding and this view handled them one at a time: uk_02's 0/1 was
-    -- decoded here, uk_06's boy/girl was discarded as NULL, and uk_05's sex
-    -- never reached its CSV at all. us_01 is unaffected either way -- it is
-    -- built in this repo, not taken from research-data-analysis.
-    --
-    -- ie_02 is decoded the same way, but its coding is the one resting on a
-    -- confirmation rather than on the file: its source carries 1/2 with no
-    -- value label saying which is which. It was carried upstream as
-    -- `sex_source_code` and NULL here until the contributor confirmed, on
-    -- 2026-09-04, that it is the same 1 = male / 2 = female coding as every
-    -- other source; upstream then renamed the column to plain `sex`.
     SELECT 'uk_01' as study,
            vuk1.subject_id,
            CASE vuk1.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
@@ -1666,25 +1368,6 @@ def vocab_combined_view_sql() -> str:
            END                as survey_vocab_max
     FROM vocab_uk_02 as vuk2
     UNION ALL
-    -- ie_01 (Down Syndrome Ireland), two waves.
-    --
-    -- ``understood`` is the parent-reported comprehension count, passed through
-    -- unchanged. It was previously GREATEST(says_total, understands_total) on the
-    -- reasoning that production implies comprehension; that repaired 7 records in
-    -- which says > understands by overwriting comprehension with production, which
-    -- (a) hid them from the ``n_parent_violations`` count that methods-models.qmd
-    -- says such rows are reported through, and (b) fed the nested spoken
-    -- likelihood exact S = U rows, i.e. observations that the child says every
-    -- word it understands. Repairing a count from the outcome being modelled is
-    -- selection on the outcome; the documented policy (retain via the marginal
-    -- fallback, count as a source-data violation) now handles them instead.
-    --
-    -- The baseline wave omitted Checklist 3 (350 of the 810 DSE items): it is
-    -- recorded as zero for every child on all three response types, no baseline
-    -- total exceeds Checklists 1+2 = 460, and follow-up records carry non-zero
-    -- Checklist 3 counts for children whose baseline total already exceeded 390.
-    -- Its true administered ceiling is therefore 460, not 810 (see
-    -- INCOMPLETE_ADMINISTRATION_CEILINGS).
     SELECT 'ie_01'                                                   as study,
            vie.subject_id,
            NULL                                                        as sex,
@@ -1707,38 +1390,6 @@ def vocab_combined_view_sql() -> str:
            810                                                     as survey_vocab_max
     FROM vocab_ie_01 as vie
     UNION ALL
-    -- us_01 (Edgin): the English Down syndrome subset of the Edgin cohort.
-    --
-    -- Read from ``vocab_us_01`` (derived by ``scripts/build_us01_source.py`` from
-    -- the item-level contributor files) rather than from the ``wordbank_child``
-    -- by-child export, for two reasons the export cannot address:
-    --
-    --   * The export is age-truncated. Wordbank's download page calls
-    --     ``get_administration_data()`` without ``filter_age = FALSE``, so every
-    --     administration outside its instrument's registered age window is dropped
-    --     before the page's age slider is even built. That cut the Edgin Down
-    --     syndrome subset from 345 administrations to 194.
-    --   * Four source administrations have every word item blank, which Wordbank
-    --     scores as zero. Two are Down syndrome rows inside the window, and at 12
-    --     months the export holds two ``(0, 0)`` rows of which only one is the empty
-    --     form — so they are separable only at item level. They are excluded when
-    --     the source CSV is built.
-    --
-    -- Administrations outside the form's registered age window are carried in the
-    -- source. Those *above* the window are admitted -- for a Down syndrome cohort an
-    -- early-vocabulary form given to an older child is developmentally appropriate,
-    -- and they are this study's only comprehension observations between 19 and 27
-    -- months. Those below its floor are dropped (FORM_AGE_FLOORS), as are children
-    -- recorded only at the form ceiling (CEILING_ONLY_CHILD_STUDIES). Both rules read
-    -- ``survey_vocab_max``, so the view's column list is untouched. See
-    -- notes/202608031500-edgin-out-of-window-administrations.md.
-    --
-    -- Wordbank's CDI: Words & Sentences (WS) form records comprehension as a
-    -- production proxy (comprehension == production by data convention), so
-    -- understood is taken only from the genuinely bivariate forms — the same
-    -- guard load_data applies on the TD side. WS rows still contribute
-    -- production (spoken/produced). See
-    -- notes/202607061200-us01-edgin-ws-comprehension-issue.md.
     SELECT 'us_01'                                     as study,
            concat('id_', hex(hash(vus01.subject_id)))   as subject_id,
            vus01.sex,
@@ -1754,30 +1405,6 @@ def vocab_combined_view_sql() -> str:
     FROM vocab_us_01 as vus01
     WHERE vus01.dev_status = 'down_syndrome'
     UNION ALL
-    -- us_03 (Fidler): Project CAPEabilities / Project EXPO, 396-word English
-    -- Words and Gestures. `understood` is the inclusive comprehension total
-    -- (the source's two mutually exclusive cells, already summed upstream), and
-    -- `age` is `age_months` floored to complete months, as every source's `age`
-    -- is since 2026-09-15. No sex was shared.
-    --
-    -- **The expressive cell is a produced union, not spoken.** The study
-    -- authors state: "Understands and Says is inclusive of expressive language through spoken word and sign."
-    -- The source document asserted a speech-only reading twice, both inferred
-    -- from the column's original name, `spoken`; the column has since been
-    -- renamed to `produced` here and upstream, and
-    -- data/vocab_data_us_03.md carries the correction. Modalities cannot
-    -- be separated -- there
-    -- is one number, not the exclusive cells nz_01 and uk_07 carry -- so no
-    -- spoken marginal can be recovered, and claiming one would put a produced
-    -- union into `q = S/U`, the headline estimand of VG10, VG16, VG19, VG20 and
-    -- VG22, for 254 of about 1,400 Down syndrome spoken observations.
-    --
-    -- So `spoken` is NULL and the count lands in `produced`. `signed` is NULL
-    -- too: signing is inside the union rather than absent, and a zero would
-    -- assert something the source does not say. us_03 therefore informs
-    -- comprehension, and its production waits for a produced-outcome model --
-    -- the rows are ordinary understood-without-spoken observations, which every
-    -- engine already handles.
     SELECT 'us_03'                          as study,
            vus03.subject_id,
            NULL                                as sex,
@@ -1855,12 +1482,6 @@ def vocab_combined_view_sql() -> str:
         810                                 as survey_vocab_max
     FROM vocab_uk_06 as vuk06
         UNION ALL
-    -- ie_02 administered DSE Checklists 1 + 2 only, so its ceiling is the 476
-    -- achievable words the source now records, not the full instrument's 810.
-    -- Its counts stay on the 810 reference scale as a short form; see
-    -- DSE_SHORT_FORM_CEILINGS. Three Checklist 2 counts of 350 against 349
-    -- achievable words take `understood` to 477, and the form-ceiling guard
-    -- drops those rows as it drops any count above its form's ceiling.
     SELECT 'ie_02'                           as study,
         vie2.subject_id,
         CASE vie2.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
@@ -1873,9 +1494,6 @@ def vocab_combined_view_sql() -> str:
     FROM vocab_ie_02 as vie2
     WHERE vie2.english_speaking = 'yes'
     UNION ALL
-    -- nz_01 (Foster-Cohen): production-only, no comprehension. The CSV columns are
-    -- modality-exclusive, so any-modality spoken = spoken + spoken_signed (a + c)
-    -- and signed = signed + spoken_signed (b + c). 675-item NZCDI ceiling.
     SELECT 'nz_01'                                        as study,
         vnz01.subject_id,
         NULL                                              as sex,
@@ -1887,39 +1505,6 @@ def vocab_combined_view_sql() -> str:
         675                                               as survey_vocab_max
     FROM vocab_nz_01 as vnz01
     UNION ALL
-    -- es_01 (Galeote): a Spanish cross-sectional Down syndrome sample assessed on
-    -- the 651-word CDI-Down, the Spanish MB-CDI adaptation for children with Down
-    -- syndrome.
-    --
-    -- The source CSV also carries the study's 186 mental-age and sex matched
-    -- typically developing children (group = 'TD'), which this Down syndrome
-    -- relation excludes. They are a Spanish-normed comparison sample on a
-    -- different instrument, so they are not interchangeable with the Wordbank TD
-    -- reference pool load_data draws on, and pooling them would put a second
-    -- instrument into the pool the Down syndrome exclusions are benchmarked
-    -- against. They stay available in vocab_es_01 for a matched-pair analysis
-    -- (pair_id links a DS child to its TD partner).
-    --
-    -- The CDI-Down adds a third response column for *symbolic* (referential)
-    -- gestures -- "gestures representing specific lexical items" (Galeote et al.,
-    -- 2011) -- so the source's `gestured` count is a gestural lexicon scored
-    -- against the same 651 words, not a tally of generic communicative gestures.
-    -- It is therefore read as this repository's `signed` construct: a non-vocal
-    -- expressive lexicon recorded per word. Like uk_02 and nz_01 -- and unlike
-    -- uk_01, see SIGNED_ONLY_STUDIES -- it is a TOTAL, counting words gestured
-    -- whether or not they are also spoken, so it is comparable without item-level
-    -- re-derivation. All 186 rows carry a non-zero total.
-    --
-    -- `produced` is the source's own recorded spoken-or-gestured union, each word
-    -- counted once, so it is a de-duplicated union like uk_01's and nz_01's rather
-    -- than a sum. It exceeds `spoken` by a mean of 28 words.
-    --
-    -- Guard: a gestural total larger than the union it belongs to is impossible --
-    -- a union cannot be smaller than either of its parts -- so such a row's
-    -- `signed` is masked rather than passed to the signing models as a total. One
-    -- of the 186 rows is affected (1 word spoken, 15 gestured, union 11); which of
-    -- its three source numbers is wrong cannot be determined, and its understood,
-    -- spoken and produced values are unaffected. See data/vocab_data_es_01.md.
     SELECT 'es_01'                           as study,
         ves01.subject_id,
         CASE ves01.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
@@ -1935,40 +1520,6 @@ def vocab_combined_view_sql() -> str:
     FROM vocab_es_01 as ves01
     WHERE ves01."group" = 'DS'
     UNION ALL
-    -- uk_07 (PACT-DS; Burgoyne, Baxter, Hartwell, Pagnamenta & Stojanovik): a UK
-    -- feasibility randomised controlled trial of a parent-delivered early language
-    -- intervention. 30 children with Down syndrome, three assessment points each
-    -- (83 retained rows, 34-95 months), on the 674-item "Reading CDI" -- the
-    -- University of Reading adaptation, which adds a per-item sign coding.
-    --
-    -- Its expressive columns are modality-EXCLUSIVE cells, the nz_01 convention
-    -- rather than the uk_01/ie_02/uk_04/uk_05 one: `spoken` is says-only (no
-    -- sign), `signed` is signs-only (no says), `spoken_signed` is both. So the
-    -- any-modality marginals are spoken = a + c and signed = b + c, and the
-    -- source's `produced` is already the union of all three, each word once.
-    -- `signed` is therefore a TOTAL sign count -- comparable with uk_02, nz_01 and
-    -- es_01 without item-level re-derivation, and so not a SIGNED_ONLY_STUDIES
-    -- case. 81 of the 83 rows carry a non-zero total, from all 30 children.
-    --
-    -- Unlike nz_01 this source also records comprehension, so every row carries
-    -- `understood`. That makes uk_07 the second source after uk_02 supplying the
-    -- four-cell WITHIN-UNDERSTOOD cross-tab that identifies the sign-speech
-    -- association psi: understood_only = understood - produced, plus the three
-    -- cells above. VG15 consumes those cells from the raw CSV (see
-    -- common_joint_modality) and drops uk_07's marginals there to avoid double
-    -- counting; this view's marginals feed every other model.
-    --
-    -- Both trial arms are pooled. The models describe vocabulary against age, not
-    -- treatment effect, and the arm is a property of the child rather than of the
-    -- measurement; `group` stays in vocab_uk_07 for a stratified analysis, and the
-    -- intervention arm's T1-T3 growth being partly programme-driven is recorded as
-    -- a source caveat.
-    --
-    -- One administration (58 months, 191 understood against 489 produced) is
-    -- withheld pending clarification with the source team, and so is absent from
-    -- vocab_uk_07 itself -- see UK07_WITHHELD_ADMINISTRATIONS. It is the only row
-    -- in the source where production exceeds comprehension, and the only one whose
-    -- understood_only cross-tab cell would be negative. 82 rows remain.
     SELECT 'uk_07'                                        as study,
         vuk07.subject_id,
         CASE vuk07.sex WHEN 1 THEN 'M' WHEN 2 THEN 'F' END as sex,
@@ -1985,17 +1536,11 @@ def vocab_combined_view_sql() -> str:
 
 
 def _deterministic_row_order(df: pd.DataFrame) -> pd.DataFrame:
-    """Return ``df`` in a canonical row order independent of scan order.
+    """Return a canonical row order independent of database scan order.
 
-    The loader queries carry no ``ORDER BY``, so row order otherwise follows
-    the DuckDB scan, which is not contractual and can change across versions
-    and platforms. Everything statistical is order-invariant, but the fit
-    manifest records an exact hash of the prepared frame — schema, values and
-    row order — precisely so a stale posterior can be told from a current one,
-    and a hash over a nondeterministic order cannot be recomputed for
-    validation (issue #266 finding 1). Sorting on every column, stably and
-    with NaNs last, gives a total order up to exact duplicate rows, whose
-    relative order cannot change the hash.
+    The prepared-frame hash includes row order, so reloads must use the same
+    order. Sort on every column with missing values last. Exact duplicate rows
+    can exchange positions without changing the hash. Call before masking.
     """
     return df.sort_values(
         list(df.columns), kind="stable", na_position="last"
@@ -2024,8 +1569,7 @@ def load_combined_data(
     Counts from partial administrations are masked by default
     (:func:`mask_incomplete_administrations`), because they are not on the
     810-item reference scale the model likelihoods assume. This is applied here
-    rather than per-engine — unlike the signing-source masking, which only the
-    signing models need — so every consumer of the DS pool gets the same scale.
+    for all DS consumers. Signing-source masking remains in the signing engines.
 
     Parameters:
     -----------
@@ -2040,22 +1584,18 @@ def load_combined_data(
             analysis. Defaults to False.
         include_below_form_floor (bool): Reintroduce administrations given below their
             form's lowest registered age, for sensitivity analysis. Defaults to False.
-            Read :data:`FORM_AGE_FLOORS` first — three of the 16 rows this puts back
-            report 236 to 368 words *spoken* at 6 months.
+            See :data:`FORM_AGE_FLOORS` for the source-specific rationale.
         include_ceiling_only_children (bool): Reintroduce children whose every
-            administration sits at their form's ceiling, for sensitivity analysis.
-            Defaults to False. Read :data:`CEILING_ONLY_CHILD_STUDIES` first — this puts
-            back 64 children and 98 administrations that carry a documented
-            preparation-batch signature.
+            administration is near its form ceiling, for sensitivity analysis.
+            Defaults to False. See :data:`CEILING_ONLY_CHILD_STUDIES` for the
+            outcome-dependent exclusion and its limits.
         include_comprehension_below_production (bool): Reintroduce comprehension
-            counts that fall below the child's recorded ``produced`` union, for
+            counts below ``max(produced, spoken)``, for
             sensitivity analysis. Defaults to False.
         include_same_day_disagreements (bool): Reintroduce production counts
             contradicted by a same-day administration on another form, for
             sensitivity analysis. Defaults to False. Read
-            :data:`SAME_DAY_DISAGREEMENT_FACTOR` first — the two counts this
-            puts back record 385 and 406 words spoken at 23 months against
-            same-day measurements of 11 and 50.
+            :data:`SAME_DAY_DISAGREEMENT_FACTOR` for scope and thresholds.
         mask_dse_short_form_comprehension (bool): Mask the comprehension counts
             of the DSE short forms kept on the 810 scale
             (:data:`DSE_SHORT_FORM_CEILINGS`), for sensitivity analysis. Defaults
@@ -2082,11 +1622,6 @@ def load_combined_data(
                 understood,
                 spoken,
                 signed,
-                -- Selected for mask_comprehension_below_production, and by
-                -- default dropped before returning: `produced` is the union of
-                -- the two modalities, which no registered model consumes, and
-                -- adding a column to the returned frame would change what
-                -- every caller sees. `include_produced` retains it on request.
                 produced,
                 survey_vocab_max
             FROM vocab_combined
@@ -2096,13 +1631,8 @@ def load_combined_data(
         ).df()
     df = _deterministic_row_order(df)
 
-    # Both source-admissibility rules run before de-duplication and before any rule
-    # that compares a child's records against each other. A ceiling-saturated row would
-    # otherwise become the later value the longitudinal-collapse signature is measured
-    # against, and could mask a valid count as a "collapse" that is an artefact of the
-    # unusable row being present. exclude_ceiling_only_children must also see raw
-    # counts, before the near-ceiling rule masks any of them, or its child-level test
-    # would depend on the order the rules run in.
+    # Child-level ceiling screening needs raw counts. Apply source-admission
+    # rules before within-child comparisons so excluded rows cannot affect them.
     df, _ = exclude_ceiling_only_children(
         df, include_ceiling_only=include_ceiling_only_children
     )
@@ -2125,12 +1655,7 @@ def load_combined_data(
     df, _ = mask_implausible_production_administrations(
         df, include_implausible=include_implausible_production
     )
-    # Same-day contradictions run after the production rules deliberately:
-    # several ceiling-region same-day pairs are already masked by the
-    # near-ceiling, collapse and duplicated-outcome signatures, so running
-    # last-of-the-production-rules keeps those rules' documented counts
-    # unchanged and makes this rule's catch exactly the counts nothing else
-    # explains. The net masking is order-independent.
+    # Report same-day masks only for values surviving earlier production rules.
     df, _ = mask_same_day_production_disagreements(
         df, include_disagreements=include_same_day_disagreements
     )
@@ -2151,10 +1676,7 @@ def load_combined_data(
             include_structurally_distinct_subsamples
         ),
     )
-    # Last, and deliberately so: this rule compares two columns of a single row,
-    # so it needs no cross-row context, and running it after the others means it
-    # only fires on comprehension counts that survived every earlier rule. A row
-    # whose `understood` an earlier mask already cleared is not counted twice.
+    # Count only comprehension values surviving earlier masks.
     df, _ = mask_comprehension_below_production(
         df, include_below_production=include_comprehension_below_production
     )
@@ -2172,25 +1694,11 @@ def count_reinstated_implausible_production(
     *,
     include_same_day_disagreements: bool = False,
 ) -> int:
-    """Spoken observations the implausible-production rule masks by default.
+    """Count net spoken observations restored by the implausibility override.
 
-    This is what the ``include_implausible_production`` sensitivity puts back, and
-    it exists so the sensitivity's own fit log can state the size of what it
-    reinstated. A registered check that cannot be seen to have done anything is
-    the failure the retired ``us01-ceiling-excluded`` variants exhibited; a
-    reinstatement variant printing 0 here would be the same fault in mirror image.
-
-    Derived by differencing the two loader paths rather than reimplementing the
-    signature, so it cannot drift from the rule it reports on. The figure is
-    the flag's *net* reinstatement with the same-day rule held at
-    ``include_same_day_disagreements`` on both sides of the difference. With
-    the same-day rule active (the default) it is smaller than the implausible
-    rule's own catch, because :func:`mask_same_day_production_disagreements`
-    independently re-masks reinstated ceiling-region counts that have an
-    observed same-day partner (5 against 11 in the current pool). With
-    ``include_same_day_disagreements=True`` -- the combined variant
-    ``us01-masked-production-reinstated`` -- it is the rule's own catch, which
-    is the figure a reader of that variant's fit log needs.
+    Difference two loader paths with the same-day flag held fixed. With that
+    rule active, some reinstated values can be masked again. With both overrides
+    active, the difference describes this rule's contribution to the combined arm.
     """
     masked = load_combined_data(
         max_age_months=max_age_months,
@@ -2211,21 +1719,11 @@ def count_reinstated_same_day_disagreements(
     *,
     include_implausible_production: bool = False,
 ) -> int:
-    """Spoken observations the same-day disagreement rule masks by default.
+    """Count net spoken observations restored by the same-day override.
 
-    The companion of :func:`count_reinstated_implausible_production` for the
-    ``include_same_day_disagreements`` flag, and for the same reason: a
-    reinstatement variant's fit log has to state what it reinstated, or a flag
-    that stopped biting would look like a pass. Differenced through the loader
-    with the implausible rule held at ``include_implausible_production`` on
-    both sides. At the default, ``False``, the figure is the rule's *own* catch
-    -- the two Words & Sentences counts of 385 and 406 words at 23 months --
-    which is what the engines print, so that beside the implausible figure
-    taken with this flag lifted (11) the two lines partition the combined
-    variant's gain over the default pool (13) rather than overlap. With
-    ``include_implausible_production=True`` the figure also counts the six
-    reinstated ceiling-region records the rule re-masks, 8 in all; that is the
-    same-day rule's reach on the reinstated frame, not what a fit log reports.
+    Difference two loader paths with ``include_implausible_production`` held
+    fixed. Lifting implausibility masks can expose more paired observations
+    to the same-day rule.
     """
     masked = load_combined_data(
         max_age_months=max_age_months,
@@ -2274,35 +1772,14 @@ def count_masked_dse_short_form_comprehension(
 def _subsample_subjects(
     df: pd.DataFrame, sample_fraction: float, random_seed: int
 ) -> pd.DataFrame:
-    """Draw a fraction of *subjects*, keeping all their administrations.
+    """Sample children and retain all their administrations.
 
-    Subsampling rows independently destroys the within-child replication that
-    identifies a subject random effect. In the typically-developing pool a child
-    contributes 1.32 administrations on average and 15.9% contribute more than
-    one; drawing 10% of *rows* leaves 1.04 and 3.8%, at which point a subject
-    random intercept and the observation-level Beta-Binomial dispersion are the
-    same quantity — two per-observation noise terms with nothing to separate
-    them.
+    Row sampling reduces the repeat observations needed to separate child effects
+    from observation-level dispersion. See the failed row-sampled VG11 fit in
+    ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md`` sections 11-12.
 
-    That is not hypothetical. Fitting VG11 to a 10% row-wise draw produces a
-    posterior with two entirely separated modes — the between-child spread
-    attributed either to ``kappa`` (``tau_subject`` about 0.07, ``a_kappa``
-    about 1.2) or to the subject effects (``tau_subject`` about 1.08,
-    ``a_kappa`` about 4.1) — with six chains splitting 3/3, no within-chain
-    migration, and R-hat 1.72. The same model on a subject-wise draw of the same
-    size is unimodal at R-hat 1.01. See
-    ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md`` §§11-12.
-
-    Subjects are keyed by ``study``/``subject_id`` together, matching the
-    ``subject_key`` convention the random-effect engines use, so a subject
-    identifier repeated across datasets is not merged.
-
-    The key list is **sorted** before sampling. ``Series.unique`` preserves order
-    of first appearance and ``Series.sample`` draws by position, so an unsorted
-    list would make the selected subjects depend on the order DuckDB happened to
-    return rows in — the loader's query carries no ``ORDER BY``. Sorting matches
-    what the random-effect engines already do when they assign study and subject
-    codes, and makes the draw reproducible from the seed alone.
+    Keys combine study and subject identifiers. Sort keys before random sampling
+    so selected children do not depend on database scan order.
     """
     subject_key = (
         df["study"].astype(str) + "::" + df["subject_id"].astype(str)
@@ -2351,22 +1828,22 @@ def load_data(
     sample_fraction : float
         Fraction of **subjects** to subsample (TD only). 1.0 = no subsampling.
         Whole children are drawn and all their administrations kept, so
-        within-child replication survives the subsample — see
+        within-child replication survives the subsample. See
         :func:`_subsample_subjects` for why drawing rows instead is unsafe for
         any model carrying subject random effects.
     random_seed : int
         Random seed for subsampling.
     max_age_months : int | None
-        Upper bound on age (inclusive, months). None means no upper bound.
+        Upper age bound in months, inclusive. None uses the TD pool's default
+        upper bound; for DS it uses :func:`load_combined_data`'s broad limit.
     languages : tuple[str, ...] | None
         Wordbank ``language`` values to include (TD only). Defaults to
         :data:`ENGLISH_LANGUAGES`. Pass a wider tuple to broaden the scope, or
-        ``None`` to include all languages. Ignored for DS (the DS subset is
-        fixed to English when the database is built).
+        ``None`` to include all languages. Ignored for DS, whose studies include
+        English, Italian and Spanish sources.
     include_incomplete_administrations, include_duplicated_outcomes, include_implausible_production, include_below_form_floor, include_ceiling_only_children, include_comprehension_below_production, include_same_day_disagreements : bool
         Reinstate records that :func:`load_combined_data` masks or drops by default,
-        for sensitivity analysis. **DS only** — each names a specific documented
-        defect class in the DS pool, so passing one for the TD population is a
+        for sensitivity analysis. These flags apply to DS only; passing one for TD is a
         caller error rather than a silent no-op.
     mask_dse_short_form_comprehension : bool
         Mask the DSE short forms' comprehension counts, for sensitivity analysis
@@ -2408,7 +1885,7 @@ def load_data(
             f"got {sorted(k for k, v in ds_only_flags.items() if v)} for {population}."
         )
 
-    # Typically developing — query wordbank_child directly.
+    # Query the typically developing pool from wordbank_child directly.
     #
     # Wordbank's CDI: Words & Sentences (WS) rows contain valid production
     # counts, but their comprehension column is a production proxy. Keep WG
@@ -2471,14 +1948,6 @@ def load_data(
                 production                         as spoken,
                 typically_developing,
                 health_conditions,
-                -- Recoded to the 'M'/'F' the Down syndrome view uses, so the
-                -- sex covariate reads one coding in both populations (#324).
-                -- Selected last and returned only when a caller asks for it:
-                -- `_deterministic_row_order` sorts on every column in order, so
-                -- a trailing column can only break ties between rows identical
-                -- in every earlier one -- the same child at the same age on the
-                -- same form -- which carry the same sex. Every projection that
-                -- does not request it is unchanged row for row.
                 CASE sex WHEN 'Male' THEN 'M' WHEN 'Female' THEN 'F' END as sex
             FROM admissions
             """,

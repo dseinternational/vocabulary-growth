@@ -1,32 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Bivariate vocabulary growth model with study-level random intercepts.
+"""Bivariate vocabulary growth with study and optional child effects.
 
-This is the engine for eleven of the twenty registered models — VG07-VG10,
-VG13, VG16 and VG19-VG23 — and the catalogue
-(:mod:`vocab_growth.models.catalogue`) is the authoritative mapping. It extends
-the production-ratio reparameterization from common_bivariate with study-level
-random intercepts on both the understood trajectory and the production ratio:
+The catalogue records which models use this engine. Study offsets modify
+comprehension and the spoken share on the logit scale. Over K retained
+studies, zero-sum offsets have conditional variance tau**2 and pairwise
+correlation -1/(K-1), for K >= 2. The constraint removes a study-mean degree
+of freedom; it is not equivalent to independent study priors.
 
-    f_U(a, s) = mean_trend_u(a) + g_u(a) + delta_u[s]
-    h(a, s)   = mean_trend_q(a) + g_q(a) + delta_q[s]
-
-    delta_u[s] = tau_u * z_u[s],  z_u ~ ZeroSumNormal(sqrt(K / (K - 1)))
-    delta_q[s] = tau_q * z_q[s],  z_q ~ ZeroSumNormal(sqrt(K / (K - 1)))
-
-over the K retained studies. The ``tau * z`` scaling is the funnel-avoiding
-non-centring of issue #65; the sum-to-zero constraint on the unit offsets is a
-deliberate **identifiability** constraint on top of it, not a prior-preserving
-reparameterisation — it removes the group-mean degree of freedom that otherwise
-trades off against the global intercept. The ``sqrt(K / (K - 1))`` rescaling
-keeps each study effect's marginal prior variance at ``tau^2``, so the marginals
-match an independent ``Normal(0, tau)`` while the joint does not: a ``-1/(K-1)``
-correlation is imposed. See the full argument at the construction site in
-:func:`build_model_re`.
-
-Plot and query predictions use the population-level trajectory (delta=0).
+Plot and query curves use zero study and child effects. Separate predictive
+outputs draw a new child under the selected child-effect structure.
 """
 
 import os
@@ -1089,9 +1073,7 @@ def fit_bivariate_re_model(
     config: str,
     definition: BivariateModelDefinition,
 ) -> BivariateREContext:
-    """
-    Fit pipeline for bivariate model with study random intercepts (VG07).
-    """
+    """Run the fit pipeline for a bivariate model with study random effects."""
     return run_fit_pipeline(config, definition, stages=bivariate_re_stages(definition))
 
 

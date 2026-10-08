@@ -1,21 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for the conditional (GLMM) dispersion calibration.
+"""Check conditional concentration calibration on simulated designs.
 
-The estimator behind ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md``
-§19 moved VG11's dispersion prior by a factor of ten, so what it claims has to be
-checkable without a full pool: these run on small synthetic designs where the
-truth is known by construction.
-
-The load-bearing property is that the estimator can tell a subject random effect
-from observation-level dispersion. The two are only weakly separated for a child
-measured once -- both add variance to the same single number, and what
-distinguishes them is the shape of the resulting count distribution rather than
-its spread -- so repeated administrations are what make the separation precise.
-If it failed silently the calibration would read the whole of the between-child
-spread as dispersion and set a prior an order of magnitude out, which is exactly
-the error it exists to correct.
+Repeated administrations help separate persistent child effects from
+observation-level count variation. These tests check selected simulated
+regimes, numerical integration and optimisation. They do not establish
+identifiability or recovery precision for every study design.
 """
 
 import importlib.util
@@ -102,35 +93,14 @@ _TAU_TOLERANCE = {"subject-heavy": 0.10, "dispersion-heavy": 0.35}
 )
 @pytest.mark.parametrize("seed", [7, 8, 9])
 def test_recovers_tau_in_both_regimes(truth, name, seed):
-    """`tau` is the load-bearing quantity, and it recovers tightly.
-
-    Whether the estimator can separate the subject effect from the dispersion is
-    a question about `tau`: a design that cannot tell them apart returns a `tau`
-    pulled toward whichever the simulation did not use. Measured over seeds
-    7-11, recovery is within 6% for a large tau and 28% for a small one.
-
-    Several seeds, because a single one hides how much of a pass is luck — the
-    earlier version of this file asserted a `kappa` this design cannot pin down,
-    passed locally, and failed on CI at a different point on the same flat ridge.
-    """
+    """Recover the child-effect scale in both selected regimes across several seeds."""
     res = _refit(_synthetic_design(), truth, seed=seed)
 
     assert res.tau == pytest.approx(truth["tau"], rel=_TAU_TOLERANCE[name])
 
 
 def test_kappa_recovers_to_within_the_design_s_resolution():
-    """`kappa` recovers only loosely here, and the tolerance says how loosely.
-
-    1,200 observations with a saturated mean spending 15 degrees of freedom do
-    not pin a dispersion parameter down: across seeds this design returns 26-33
-    against a truth of 30, and at the ~300 of VG11's real posterior it returns
-    anywhere from 158 to 298. The tight check belongs on the real VG11 frame
-    (16,235 rows when section 19 of the note ran it; 18,500 now that the
-    frames use the registered language scope, #240), where
-    `scripts/kappa_conditional_calibration.py --recover` puts it within 7%;
-    what is checkable here is that the estimate lands in the right region
-    rather than at the prior or at a bound.
-    """
+    """Use broad concentration tolerances for this small simulated design."""
     res = _refit(_synthetic_design(), _DISPERSION_HEAVY, seed=7)
     truth = _DISPERSION_HEAVY["kappa_min"] + _DISPERSION_HEAVY["excess_young"]
 
@@ -138,12 +108,7 @@ def test_kappa_recovers_to_within_the_design_s_resolution():
 
 
 def test_the_two_regimes_are_told_apart():
-    """The sharper claim: the fits do not land in the same place.
-
-    A recovery tolerance can be met while the estimator returns much the same
-    answer either way. This asserts the contrast directly, on `tau`, which is
-    where the identification question actually lives.
-    """
+    """Check the difference between estimated child scales in the two regimes."""
     design = _synthetic_design()
     heavy = _refit(design, _SUBJECT_HEAVY, seed=7)
     light = _refit(design, _DISPERSION_HEAVY, seed=7)
@@ -152,20 +117,11 @@ def test_the_two_regimes_are_told_apart():
 
 
 def test_a_small_tau_needs_the_repeats():
-    """The converse, so the test above is known to be testing something.
+    """Show weaker small-scale recovery without repeats in this selected design.
 
-    It is tempting to say the subject effect and the dispersion are *confounded*
-    for a child measured once — both add variance to one number. That is too
-    strong, and this design shows why: a logit-normal random effect and a
-    Beta-Binomial leave differently shaped count distributions, so a large tau is
-    still recovered from 900 singletons (0.91-1.03 against a truth of 1.0).
-
-    What the repeats buy is resolution at the *small* end, and there the
-    difference is stark. Strip them out and a truth of tau = 0.3 comes back
-    anywhere in 0.001-0.48 across seeds — the estimator can no longer tell
-    whether there is a subject effect at all. That is the regime that matters,
-    since it is what separates a model needing a conditional prior from one that
-    does not.
+    Single-visit count distributions can still contain information about a
+    child effect. A large scale and a small scale need not be equally hard
+    to distinguish from count dispersion.
     """
     truth = _DISPERSION_HEAVY["tau"]
     without = [
@@ -180,12 +136,7 @@ def test_a_small_tau_needs_the_repeats():
 
 
 def test_too_few_quadrature_nodes_biases_kappa_down():
-    """Why DEFAULT_NODES is 160 and not the 24 a first pass would reach for.
-
-    Under-integrating a wide subject distribution understates the spread the
-    random effect accounts for, so the dispersion has to absorb it and `kappa`
-    comes out too low. On the real VG11 frame that was a 17% error.
-    """
+    """Show a lower concentration estimate with too few nodes in this simulation."""
     design = _synthetic_design()
     coarse = _refit(design, _SUBJECT_HEAVY, seed=7, nodes=8)
     fine = _refit(design, _SUBJECT_HEAVY, seed=7, nodes=160)
@@ -197,12 +148,8 @@ def test_too_few_quadrature_nodes_biases_kappa_down():
 
 # --- the age-varying subject loading (a diagnostic, not a calibration path) -----
 #
-# Section 21 of the note traces the 16-18 month typically-developing understood
-# `kappa` spike to a subject scale that falls with age while the model holds it
-# constant. `--loading` is the check for that, and it is only worth anything if
-# it is quiet when the scale really is constant and loud when it is not. Both
-# truths below are simulated on the same design; tolerances are the worst over
-# seeds 7-11, rounded out.
+# Compare constant and falling simulated child scales on the same design.
+# The loading diagnostic should distinguish these cases across selected seeds.
 
 _CONSTANT_LOADING = dict(tau=1.0, kappa_min=5.0, excess_young=295.0, excess_old=45.0)
 _FALLING_LOADING = dict(tau=1.3, lam_old=0.55, kappa_min=5.0,
@@ -223,12 +170,7 @@ def _refit_loading(truth, *, seed, nodes=N_NODES):
 
 @pytest.mark.parametrize("seed", [7, 8, 9])
 def test_a_constant_subject_scale_reads_as_constant(seed):
-    """The null. A one-parameter extension must not pay for itself on noise.
-
-    Simulating a genuinely constant loading and fitting the age-varying form
-    returns a flat one (ratio 0.94-1.11 over seeds 7-11) for 0.4-1.9 log-likelihood
-    units. Without this the diagnostic would flag every pool it was pointed at.
-    """
+    """Recover a near-constant loading when the simulated scale is constant."""
     const, varying = _refit_loading(_CONSTANT_LOADING, seed=seed)
 
     assert const.nll - varying.nll < 5.0
@@ -237,14 +179,10 @@ def test_a_constant_subject_scale_reads_as_constant(seed):
 
 @pytest.mark.parametrize("seed", [7, 8, 9])
 def test_a_falling_subject_scale_is_found_and_distorts_kappa_if_it_is_not(seed):
-    """The alternative, and why it matters that the diagnostic exists.
+    """Recover the simulated falling scale and its improvement in likelihood.
 
-    A loading falling 1.3 -> 0.55 across the anchors is recovered as 0.43-0.50 of
-    its young value for 63-82 log-likelihood units. Fitting the same draw with
-    the constant scale every registered model carries does not merely lose those
-    units: its `kappa` at the young anchor comes back at 13-26 against a truth of
-    100, so a calibration read off it would be out by nearly an order of
-    magnitude in a way nothing in the fit itself announces.
+    The constant-scale fit must also underestimate the young concentration
+    in this selected design.
     """
     truth_ratio = _FALLING_LOADING["lam_old"] / _FALLING_LOADING["tau"]
     truth_kappa_young = _FALLING_LOADING["kappa_min"] + _FALLING_LOADING["excess_young"]
@@ -331,7 +269,7 @@ def test_pinning_tau_at_zero_recovers_the_marginal_estimate():
 
     assert marginal.tau == pytest.approx(0.0, abs=1e-5)
     assert marginal.kappa_young < conditional.kappa_young
-    # and the conditional fit must actually be the better explanation
+    # The conditional fit must also have the larger likelihood in this simulation.
     assert conditional.nll < marginal.nll
 
 
@@ -340,16 +278,10 @@ def test_pinning_tau_at_zero_recovers_the_marginal_estimate():
 
 @pytest.mark.parametrize("log_kappa", [np.log(300.0), np.log(5e4), np.log(1e7)])
 def test_gradient_stays_finite_at_extreme_dispersion(log_kappa):
-    """The failure that only showed up on CI.
+    """Keep gradients finite when quadrature nodes approach probability boundaries.
 
-    With a wide `tau` the outermost quadrature nodes push p to the edge, and once
-    `kappa` is large the smaller Beta parameter underflows to zero. `betaln` then
-    returns inf; logsumexp gives such a node a softmax weight of about e^-80, but
-    reverse-mode AD still computes 0 * inf = NaN and the entire gradient is lost.
-    L-BFGS receives NaN, stops, and reports a nonsense optimum — which is exactly
-    what happened when the line search happened to wander far enough, hence the
-    platform dependence. The estimator converged locally and returned 158 against
-    a truth of 300 in CI.
+    Very small beta parameters can make special-function values infinite.
+    Multiplication by near-zero integration weights must not produce NaN.
     """
     design = _synthetic_design()
     nll, layout = _MODULE.make_objective(design, ANCHORS, n_nodes=48)
@@ -369,12 +301,7 @@ def test_gradient_stays_finite_at_extreme_dispersion(log_kappa):
 
 
 def test_the_optimiser_stays_inside_its_box():
-    """The bounds exist to stop a runaway line search, not to shape the answer.
-
-    Both boxes sit orders of magnitude outside any real fit, so a converged
-    optimum must be strictly interior — an estimate sitting *on* a bound would
-    mean the bounds had become part of the model.
-    """
+    """Check that this simulated fit reaches an interior optimum, not a bound."""
     res = _refit(_synthetic_design(), _SUBJECT_HEAVY, seed=7)
 
     assert 1e-3 < res.tau < 10.0
@@ -467,15 +394,7 @@ def test_every_registered_pool_names_a_real_model_and_ordered_anchors():
 
 
 def test_frames_use_the_registered_language_scope():
-    """The calibration frames must match the registered model frames (#240).
-
-    ``univariate_frame`` and ``bivariate_frames`` used to call the loader
-    without ``definition.td_languages`` and so calibrated on the English-only
-    default (16,235 / 5,997 / 5,406 rows for VG11 / VG12 / VG13-understood).
-    The registered graphs fit English plus Romance; the counts pinned here are
-    those frames after source-level deduplication, and they move only when the
-    export is refreshed.
-    """
+    """Use the registered language scope for calibration frames."""
     import os
 
     import vocab_growth.data_utils as du

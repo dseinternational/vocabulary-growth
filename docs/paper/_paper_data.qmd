@@ -7,7 +7,7 @@ Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
 Data-access helpers for the paper, mirroring the report's `_report_data.qmd`
 over the same curated figure + summary store (docs/report/figures/, synced by
 scripts/sync_report_figures.py). Included via {{< include _paper_data.qmd >}}
-so no number in the manuscript is ever hand-entered.
+to keep these data readers shared within the manuscript.
 
 This is deliberately a small subset of the report's layer: the shared reader
 comes from dse_research_utils, and only the helpers the paper actually uses
@@ -108,8 +108,8 @@ def comp_band(name, grid_col, grid_val, prefix="d", fmt="{:.1f}", unit=""):
 
 
 # Posterior-summary column subset for count tables (schema as in the report:
-# Ey_* = expected count for the mean trajectory, Y_* = predictive count for an
-# individual child; ci50_* inner 50%, ci_* outer 89% equal-tailed intervals).
+# Ey_* = reference expected count; Y_* = predictive count, under the fit's
+# prediction conditions; ci50_* inner 50%, ci_* outer 89% equal-tailed intervals).
 _COUNT_COLS = {
     "age_months": "Age (mo)",
     "Ey_median": "Expected",

@@ -1,14 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Build alternative-prior variants of a model definition (issue #89 §7).
+"""Build independent sensitivity definitions from registered models.
 
-`make_variant` returns a copy of a committed definition (via
-``dataclasses.replace``) whose ``config_name`` carries a suffix — so its fitted
-output lands in a separate ``output/models/<model_id>-<config_name>-<suffix>/``
-directory and never clobbers the model of record — with the named prior
-hyperparameters overridden. The committed ``VGxx`` instances are never mutated,
-and since issue #273 they are frozen, so they cannot be.
+make_variant copies the definition and adds a config-name suffix for separate
+fit output. It can change priors, data rules and supported structural fields.
+Nested concentration blocks are replaced with new frozen instances.
 """
 
 from __future__ import annotations
@@ -25,22 +22,10 @@ from vocab_growth.models.definitions import (
 def replace_kappa(
     kappa: KappaPriorParams | KappaAnchorPriorParams, **overrides: float
 ) -> KappaPriorParams | KappaAnchorPriorParams:
-    """Return a NEW kappa prior block with the given fields overridden.
+    """Return a new concentration-prior block with validated field overrides.
 
-    A fresh instance is required because ``dataclasses.replace`` on the parent
-    definition copies the nested kappa objects by *reference*, so an override
-    has to supply a new object rather than edit the shared one. Since issue #273
-    froze :class:`~vocab_growth.models.definitions.KappaPriorParams` and
-    :class:`~vocab_growth.models.definitions.KappaAnchorPriorParams` there is no
-    longer an in-place edit to reach for -- the sharing is safe by construction
-    and an accidental mutation raises rather than silently reaching the base
-    definition -- but the reason this function exists is unchanged: a variant
-    needs its own block.
-
-    Field names are checked against whichever form the block uses, so a variant
-    written for the legacy triple fails loudly on a migrated outcome instead of
-    silently doing nothing — which is how a stale sensitivity variant would
-    otherwise survive a migration.
+    A parent dataclass copy shares unchanged nested blocks. Replacing the block
+    keeps the base prior intact. Unknown fields fail for either parameterisation.
     """
     valid = {f.name for f in dataclasses.fields(type(kappa))}
     unknown = set(overrides) - valid
@@ -94,16 +79,6 @@ def make_variant(
         banner=f"{base.banner} [sensitivity: {config_suffix}]",
         **over,
     )
-    # Validate the VARIANT, not just the registered base. `validate_model_definition`
-    # is documented as the guard for a declarative specification and is cited from
-    # field docstrings as such, but it ran only from `validate_model_registry` -- so
-    # the sensitivity variants, which are fitted and reported like any other model,
-    # were never checked. They override precisely the fields it cross-checks:
-    # `slope_anchors`, `ages_query` and `gp_domain_months` together (the GP-domain
-    # containment check exists because a query age outside the domain extrapolates
-    # the HSGP basis), and `sign_peak_prior`, whose check exists because the engines
-    # index the pair straight into `pz.Beta`, which accepts a non-positive parameter
-    # and then samples garbage (#238). Both failure modes are silent-wrong-number.
-    # Every current variant passes, so this is inert today and costs nothing.
+    # Check the overridden definition, including domain bounds and prior shapes.
     validate_model_definition(variant)
     return variant

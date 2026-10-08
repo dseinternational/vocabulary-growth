@@ -20,11 +20,7 @@ import vocab_growth.intervals as intervals
 def _save_csv(df: pd.DataFrame, output_dir: str, filename: str) -> None:
     """Save a DataFrame as CSV alongside the corresponding plot.
 
-    An argument-order adapter for :func:`plot_io.save_plot_data`, and genuinely
-    private: this module's ten call sites put the frame first. The three engines
-    imported it across the module boundary until 2026-09-01 -- 16 call sites on a
-    private name whose only content is the reordering -- and now call the public
-    writer directly.
+    Adapt this module's frame-first calls to ``plot_io.save_plot_data``.
     """
     plot_io.save_plot_data(output_dir, filename, df)
 
@@ -60,10 +56,7 @@ def _save_png_svg(
     )
 
 
-#: A child needs at least this many administrations before their observations are
-#: joined into a trajectory. Two points are a segment, not a trajectory: they say
-#: nothing about shape, and drawing them costs the ink that makes the children who
-#: do have a shape readable.
+#: Minimum administrations for joined observations, chosen to reduce plot overlap.
 MIN_ADMINISTRATIONS_FOR_TRAJECTORY = 3
 
 #: An observation at or above this share of its **own** form's item count is
@@ -79,9 +72,7 @@ _TRAJECTORY_COLOUR = "0.30"
 #: enough to see through to the bands and the observed lines underneath.
 DEFAULT_PREDICTIVE_TRAJECTORIES = 60
 
-#: The predictive trajectories take the median's own colour, the first chart
-#: colour, thin and translucent, because that is what they are: draws of the
-#: quantity the median line summarises, not a separate series.
+#: Expected curves for new children share the main outcome colour.
 _PREDICTIVE_TRAJECTORY_COLOUR = plot_styles.CHART_COLOURS[0]
 
 #: Prior figures draw the prior's samples in the third chart colour, against
@@ -105,15 +96,10 @@ def _draw_subject_trajectories(
 ) -> dict[str, int]:
     """Join each child's observations into a trajectory, on the current axes.
 
-    Segments are drawn **solid within one recording form and dashed across a
-    change of form**, because a change of form makes consecutive counts
-    incomparable. The Down syndrome pool spans item counts from 396 to 810, and
-    roughly half the children with three or more administrations are recorded on
-    more than one form; a child near the ceiling of a short form can record
-    *fewer* words on a longer form a month later. One real child in this pool
-    scores 393 understood on a 416-item form at 47 months and 347 on an 810-item
-    form at 48. Joining those counts without marking the form change invites a
-    developmental interpretation that the records alone cannot establish.
+    With ``form_max``, segments are solid when adjacent item ceilings agree and
+    dashed when they differ or are missing. Item count is a form proxy; equal
+    ceilings do not prove measurement equivalence. Without ``form_max``, all
+    segments are solid. A count change across forms need not reflect development.
 
     Returns the counts the caller needs for the legend, so the figure states its
     own composition rather than relying on a caption written elsewhere.
@@ -188,7 +174,7 @@ def _draw_predictive_trajectories(
     for a child the model has not seen, built by the engine from a single child
     effect reused across the whole age grid. That coherence is the point: the
     predictive bands are pointwise quantiles, and a set of pointwise intervals
-    does not tell you what a trajectory looks like -- it cannot say whether the
+    does not tell you what a trajectory looks like. It cannot say whether the
     spread comes from children differing in level, in rate, or in shape.
 
     Returns how many were drawn, for the legend.
@@ -289,11 +275,8 @@ def plot_prior_samples_ratio(
     """
     Plot prior-sample curves for a production/signed ratio (q or r) in [0, 1].
 
-    All curves share a single colour at a legible alpha — unlike matplotlib's
-    default colour cycle at near-zero alpha, which renders the curves a faint,
-    multi-coloured wash. Matches the single-colour convention of
-    ``plot_prior_samples`` (the observed-data scatter elsewhere is blue, so the
-    curves default to orange to contrast).
+    Curves share one colour, as in ``plot_prior_samples``. The default differs
+    from the observed-data colour.
 
     Parameters
     ----------
@@ -375,9 +358,8 @@ def _draw_ppc_count_distribution(
 ) -> None:
     """Draw one query age's posterior predictive count distribution on ``ax``.
 
-    Shared by the combined grid figure and the individual per-age figures
-    (issue #123). Does not set the x-axis label — the caller owns that, so the
-    combined grid can label only its bottom row.
+    Shared by the grid and per-age figures. Leaves the x-axis label to the
+    caller, so the grid can label only its bottom row.
 
     ``count_axis_max`` caps the word-count axis (defaults to ``n_trials``); the
     label offsets scale with it so annotations stay on-plot when the axis is
@@ -408,10 +390,7 @@ def _draw_ppc_count_distribution(
     ax.fill_betweenx(
         [0, ylim_max * 0.96], lo50, hi50, color=_PPC_INTERVAL_COLOUR, alpha=0.18
     )
-    # Both bands are annotated. The inner one was drawn but unlabelled, which left
-    # the reader to guess what the darker shading meant -- and the two are easy to
-    # confuse precisely because an equal-tailed interval is asymmetric about the
-    # median, so neither band's edges sit where an eye expects them to.
+    # Label both interval probabilities so the darker band is identifiable.
     inner_pct = int(round(intervals.INNER_CI_PROB * 100))
     ax.text(
         hi + label_off,
@@ -471,15 +450,12 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     inventory can be zoomed in.
 
     Returns the combined grid figure (one subplot per query age; built for the
-    return value but no longer written to disk — the reports embed the per-age
+    return value but not written to disk; reports embed the per-age
     figures). When ``output_dir``/``filename`` are given, writes each age as its
     own ISO A-landscape file ``{filename}_{age}m.{png,svg}`` and the summary
     table ``{filename}.csv`` (issue #123).
     """
-    # ``max_age_months`` drops query ages past the outcome's reporting cap. This
-    # grid is the one place the two came apart: ``ages_query`` runs to 90, so the
-    # understood panels were drawn at 90 while every other understood artefact
-    # stopped at 84. See :mod:`vocab_growth.reporting_ages`.
+    # Apply the outcome's cap to both plotted ages and saved summaries.
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
     y_query = np.asarray(y_query)
     if max_age_months is not None:
@@ -509,14 +485,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
     fig.suptitle("Posterior predictive distributions at query ages", y=1.02)
 
     if filename is not None and output_dir is not None:
-        # Clear the previous run's per-age figures before writing this run's.
-        # Without this a tightened reporting cap leaves the old, wider set on
-        # disk, and `ppc_count_distribution_gallery` globs whatever it finds:
-        # VG02 kept publishing a 90-month comprehension figure against an
-        # 84-month cap, and it propagated into docs/report/figures/. The
-        # capped `{filename}.csv` written below has no matching row, so the
-        # orphan was invisible to `tests/test_reporting_age_policy.py`, which
-        # reads tables.
+        # Clear old per-age figures so a tightened cap leaves no uncapped assets.
         import glob as _glob
         import re as _re
 
@@ -532,10 +501,7 @@ def plot_posterior_predictive_count_distributions_by_query_age(
             if stale_pattern.match(os.path.basename(stale)):
                 os.remove(stale)
 
-        # The combined grid is no longer written — reports embed the per-age
-        # figures below (via ppc_count_distribution_gallery). The grid is still
-        # returned for callers/tests.
-        # Individual per-age figures, in ISO A landscape (issue #123).
+        # Save per-age figures; retain the combined grid only as the return value.
         for j, age in enumerate(X_query):
             fig_i, ax_i = plt.subplots(figsize=_iso_a_landscape_figsize())
             _draw_ppc_count_distribution(
@@ -578,9 +544,8 @@ def ppc_count_distribution_gallery(
     Ages absent from the companion table ``{prefix}.csv`` are skipped. That
     table is written under the outcome's reporting cap, so this keeps the
     gallery inside the cap even when a figure from an earlier, looser run is
-    still on disk -- which is how VG02 came to publish a 90-month comprehension
-    figure against an 84-month cap. The fit-time writer now clears stale
-    figures, but this guard also protects fits produced before it did.
+    still on disk. The fit-time writer clears stale files; this guard also
+    protects older fits.
     """
     import glob
     import re
@@ -634,13 +599,11 @@ def plot_posterior_predictive_pmf(
     For each query age, plot the posterior predictive distribution of counts as a PMF on a common support.
 
     ``y_query`` carries the exact posterior-predictive draws at the query ages,
-    shape ``(n_query, n_samples)`` — previously the nearest point on the plot
-    grid was substituted, so each panel showed the distribution at an age up to
-    half a grid step away from the one in its label (#234).
+    shape ``(n_query, n_samples)``. Use query-age draws rather than substituting
+    the nearest plot-grid point.
 
     ``max_age_months`` drops query ages past the outcome's reporting cap. Age
-    lives in the *column names* here (``pmf_84m``), not in a column, so this
-    table is easy to miss when auditing which artefacts are capped — it was.
+    lives in column names such as ``pmf_72m``, rather than a separate age column.
     """
     X_query = np.asarray(X_query, dtype=float).reshape(-1)
     y_query = np.asarray(y_query)
@@ -707,8 +670,7 @@ def plot_posterior_predictive_cdf(
     """For each query age, plot the posterior predictive CDF of counts.
 
     ``y_query`` carries the exact posterior-predictive draws at the query ages,
-    shape ``(n_query, n_samples)`` (see :func:`plot_posterior_predictive_pmf`
-    for why the nearest-plot-grid substitution was retired). ``max_age_months``
+    shape ``(n_query, n_samples)``. ``max_age_months``
     drops query ages past the outcome's reporting cap; age is carried in the
     column names.
     """
@@ -787,11 +749,9 @@ def _resolve_savgol_window_length(
     if window_length > n:
         window_length = n
 
-    # Must be odd
     if window_length % 2 == 0:
         window_length -= 1
 
-    # Must be greater than polyorder
     min_valid = polyorder + 2 if (polyorder + 2) % 2 == 1 else polyorder + 3
     if window_length <= polyorder:
         window_length = min_valid
@@ -888,10 +848,9 @@ def plot_posterior_predictive_median_trend(
     trajectory_samples
         Posterior predictive **expected counts for an unseen child**, shape
         ``(n_grid, n_samples)``. A sample of its columns is drawn as curves, so
-        the figure shows the trajectories the predictive bands summarise rather
-        than only their pointwise quantiles -- a band of pointwise intervals and
-        a set of coherent trajectories are different objects, and only the second
-        answers how much children differ.
+        the figure shows coherent expected curves alongside pointwise predictive
+        count bands. The expected curves exclude observation noise included in
+        those count bands.
 
         Pass the *expected* curve, not the predictive counts: the counts carry
         observation noise drawn independently at each grid point, which on a
@@ -1111,15 +1070,17 @@ def plot_expected_learning_rate(
     max_age_months: float | None = None,
 ):
     """
-    Plot the posterior distribution of the estimated learning rate
-    (estimated gain in spoken words per month) across age.
+    Plot the age derivative of the fitted expected count, in words per month.
 
-    ``max_age_months`` stops the curve where its outcome's evidence stops, and
+    This describes differences along the supplied age trajectory. It does not
+    establish the rate at which an individual child learns words.
+
+    ``max_age_months`` applies the outcome's reporting cap and
     is applied *before* smoothing so the Savitzky-Golay window cannot pull
     values from beyond the cap back across it. See
     :mod:`vocab_growth.reporting_ages`.
 
-    The is the derivative of the conditional expectation of the count given the
+    This is the derivative of the conditional expectation of the count given the
     latent function f. The posterior uncertainty bands show how that estimated
     rate varies across posterior draws of f:
 
@@ -1151,7 +1112,7 @@ def plot_expected_learning_rate(
     savgol_polyorder
         Polynomial order for Savitzky-Golay smoothing.
     smooth_intervals
-        If True, smooth HDI bounds as well as the median curve.
+        If True, smooth interval bounds as well as the median curve.
         If False, smooth only the median.
     y_label
         Label for the y-axis.
@@ -1186,7 +1147,7 @@ def plot_expected_learning_rate(
         edge_order=2,
     )  # shape: (n_samples, n_plot)
 
-    # Transform to estimated word-count learning rate
+    # Transform to the expected-count derivative with the chain rule.
     #    E[Y] = N * sigmoid(f)
     #    dE[Y]/dx = N * p * (1 - p) * df/dx
     p = 1.0 / (1.0 + np.exp(-f_plot_values))
@@ -1253,11 +1214,7 @@ def plot_expected_learning_rate(
 
     if filename is not None and output_dir is not None:
         _save_png_svg(plt.gcf(), output_dir, filename)
-        # The *plotted* arrays, so the table is the figure's own numbers. Saving
-        # the pre-smoothing arrays made `expected_learning_rate_smoothed.csv`
-        # byte-identical to `expected_learning_rate.csv`, so a reader who
-        # downloaded the smoothed table to check the smoothed figure got the
-        # unsmoothed series without being told.
+        # Save displayed summaries, including any smoothing.
         _save_csv(pd.DataFrame({
             "age_months": x_plot_values,
             "median_rate": median_rate_plot,
@@ -1267,12 +1224,10 @@ def plot_expected_learning_rate(
             "ci_hi": ci_rate_plot[:, 1],
         }), output_dir, filename)
         if not smooth:
-            # Draw-wise peak location over the (capped) grid, so the headline
-            # "fastest growth" row can carry uncertainty in *where* the peak is
-            # rather than only in the rate at one selected age (#234). A draw
-            # whose maximum lands on the first or last grid age is
-            # boundary-censored — its true peak lies at or beyond the edge of
-            # the reported range — so the censored share is recorded alongside.
+            # Per-draw peak ages capture location uncertainty, not just rate
+            # uncertainty at a selected age. A maximum at either grid boundary
+            # does not resolve the peak age within the range.
+            # Record the boundary share alongside the grid-based age summary.
             # The unsmoothed draws are used; the smoothed call writes no
             # companion because it would duplicate this file byte for byte.
             peak_idx = np.argmax(rate, axis=1)
@@ -1326,8 +1281,8 @@ def plot_posterior_kappa(
     Plot the posterior distribution of κ(age) on the plot grid, and return
     summary DataFrames for both the plot grid and query ages.
 
-    ``max_age_months`` stops the curve where its outcome's evidence stops. κ is
-    the dispersion *of one outcome*, so it takes that outcome's cap -- see
+    ``max_age_months`` applies the outcome's reporting cap. κ is
+    the dispersion of one outcome, so it takes that outcome's cap; see
     :mod:`vocab_growth.reporting_ages`. It trims the query grid as well as the
     plot grid, and the saved CSVs with the figure, so none of them can disagree.
 
@@ -1507,11 +1462,8 @@ def plot_production_rate(
 ) -> Figure:
     """Plot the posterior of the production ratio q(a) = p_S(a) / p_U(a) over age.
 
-    ``max_age_months`` stops the curve where the comprehension evidence stops.
-    ``q`` is a ratio *of* comprehension, so it inherits the narrower of the two
-    outcomes' age ranges, not the plot grid's — which spans the spoken data. It
-    is the model definition's ``report_max_age_understood``, and it trims the
-    saved CSV with the figure so the two cannot disagree.
+    ``max_age_months`` applies the comprehension reporting cap because ``q`` is
+    a share of understood words. Apply the same cap to the figure and saved CSV.
     """
     X_plot = samples.X_plot
     q_plot = samples.q_plot
@@ -1581,10 +1533,8 @@ def plot_comprehension_production_gap(
 ) -> Figure:
     """Plot the posterior of the comprehension-production gap (p_U - p_S) over age.
 
-    ``max_age_months`` stops the curve where the comprehension evidence stops, for
-    the same reason as :func:`plot_production_rate`: the gap is a *difference from*
-    comprehension, so it inherits comprehension's narrower age range rather than
-    the plot grid's, which spans the spoken data.
+    ``max_age_months`` applies the comprehension reporting cap to both the figure
+    and saved CSV, as in :func:`plot_production_rate`.
     """
     X_plot = samples.X_plot
     gap = (samples.p_u_plot - samples.p_s_plot) * n_trials  # in word count units
@@ -1658,14 +1608,11 @@ def plot_expected_counts_by_month(
     :func:`vocab_growth.posterior_analysis.monthly_summary_table`, so the figure
     and its companion CSV cannot disagree.
 
-    Two estimands are drawn, kept visually distinct because they are routinely
-    confused and quoting one for the other misleads badly:
+    Draw expected and predictive counts distinctly:
 
-    - the **expected** count ``Ey`` (filled bands, monthly markers) — the mean
-      trajectory with parameter uncertainty only;
-    - the **predictive** count ``Y`` for an individual child (dashed outline,
-      unfilled) — which is much wider, because it also carries between-child and
-      occasion-level dispersion.
+    - ``Ey`` uses filled bands and monthly markers for expected counts;
+    - ``Y`` uses an unfilled dashed outline for predictive counts, which also
+      include the count variation specified by the caller's prediction target.
 
     Parameters
     ----------

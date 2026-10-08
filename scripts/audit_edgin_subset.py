@@ -3,12 +3,9 @@
 
 """Systematic data audit of the Edgin (``us_01``) Down syndrome subset.
 
-Successive patches to this subset — the removed ``production <= 100`` inclusion
-rule, the Words & Sentences comprehension proxy, the duplicated outcome columns —
-each fixed one defect found by hand. This script instead enumerates every defect
-class the aggregate data can expose, so the subset is characterised once rather
-than patched repeatedly, and so any later change can be re-checked by re-running
-it.
+Check impossible counts, duplicate records, form age windows, outcome duplication,
+ceiling runs and large falls between visits. These checks flag records for review;
+they do not establish that every flagged record is wrong or detect every defect.
 
 Each check prints its finding and the affected administrations. Nothing is
 mutated: the script reads ``data/wordbank_administration_data.csv`` and reports.
@@ -17,7 +14,7 @@ descriptive tool, not a gate.
 
 Run from anywhere::
 
-    python scripts/audit_edgin_subset.py [--all-checks] [--csv PATH]
+    python scripts/audit_edgin_subset.py [--csv PATH]
 
 ``--csv`` writes the per-administration verdict table. The reference benchmarks
 are the same-age typically-developing Wordbank children on the same form, and the
@@ -46,7 +43,7 @@ FORM_AGE_RANGES = {"WG": (8, 18), "WS": (16, 30)}
 # docs/models/PRIORS.md. Used only as an order-of-magnitude implausibility
 # benchmark, never as a filter threshold.
 BERGLUND_SPOKEN_MEDIAN = {12: 0, 24: 10, 36: 30, 48: 50, 60: 65}
-BERGLUND_MAX_CHILD = 668  # the single most able child, at 48 months
+BERGLUND_MAX_CHILD = 668  # largest reported spoken count, at 48 months
 
 # Kept in step with vocab_growth.data_utils, so the audit's verdict and the
 # implemented masking agree rather than differing by an unscoped check.
@@ -300,7 +297,7 @@ def check_longitudinal_collapse(
     max_age: float = COLLAPSE_MAX_AGE_MONTHS,
 ) -> pd.Series:
     section(f"7. Longitudinal collapse (a value exceeding a LATER record by >= {factor:g}x)")
-    print("  Vocabulary does not shrink with age, so a hit is unambiguous. Two")
+    print("  A large fall in reported vocabulary flags a record for review. Two")
     print(f"  calibrations are applied, matching the implemented rule: a floor of {floor:g}")
     print("  (without it, 5 words falling to 1 would fire) and an age scope of")
     print(f"  {max_age:g} months (at older ages a decline can follow a form change).")

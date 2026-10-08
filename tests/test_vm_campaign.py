@@ -48,7 +48,7 @@ def test_the_arm_lists_cover_every_registered_arm_once():
 
 
 def test_typically_developing_arms_run_serially_and_ds_arms_pool():
-    """The TD fits peak at 27-28 GB each and must be alone on the machine."""
+    """Keep the campaign's TD fits serial to limit concurrent memory demand."""
     td = {key for key, model in CATALOGUE.items() if "td" in model.definition.config_name.split("-")}
     for name in ("C_TD_ARMS", "D_TD_ARMS"):
         assert {model for model, _ in _array(name)} <= td

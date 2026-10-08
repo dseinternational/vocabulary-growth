@@ -1,54 +1,19 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Does early signing predict later *spoken* vocabulary, beyond comprehension?
+"""Estimate the association between early signing and later spoken vocabulary.
 
-The practice question behind the signing results: children with Down syndrome who
-sign early — do they go on to say more than otherwise-similar children who did
-not? This script measures the association and, more importantly, measures how far
-the data can support an answer at all.
+Use one row per child. The first wave with signed, understood and spoken counts
+supplies early measures; the latest later wave supplies spoken vocabulary.
+Adjust count logits for age and study as in ``rank_stability.py``. Regress later
+spoken standing on early speech, comprehension and either any signing or the
+adjusted signed share of comprehension.
 
-Design
-------
-One row per child. At the **early wave** ``t0`` — the first administration
-carrying signed, understood *and* spoken — we record the child's signing, their
-comprehension standing and their existing speech. At the **latest later wave**
-``t1`` we record spoken vocabulary. Every measure is an age- and study-adjusted
-logit residual, the same scoring
-``scripts/experiments/rank_stability.py`` uses, so "standing" means the same
-thing here as it does there.
-
-The estimand is the coefficient on early signing in
-
-    resid_spoken(t1) ~ resid_spoken(t0) + resid_understood(t0) + signing(t0)
-
-Conditioning on ``resid_spoken(t0)`` is the analytical heart of it. Signing is
-taught *because* a child is not talking, so early signing marks low speech, and a
-model that omits prior speech measures that selection rather than any effect of
-signing. With prior speech held, the coefficient asks the narrower and more
-answerable question: among children at the same comprehension standing and the
-same starting speech level, is signing associated with more speech later?
-
-Two signing measures, because they answer different questions:
-
-* ``signs`` — binary, "does this child sign at all". The practitioner framing.
-* ``sign_dose`` — the age- and study-adjusted residual of the signed fraction of
-  comprehension. Retains within-study contrast where the binary has almost none.
-
-What this cannot be
--------------------
-**Not causal, and the confounding is unusually severe rather than pro forma.**
-Signing is not randomly assigned; it is a decision taken by families and by the
-programmes the studies recruit from. §"design" in the output shows the damage:
-signing status is very nearly a function of *study*, with two studies at ~100%
-signers and one at 0%. So a study-adjusted estimate rests on the three studies
-that actually vary internally, and an unadjusted one is mostly a between-study
-comparison wearing a within-child disguise. Both are reported, and they should be
-read as a range bracketing the design's ambiguity rather than as an estimate and
-a robustness check.
-
-The residual selection runs one way, which is the one thing here that helps: any
-remaining indication bias makes early signers look *worse*, so a positive
-coefficient is harder to manufacture than a negative one.
+Signing may be introduced in response to low speech. Adjusting for early speech
+addresses part of that selection, but does not make the association causal.
+Study signing rates may leave little within-study contrast. Report adjusted and
+unadjusted estimates and leave-one-study-out checks to show this dependence.
+Neither estimates bound the causal effect, and remaining bias can act in either
+direction. Bootstrap intervals resample children.
 
 Usage::
 

@@ -1,26 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Synthetic guards for the anchored-GP orthogonalisation and the sum-to-zero
-study random-intercept rescale.
+"""Check GP projection, point anchoring and zero-sum study-scale correction.
 
-These tests are deliberately data-free (no DuckDB, no MCMC): they exercise the
-graph helpers on small hand-built designs so they run in CI, where ``pytest``
-executes before ``scripts/prepare_data.py`` and the model-construction fixtures
-that need the prepared database skip. They pin the statistical contracts of the
-#176 conditioning fixes directly:
-
-* the anchored GP is orthogonalised against its mean's basis using coefficients
-  fitted on the observed rows only (so the plot/query reporting grid cannot leak
-  into the observed-row latent), then pinned to zero at the reference-age
-  anchor row (the ``anchor_g*_at_ref`` contract). The pinning shift restores a
-  constant component, so the composite is point-anchored and *centred*-orthogonal
-  to the basis — not orthogonal to it in the raw sense (#240); the assertions
-  below therefore use centred covariances, which the anchor shift cannot move;
-  and
-* ``ZeroSumNormal`` rescaled by ``sqrt(K / (K - 1))`` restores each group's
-  marginal prior variance to that of the original independent ``Normal(0, 1)``
-  offsets, so only the group-mean degree of freedom is removed.
+Projection coefficients use observed rows so reporting grids cannot alter
+them. Point anchoring then adds a constant shift, so tests check centred
+covariance rather than raw orthogonality. The stabilising ridge permits a
+small residual. Zero-sum study effects are rescaled to retain unit marginal
+variance.
 """
 
 import numpy as np

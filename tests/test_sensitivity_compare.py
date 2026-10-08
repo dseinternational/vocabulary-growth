@@ -1,15 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Unit tests for the prior-sensitivity baseline/variant comparison (issue #89 §7).
+"""Check baseline and sensitivity-variant comparisons without sampling.
 
-Pure/fast (no sampling). The load-bearing regression here is the VG15 shape:
-``compare_dirs`` emits ``within_baseline_hdi = None`` for the HDI-less series
-(``Ey_any``, ``P_psi_gt_1``), which makes the column object dtype (mixed Python
-bools + None) even after ``dropna``. ``summarise`` must coerce before inverting
-the mask — on object dtype ``~True``/``~False`` are the ints -2/-1 and ``.loc``
-raises ``KeyError``, aborting ``scripts/compare_sensitivity.py`` for vg15.
-VG10/VG11 frames are pure bool and never hit this.
+Interval-less rows make containment columns object-valued. Coerce checked
+values to booleans before inversion; otherwise bitwise inversion can create
+integer labels rather than a selection mask.
 """
 
 import json
@@ -142,14 +138,7 @@ def _write_grid_outputs(dirpath, *, gap_ages, gap_offset, q_ages):
 
 
 def test_plot_grid_series_are_compared_as_curves_inside_the_variant_support(tmp_path):
-    """#289 task 4.2: a restricted pool gets a different linspace for `gap`.
-
-    Matched on exact ages, VG10 `dse-native-only` shared 39 of 335 baseline
-    rows and was reported as partial coverage with nothing to compare. The
-    variant's curve is now interpolated onto the baseline's plot ages inside
-    the variant's own support, while the query-grid series still match
-    exactly, so a genuinely narrower support still counts against coverage.
-    """
+    """Interpolate plot-grid curves within variant support and match query ages exactly."""
     import numpy as np
 
     base_dir, var_dir = tmp_path / "base", tmp_path / "var"
@@ -224,9 +213,7 @@ def test_load_parameters_omits_absent_cross_lag(tmp_path):
 
 
 def test_a_moved_cross_lag_is_scored_rather_than_ignored(tmp_path):
-    """The defect this closes: a variant that halves beta_lag while leaving the
-    trajectories alone was previously scored **robust**, because beta_lag was in
-    no compared series. VG16 supplies no other reported number."""
+    """Include a changed lag coefficient even when reported trajectories are unchanged."""
     base_dir, var_dir = tmp_path / "base", tmp_path / "var"
     base_dir.mkdir(), var_dir.mkdir()
     _write_gate_payload(base_dir)

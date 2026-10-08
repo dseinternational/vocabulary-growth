@@ -1,19 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Every script that opens a trace either validates it or is a recorded exemption.
+"""Require validation or a recorded exemption for each top-level trace reader.
 
-Issue #266 finding 1 asked for the exact prepared-frame hash to be compared "for
-every fit consumer", and the gap that stayed open for a month was not the
-mechanism -- it was coverage. Eleven of the sixteen scripts that open a trace did
-not use it, and nothing said so; the eleven were found by reading the tree, which
-is exactly the check that does not run again when the seventeenth script is
-added.
-
-So the invariant is pinned here rather than swept once. A new trace-reading
-script fails this test until it either validates or is added to
-``EXEMPT_CONSUMERS`` with a reason -- and adding it there is a visible, arguable
-edit rather than an absence.
+The source scan uses known trace-reading and validation markers. A new script
+must join this coverage check rather than bypass compatibility validation.
 """
 
 from __future__ import annotations
@@ -81,13 +72,5 @@ def test_the_exemptions_name_scripts_that_exist_and_read_a_trace():
 
 
 def test_the_trace_reader_count_is_reviewed():
-    """A count, so a new consumer is noticed even if it happens to validate.
-
-    Sixteen top-level scripts opened a trace when finding 1's coverage was
-    enumerated on 2026-09-06. The number is not sacred -- but it moving is worth
-    a moment's thought about whether the new script belongs on this list, so
-    changing it here should be deliberate. The seventeenth script is the
-    comparison-resume wrapper: it inspects trace metadata, and its exemption
-    explains why that does not introduce another posterior reader.
-    """
+    """Make additions to the top-level trace-reader set explicit."""
     assert len(_trace_reading_scripts()) == 17

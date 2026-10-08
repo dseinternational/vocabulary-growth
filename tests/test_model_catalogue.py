@@ -1,23 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The model catalogue is the single source for every per-model dispatch.
+"""Check catalogue hooks, engine dispatch and documented reporting roles.
 
-Before issue #273 a model's engine was declared in five places: the
-``model_vgNN`` wrapper's import, ``analysis_frames.FRAME_BUILDERS``,
-``scripts/regenerate_plots.py``, ``scripts/prior_predictive_audit.py`` and
-``scripts/fit_sensitivity.py`` (with a sixth copy in ``refit_hightune.py`` and a
-seventh in ``recovery/spec.py``). Drift guards existed over two of them, which
-is why two of the others were wrong at once: the prior audit routed VG16 and
-VG19-VG23 through the plain bivariate engine, and the sensitivity scripts could
-not reach VG16's, VG21's or VG23's registered variants at all.
-
-Every one of those tables is now derived from
-:mod:`vocab_growth.models.catalogue`. These tests pin the catalogue's own
-claims against the code they describe -- which is the only place a check is
-worth putting once everything else follows from one record.
-
-Nothing here samples. The heaviest thing is importing the engine modules.
+These tests compare declarations with wrappers, stage factories and guides.
+They import engines but do not sample.
 """
 
 from __future__ import annotations
@@ -77,16 +64,7 @@ def test_the_definition_is_the_registered_one(model_key):
 
 
 def test_the_exploratory_modules_are_deliberately_absent():
-    """VG17/VG18 bypass the shared manifest, staging and convergence gate.
-
-    A catalogue entry would assert a supported lifecycle they do not have, and
-    would make ``fit_model.py`` and the validators offer to treat their output as
-    publishable. Since #273 finding 4 was resolved they live in
-    ``vocab_growth.models.exploratory``, outside the ``model_vgNN`` naming
-    convention ``fit_model.py`` resolves, so they are unreachable from the
-    registered path by construction rather than by omission.
-    ``tests/test_exploratory_lifecycle.py`` covers the rest of that resolution.
-    """
+    """Keep VG17 and VG18 outside registered fitting and publication paths."""
     assert "vg17" not in CATALOGUE
     assert "vg18" not in CATALOGUE
     exploratory = _REPO_ROOT / "src" / "vocab_growth" / "models" / "exploratory"
@@ -129,16 +107,7 @@ def test_the_optional_hooks_are_all_or_nothing(engine_name):
 
 @pytest.mark.parametrize("engine_name", _ENGINE_NAMES)
 def test_a_replot_engine_declares_exactly_one_way_to_obtain_samples(engine_name):
-    """Either a pure extractor or a posterior-predictive stage to re-run, not both.
-
-    `regenerate_plots.py` used to decide this with
-    `getattr(engine_module, "extract_model_samples", None)`, so the branch was a
-    function of an engine module's import list rather than of any declaration:
-    `common_bivariate_re` imports the shared predictive but not the shared
-    extractor, and its eleven models therefore re-sampled while the surrounding
-    comment said otherwise. Adding that name for an unrelated reason would have
-    flipped eleven models with nothing to notice.
-    """
+    """Require one sample source: extraction or posterior predictive sampling."""
     engine = ENGINES[engine_name]
     declared = [
         h for h in ("samples_extractor", "posterior_predictive")
@@ -154,12 +123,7 @@ def test_a_replot_engine_declares_exactly_one_way_to_obtain_samples(engine_name)
 
 @pytest.mark.parametrize("engine_name", _ENGINE_NAMES)
 def test_a_declared_extractor_really_is_importable_from_the_engine_module(engine_name):
-    """The declaration must match the module, in both directions.
-
-    A module that exports `extract_model_samples` while the catalogue declares
-    `posterior_predictive` is the old probe's behaviour re-emerging by accident, and
-    it would silently change which draws eleven models' figures are drawn from.
-    """
+    """Check that the declared sample source matches the engine exports."""
     engine = ENGINES[engine_name]
     module = importlib.import_module(engine.module)
     exports_extractor = hasattr(module, "extract_model_samples")
@@ -185,14 +149,7 @@ def test_resolve_names_the_engine_and_the_field_when_a_hook_is_missing(engine_na
 
 @pytest.mark.parametrize("engine_name", _ENGINE_NAMES)
 def test_the_prior_check_convention_matches_the_signature(engine_name):
-    """Passing the wrong convention raises only once that stage is reached.
-
-    Which, for a script that runs a single stage, is at the point of use -- and
-    the prior audit is exactly such a script. ``"definition"`` is what carries
-    :mod:`vocab_growth.models.prior_child_checks`'s unseen-child figures, so
-    getting it wrong drops the figures a child-effect model's prior audit exists
-    to look at rather than raising.
-    """
+    """Check the prior-check signature against its declared calling convention."""
     engine = ENGINES[engine_name]
     params = inspect.signature(engine.resolve("prior_checks")).parameters
     positional = [
@@ -235,12 +192,7 @@ def test_the_frame_builder_is_pure_in_the_definition(engine_name):
 
 @pytest.mark.parametrize("model_key", _MODEL_KEYS)
 def test_the_declared_engine_is_the_one_the_wrapper_imports(model_key):
-    """The catalogue's claim, checked against the module that does the fitting.
-
-    Engine identity cannot be inferred from the definition class -- VG05 and VG07
-    share ``BivariateModelDefinition`` on different engines -- so it is declared,
-    and this is what stops a declaration drifting from the code.
-    """
+    """Check the wrapper import because the definition class does not identify its engine."""
     module = importlib.import_module(get(model_key).wrapper_module)
     imported = {
         value.__module__
@@ -259,12 +211,7 @@ def test_the_declared_engine_is_the_one_the_wrapper_imports(model_key):
 def test_fit_dispatches_to_the_declared_engine_with_the_registered_definition(
     model_key, monkeypatch
 ):
-    """``model_vgNN.fit(config)`` must call *this* engine with *this* definition.
-
-    Exercised rather than read: the wrapper binds the engine's fit function at
-    import time, so substituting it here is what the call actually reaches. No
-    sampling happens -- the substitute records its arguments and returns.
-    """
+    """Record wrapper dispatch without running the engine or sampling."""
     model = get(model_key)
     module = importlib.import_module(model.wrapper_module)
     calls = []
@@ -285,14 +232,7 @@ def test_the_frame_builder_map_agrees_with_the_catalogue(model_key):
 
 
 def test_the_prior_audit_routes_every_model_through_its_own_engine():
-    """The defect this catalogue was built for.
-
-    ``scripts/prior_predictive_audit.py`` held its own bivariate-RE set listing
-    only VG07-VG10 and VG13, so VG16 and VG19-VG23 -- the cross-lag,
-    child-slope, correlated-effect and factor models -- were audited on a graph
-    without the structure that distinguishes them, and the script still produced
-    plots.
-    """
+    """Check that each prior audit uses the catalogued engine."""
     import importlib.util
     import sys
 
@@ -313,21 +253,14 @@ def test_the_prior_audit_routes_every_model_through_its_own_engine():
     for hook in ("prepare", "priors", "build", "prior_checks"):
         assert f'resolve("{hook}")' in source, f"the audit does not run the {hook} stage"
 
-    # And the six models the stale table mis-routed are on the RE engine.
+    # These models use the bivariate random-effects engine.
     for model_key in ("vg16", "vg19", "vg20", "vg21", "vg22", "vg23"):
         assert engine_for(model_key).name == "bivariate_re"
         assert engine_for(model_key).prior_checks_call == "definition"
 
 
 def test_the_recovery_harness_uses_the_catalogued_engine():
-    """A recovery fit must run the pipeline of the engine that fits the model.
-
-    The harness substitutes stage 0 for a simulated-frame loader and runs the
-    rest unchanged, so pairing a model with another engine's stage factory would
-    refit synthetic data through a graph the truth was never drawn from. The
-    spec's own ``engine`` field is a second record of the same fact and must
-    agree.
-    """
+    """Keep recovery stage factories and engine declarations consistent."""
     from vocab_growth.recovery.spec import recovery_target, supported_models
 
     for model_key in supported_models():
@@ -339,11 +272,7 @@ def test_the_recovery_harness_uses_the_catalogued_engine():
 
 
 def test_recovery_refuses_a_model_whose_engine_has_no_stage_factory():
-    """The univariate, bivariate and trivariate engines build their stages inline.
-
-    A recovery target on one of them cannot have stage 0 swapped, so it must be
-    refused by name rather than fail somewhere inside the pipeline.
-    """
+    """Reject engines whose inline stages cannot accept a simulated-frame loader."""
     from vocab_growth.recovery.spec import supported_models
 
     for model_key in supported_models():
@@ -364,7 +293,7 @@ def test_every_model_has_a_report_template(model_key):
 
 
 def test_no_orphan_report_templates():
-    """A template for an unregistered model is a model someone forgot to remove."""
+    """Require every report template to belong to a registered model."""
     templates = {
         path.parent.name
         for path in (_REPO_ROOT / "docs" / "models").glob("*/index.qmd")
@@ -379,11 +308,7 @@ def test_no_orphan_report_templates():
 
 
 def test_the_inventory_covers_every_catalogued_model():
-    """``docs/models/README.md`` is named the single source of truth for the set.
-
-    A model registered without an inventory row leaves the document that claims
-    to be canonical describing a smaller family than the code fits.
-    """
+    """Keep the documented model inventory consistent with the executable catalogue."""
     inventory = (_REPO_ROOT / "docs" / "models" / "README.md").read_text(encoding="utf-8")
     missing = [
         key for key in CATALOGUE if f"[{key.upper()}]({key}/index.qmd)" not in inventory
@@ -397,13 +322,7 @@ def test_the_inventory_covers_every_catalogued_model():
     "path", ["AGENTS.md", "CLAUDE.md", ".github/copilot-instructions.md"]
 )
 def test_the_agent_instructions_state_the_right_model_count(path):
-    """The three copies carry the count in prose, so it can drift silently.
-
-    It has: ``models/__init__.py`` said "VG01-VG16" for as long as there had
-    been twenty registered models. Pinning the word against the catalogue is
-    what turns the next registration into a failing test rather than a document
-    that quietly stops being true.
-    """
+    """Check the model count and ranges in all three instruction copies."""
     words = {
         18: "eighteen", 19: "nineteen", 20: "twenty", 21: "twenty-one",
         22: "twenty-two", 23: "twenty-three", 24: "twenty-four",
@@ -436,12 +355,7 @@ def _in_a_range(model_id: str, text: str) -> bool:
 
 
 def test_the_package_docstring_points_at_the_source_rather_than_restating_it():
-    """``models/__init__.py`` carried its own model range, and it rotted.
-
-    It said "VG01-VG16" for as long as there had been twenty registered models.
-    The fix is not a corrected range but no range: the docstring names where the
-    set lives.
-    """
+    """Point readers to the registry instead of duplicating its model range."""
     import vocab_growth.models as package
 
     docstring = package.__doc__ or ""
@@ -453,12 +367,8 @@ def test_the_package_docstring_points_at_the_source_rather_than_restating_it():
 
 # --- roles: declared here, pinned against the documented table ------------------
 #
-# The roles table in ``docs/models/README.md`` is the study owner's record of
-# what each model is for. Until the catalogue carried it, nothing could read it
-# and every model was treated identically by publication validation. These pin
-# the declaration against that record so the two cannot drift the way the engine
-# assignment did (#273) -- and so relaxing a model is a visible, reviewable edit
-# rather than something that happens by omission.
+# Keep the catalogue's publication roles consistent with the documented table.
+
 
 
 def _roles_table_section() -> str:
@@ -525,13 +435,7 @@ _ROLE_LABELS = (
 
 
 def _documented_roles() -> dict[str, ModelRole]:
-    """``{model key: role}`` for every model the roles table names.
-
-    A row whose label matches no known role fails here rather than being
-    skipped, because a new wording is exactly how a model would slip out of
-    the pin. Before 2026-09-09 only development steps were pinned, and only in
-    one direction; a superseded model could be declared with no row at all.
-    """
+    """Return documented roles, rejecting labels that match no known role."""
     found: dict[str, ModelRole] = {}
     for line in _roles_table_section().splitlines():
         if not line.startswith("|"):
@@ -580,7 +484,7 @@ def test_every_declared_role_has_a_roles_table_row():
 
 
 def test_an_unclassified_model_still_requires_publication_validation():
-    """Fail closed. Omitting a role must never relax a model by accident."""
+    """Require publication validation when a model has no assigned role."""
     assert ModelRole.UNCLASSIFIED.publication_required
 
 
@@ -593,7 +497,7 @@ def test_the_roles_that_supply_numbers_are_publication_required(role):
 
 @pytest.mark.parametrize("role", [ModelRole.DEVELOPMENT_STEP, ModelRole.SUPERSEDED])
 def test_the_roles_that_supply_no_number_are_not_publication_required(role):
-    """The taxonomy's own rule: a superseded model never supplies a number."""
+    """Exclude development and superseded roles from required publication fits."""
     assert not role.publication_required
 
 
@@ -616,7 +520,7 @@ def test_the_publication_scope_is_a_strict_subset_of_the_registry():
 
 
 def test_an_unclassified_model_is_still_in_the_publication_scope():
-    """Fail closed end to end: undecided must mean refitted, not dropped."""
+    """Keep unclassified models in the required refit scope."""
     unclassified = models_with_role(ModelRole.UNCLASSIFIED)
     assert set(unclassified) <= set(publication_models())
 

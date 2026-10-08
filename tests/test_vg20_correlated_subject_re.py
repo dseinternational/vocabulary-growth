@@ -1,23 +1,15 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""VG20's correlated subject random effects (issue #224).
+"""Check correlated comprehension and production-ratio child effects.
 
-VG20 is VG10 with one added parameter, ``rho_uq``, correlating each child's
-understood deviation with their production-ratio deviation. Two properties carry
-the whole design and are pinned here:
+The Cholesky construction must preserve each marginal scale and produce the
+stated correlation. At zero correlation it reduces to independent deviates.
+Registered VG20/VG10 and VG23/VG13 pairs also differ in sex adjustment, so graph
+comparisons align that setting first. They check selected structure and values,
+not equality of separately fitted posteriors or every prior distribution.
 
-- **VG10 is nested exactly at ``rho_uq = 0``.** The comparison in #224 reads
-  "did anything else move?" as a red flag, which is only meaningful if the graphs
-  coincide at zero. Checked numerically on the deterministic itself, not by
-  inspection of the source.
-- **The correlation cannot be switched on in a configuration that would fit
-  something other than what was asked for.** Each rejected combination would
-  otherwise fail silently.
-
-The definition-subclass check matters just as much and is cheap: putting the
-field on ``BivariateModelDefinition`` would change the serialised definition of
-six models of record and invalidate every one of their fitted outputs.
+Also check incompatible effect combinations and the new-child predictive path.
 """
 
 import dataclasses
@@ -171,7 +163,7 @@ def test_resolver_rejects_a_missing_subject_block(drop):
 
 @pytest.mark.parametrize("side", ["u", "q"])
 def test_resolver_rejects_an_age_varying_scale(side):
-    """Proposal A1's age-varying scale and a constant correlation do not compose."""
+    """Reject a scale/correlation combination this builder does not support."""
     definition = _as_definition_subclass(
         VG20,
         BivariateCorrelatedSubjectREModelDefinition,
@@ -216,14 +208,10 @@ def test_resolver_rejects_a_non_positive_eta(bad):
 
 
 def test_built_graph_adds_exactly_one_parameter_and_nothing_else():
-    """VG20's graph must be VG10's plus ``rho_uq`` — the claim #224 rests on.
+    """Compare free parameter names after matching the sex adjustment.
 
-    Anything else appearing here means the two models differ in more than the
-    correlation, and the comparison stops being readable: #224 treats movement in
-    any reported trajectory as a red flag, which assumes the graphs are otherwise
-    identical.
-
-    Builds both real models (no sampling), so it needs the prepared DuckDB.
+    This is a graph-structure check, not a claim that reference trajectories
+    stay fixed when either model is refitted to the data.
     """
     import os
     import tempfile
@@ -271,33 +259,15 @@ def test_built_graph_adds_exactly_one_parameter_and_nothing_else():
 
 
 def test_as_definition_subclass_shares_nested_prior_blocks():
-    """The helper must be shallow: nested prior dataclasses stay the same objects.
-
-    A deep copy would serialise identically today but drift the moment one side's
-    priors were edited, which is the failure this derivation exists to prevent.
-    """
+    """Derivation preserves the same nested immutable prior objects."""
     assert VG20.kappa_u is VG10.kappa_u
     assert VG20.kappa_s is VG10.kappa_s
 
 
 def test_subject_marginal_predictive_uses_the_correlation():
-    """The unseen child must be drawn from the joint the model fitted.
+    """Check correlation availability before building the new-child predictive block.
 
-    Until 2026-08-19 the subject-marginal predictive drew the two deviates as
-    two independent ``pm.Normal``s, so VG20 estimated ``rho_uq`` and then threw
-    it away when building the one quantity the correlation exists to change.
-    VG20's gate 3 read as "a correlation of +0.368 leaves the spoken intervals
-    unchanged" — which was this code path asserting rho = 0, not a result.
-
-    This checks the *precondition* the patched branch keys on -- that ``rho_uq``
-    is reachable from the predictive path for VG20 and absent for VG10 -- which
-    is what silently failed before. It does not by itself prove the branch is
-    taken. That gap is now closed by
-    ``test_vg20_takes_the_correlated_branch_and_vg10_does_not`` and the three
-    hermetic tests beside it (#233); before those, the only end-to-end evidence
-    was regenerating VG20's plots and re-running gate 3. Kept because the
-    precondition is the cheap half and would catch a refactor that stopped
-    exposing ``rho_uq`` here.
+    The branch-execution tests below separately establish that it is used.
     """
     import contextlib
     import io
@@ -379,24 +349,15 @@ def test_the_correlated_marginal_draw_preserves_each_marginal_sd():
     assert delta_q.std() == pytest.approx(tau_q, rel=0.01)
     assert np.corrcoef(delta_u, delta_q)[0, 1] == pytest.approx(rho, abs=0.01)
 
-    # And the point of the whole exercise: on the logit scale the two deviates
-    # compound, so an unseen child's spoken vocabulary is more variable than
-    # independent draws imply.
+    # Positive covariance increases the variance of this linear sum. Nonlinear
+    # spoken-count spread also depends on the reference probabilities.
     independent = (tau_u * z_u + tau_q * z_q).std()
     correlated = (delta_u + delta_q).std()
     assert correlated > independent
 
 
 def test_the_correlated_branch_executes_and_realises_the_correlation():
-    """Run the branch itself, not the precondition for reaching it (#233).
-
-    `test_subject_marginal_predictive_uses_the_correlation` above says outright
-    that it "does not by itself prove the branch is taken", and until 2026-08-24
-    nothing else did: the correlated construction was inline in
-    `sample_posterior_predictive`, which cannot be called without a fitted trace
-    and a prepared database. This drives the extracted function through PyMC,
-    hermetically, and checks the three properties the construction exists for.
-    """
+    """Sample the predictive helper and check its marginal scales and correlation."""
     import numpy as np
     import pymc as pm
 
@@ -556,8 +517,7 @@ def test_vg23_differs_from_vg13_only_in_naming_the_correlation_and_sex():
     }
     assert differing == {"model_id", "config_name", "banner", "sex_effect_sigma"}
     assert VG23.subject_re_correlation_eta == 2.0
-    # Matched to VG20's, so the DS and TD correlations are estimated under the
-    # same prior and their comparison is not a prior artefact.
+    # Match this marginal correlation prior; other model priors can still differ.
     assert VG23.subject_re_correlation_eta == VG20.subject_re_correlation_eta
 
 

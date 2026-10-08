@@ -1,29 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The singleton child effects are integrated out, exactly and only.
+"""Check numerical integration of singleton child effects.
 
-``SingletonMarginalisationParams`` replaces the explicit ``delta_subject`` of a
-child seen once with a quadrature integral over its prior. The claims that make
-that admissible, and which these tests pin:
-
-1. it is **exact** -- the marginal log density matches a fine-grid numerical
-   integral of the same integrand, at the dispersion and scale both models of
-   record actually occupy, and it does not move when the node count doubles;
-2. it changes **nothing of substance** for a child seen repeatedly -- those rows
-   keep the conditional Beta-Binomial density the models have always used, to
-   within 1e-9. Not bit for bit: the block is computed by this module's
-   written-out density rather than by ``pm.logp``, because inside a
-   ``CustomDist`` PyMC's version returns a non-finite gradient;
-3. it removes exactly the singleton dimensions from the sampled space, and
-   leaves an exact zero in the linear predictor where the effect used to be;
-4. the likelihood reads its two blocks as slices, so it requires -- and the data
-   preparation supplies -- rows ordered with every marginalised row first; and
-5. with the flag off the graph is the one every existing fit was produced
-   under, and neither VG11 nor VG12 carries the flag, so their fits stay valid.
-
-See ``notes/202608231410-td-geometry-remaining-levers.md`` §3 for the lever and
-``notes/202608231745-singleton-marginalisation.md`` for what building it took.
+Compare quadrature with an independent fine-grid integral at selected scales
+and counts, and check stability when doubling nodes. Repeated-child rows keep
+the conditional likelihood within numerical tolerance. Marginalised rows come
+first for slice-based evaluation and lose their explicit sampled child effects.
+The registered models retain the flag-off definition.
 """
 
 import dataclasses
@@ -79,15 +63,7 @@ def test_two_nodes_is_the_floor():
 
 
 def test_the_written_out_density_is_pymcs():
-    """The hoisted form is an optimisation, not a second opinion.
-
-    Both sides are given ``float64`` inputs deliberately. PyTensor types a bare
-    Python scalar as the narrowest dtype that holds it, and a single-precision
-    ``gammaln`` of an argument in the hundreds is wrong in the seventh decimal
-    -- which is what this comparison would otherwise be measuring. The library
-    function casts defensively for that reason; the test's own inputs have to be
-    explicit so the comparison is between two double-precision computations.
-    """
+    """Compare the explicit and PyMC densities with float64 inputs on both sides."""
     value = np.array([0, 1, 37, 405, 809, 810], dtype=np.float64)
     for kappa_value in np.float64([5.0, 37.0, 288.0, 714.0]):
         for p_value in np.float64([0.002, 0.05, 0.4, 0.95]):
@@ -255,12 +231,7 @@ def test_singleton_first_order_is_stable():
 
 
 def test_the_likelihood_refuses_rows_it_cannot_slice():
-    """It reads its two blocks as slices, so an unordered frame is an error.
-
-    Not a silent fallback to indexing them out: the gather that would need --
-    and its scatter counterpart -- were where a non-finite gradient and a
-    thread race came from. See ``singleton_first_order``.
-    """
+    """Require marginalised rows first so the likelihood can evaluate contiguous slices."""
     partition = partition_subject_rows(np.array([0, 1, 0, 2]))
     assert not partition.is_singleton_first
     with pytest.raises(ValueError, match="marginalised row first"), pm.Model():
@@ -288,14 +259,7 @@ def test_partition_rejects_malformed_codes():
 
 
 def test_the_models_of_record_do_not_carry_the_flag():
-    """The invariant that keeps VG11's and VG12's published fits valid.
-
-    A fit is validated by comparing ``dataclasses.asdict`` of its definition
-    against the registered one, so a definition class that gains a field
-    invalidates every fit of that class. The flag therefore lives on a subclass
-    that no registered model uses yet. When one adopts it -- after the VG12
-    bench -- that model needs a refit, and this test is the place to say so.
-    """
+    """Keep singleton marginalisation outside the registered model definitions."""
     for definition in MODEL_REGISTRY.values():
         assert not isinstance(definition, UnivariateMarginalisedREModelDefinition), (
             f"{definition.model_id} adopted singleton marginalisation; its fit of "
@@ -404,7 +368,7 @@ def test_the_marginalised_rows_carry_no_child_effect(subject_marginal_context):
 
 
 def test_repeat_rows_keep_the_conditional_density(subject_marginal_context):
-    """Bit for bit: those rows are not approximated, they are untouched."""
+    """Match the repeated-child conditional density within numerical tolerance."""
     import pytensor
 
     model = subject_marginal_context.model

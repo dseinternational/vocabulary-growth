@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 # %% [markdown]
-# > Drafted by an LLM-based AI tool (OpenAI Codex/GPT-6).
+# > Drafted and revised with assistance from OpenAI Codex/GPT-6.
 #
 # # Build a vocabulary model step by step
 #
@@ -53,9 +53,8 @@ def small_frame() -> pd.DataFrame:
             "subject_code": child,
             "study": np.array(["study_a", "study_b", "study_c"])[child // 2],
             "study_code": child // 2,
-            # Recorded per child; the third study records none, as seven Down
-            # syndrome studies do. Only a model carrying the sex covariate (VG20
-            # here) reads it, and codes an unrecorded child at zero.
+            # Sex is unrecorded in the third study. VG20 codes these children
+            # at zero in its sex contrast.
             "sex": np.array(["F", "M", "F", "M", None, None], dtype=object)[child],
         }
     )
@@ -159,7 +158,7 @@ def run_walkthrough():
         context, _ = build_example(replace(definition, n_plot=24), frame)
         contexts[definition.model_id] = context
 
-    # This draws from prior assumptions, before the invented counts update them.
+    # Prior predictive draws do not condition on the invented counts.
     with contexts["VG01"].model:
         prior = pm.sample_prior_predictive(
             draws=8,
@@ -167,8 +166,8 @@ def run_walkthrough():
             random_seed=42,
         )
 
-    # Missing U removes that comprehension likelihood term. The default spoken
-    # treatment retains S through a full-inventory marginal likelihood.
+    # A missing understood count removes its likelihood term. The default
+    # speech model retains the spoken count through a marginal likelihood.
     missing_parent = frame.astype({"understood": float})
     missing_parent.loc[0, "understood"] = np.nan
     observations = prepare_bivariate_observations(
@@ -183,8 +182,8 @@ def run_walkthrough():
     zero_reference = replace(VG19, n_plot=24, subject_slope_ref_age_months=0.0)
     slope_context, _ = build_example(zero_reference, frame)
 
-    # Signed and spoken shares overlap. These are four probabilities within U,
-    # ordered neither, sign only, speech only, both. Independence is not a bound.
+    # Signing and speech overlap. The cells within understood vocabulary are
+    # ordered neither, sign only, speech only, both.
     cells = composition_probabilities(
         np.array([0.4]), np.array([0.5]), np.array([1 / 6])
     ).eval()[0]

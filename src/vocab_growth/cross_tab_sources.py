@@ -1,40 +1,21 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The four study sources that carry a modality cross-tabulation, and their cells.
+"""Load study-specific sign-speech cross-tabulations and marginal-only rows.
 
-Each loader opens one raw CSV, derives that source's cross-tab cells, and splits its
-rows into the ones that carry a usable composition and the ones that can only
-contribute margins. This is per-study measurement knowledge -- the same class of
-thing as :mod:`vocab_growth.data_utils`' defect rules -- and it lived inside the
-joint engine's PyMC module until 2026-09-01, where a reader looking for "what does a
-cross-tab source have to supply" had no reason to look.
+Each loader reads its source CSV and applies its measurement rules. New sources
+should cite their ``data/vocab_data_<study>.md`` record, document cell derivations
+and retain rows without a usable composition for their available marginals.
+The production-only ``nz_01`` loader returns one frame and drops zero-production
+rows because they contribute neither composition nor marginal likelihoods.
 
-**Adding a fifth source.** Write a ``load_<study>_*`` function here that:
+The joint engine maps source columns into analysis-frame cells and controls
+which sources enter each model. Changing that mapping or the frame's row order
+changes the prepared-frame hash and can invalidate stored fits.
 
-1. reads only its own CSV from :data:`~vocab_growth.environment.DATA_DIR`, and cites
-   its ``data/vocab_data_<study>.md`` note for anything not obvious from the columns;
-2. returns ``(four_cell_df, marginal_df)`` -- the rows whose cells are complete,
-   non-negative and reconcile with the recorded margins, and everything else, which
-   still informs the model through its margins. Never drop a row for want of a
-   composition; route it to the marginal set. (``load_nz01_produced_cells`` is the
-   one exception, and returns a single frame: nz_01 is production-only, so a row
-   with no produced words has no margins to contribute either.);
-3. states which guards can fire on the source *as it is today* and which are held
-   for what it may become -- ``load_uk07_four_cell``'s two currently cannot fire,
-   and saying so is what stops a later reader deleting them as dead;
-4. leaves the source's own column names in place. They are mapped to the
-   analysis-frame cells by the assembly blocks in
-   ``models/common_joint_modality.build_joint_analysis_frame``, which is also where
-   the study is gated behind its definition field. Normalising the names here is a
-   sensible next step but not a free one: the concatenated frame's schema and row
-   order are hashed into every VG14/VG15 fit's ``analysis_frame_hash``.
-
-The cell counts are validated at build time -- ``build_model`` requires each row's
-four cells to sum to its recorded total -- so a margin substituted for a cell
-raises. A ``signed_only`` / ``spoken_only`` swap preserves that sum and does not;
-the direction of each source's derivation is stated in its docstring for that
-reason.
+Model construction validates cell counts and totals. A swap of signed-only and
+spoken-only cells would preserve the total, so each loader documents their
+direction explicitly.
 """
 
 import os
@@ -44,7 +25,7 @@ import pandas as pd
 import vocab_growth.data_utils as vocab_data_utils
 import vocab_growth.environment as local_env
 
-# The two sources with the four-cell within-understood cross-tabulation.
+# Three sources supply a four-cell within-understood cross-tabulation.
 UK02_STUDY_ID = "uk_02"
 # uk_02 ran two instruments. Its `form` column separates them, and only the DSE
 # arm is native to the 810-item reference (the other is the 416-item Oxford CDI),
@@ -74,12 +55,8 @@ def load_uk02_four_cell():
     U likelihood and the Dirichlet-Multinomial likelihood disagree. The rest are
     marginal-only uk_02 rows (no usable cross-tab).
 
-    A row missing any cell — in particular ``understood_only`` (some uk_02 rows
-    record a produced sign/speech cross-tab but no comprehension total) — cannot
-    form the within-understood four-way composition, so it is routed to the
-    marginal-only set, where its recorded spoken/signed margins still inform the
-    model. (Without this guard a NaN cell casts to a negative integer and trips
-    the four-cell count validation in ``build_model``.)
+    Rows missing any cell cannot form the within-understood composition. They
+    retain their recorded spoken and signed margins in the marginal-only set.
     """
     path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_02.csv")
     raw = pd.read_csv(path)
@@ -99,23 +76,19 @@ def load_uk02_four_cell():
 def load_uk07_four_cell():
     """Load uk_07 (PACT-DS) rows as a four-cell within-understood cross-tab.
 
-    uk_07 records comprehension per item alongside a three-way *modality-exclusive*
-    expressive coding — says-only, signs-only, both — so the fourth cell follows by
+    uk_07 records comprehension per item alongside three modality-exclusive
+    expressive cells (says-only, signs-only, both), so the fourth cell follows by
     subtraction: ``understood_only = understood - produced``, where ``produced`` is
     the source's own sum of the three expressive cells. That is the same
     within-understood partition uk_02 supplies, and it is what identifies psi.
 
-    Two guards, mirroring ``load_uk02_four_cell``. A row whose production exceeds
-    its comprehension has no non-negative ``understood_only`` cell, and a row with
-    no understood words carries no composition; both are routed to the marginal
-    set, where the recorded spoken/signed margins still inform the model. Neither
-    fires on the current source: the one administration that would have failed the
-    first is withheld before this point (see
-    ``data_utils.UK07_WITHHELD_ADMINISTRATIONS``). They are kept so the guarantee
-    holds for whatever the source becomes, rather than for what it is today.
+    Incomplete rows, rows with production above comprehension and rows with no
+    understood words enter the marginal-only set. These guards also apply to
+    future source revisions. The known incoherent administration is withheld
+    before the split (see ``data_utils.UK07_WITHHELD_ADMINISTRATIONS``).
 
-    Returns ``(four_cell_df, marginal_df)`` with the any-modality marginals
-    re-derived on the marginal rows exactly as ``vocab_combined`` does them.
+    Returns ``(four_cell_df, marginal_df)`` with the source's exclusive cells.
+    The joint engine derives any-modality marginals from those cells.
     """
     path = os.path.join(local_env.DATA_DIR, "vocab_data_uk_07.csv")
     raw, _withheld = vocab_data_utils.drop_uk07_withheld_administrations(
@@ -139,7 +112,7 @@ def load_es01_four_cell():
 
     es_01 records four totals per child. In the original table they are labelled
     TOTAL COMPREHENSIÓN, TOTAL PRODUCTION, TOTAL GESTURES and WORD PRODUCED +
-    GESTURES ONLY — the last being what Galeote et al. (2011) describe as "total
+    GESTURES ONLY, the last being what Galeote et al. (2011) describe as "total
     lexical production combining the two modalities". So the third column is a
     *total* (words gestured whether or not also spoken) and the fourth is a
     de-duplicated union, and the four cells follow by subtraction::
@@ -149,19 +122,16 @@ def load_es01_four_cell():
         signed_only     = union             - spoken
         signed_spoken   = spoken + gestured - union
 
-    which sum to ``understood`` identically. That the fourth column is a union
-    rather than a disjoint cell is not an assumption: a disjoint reading forces
-    ``union == spoken + gestured`` on every row, and 134 of the 186 Down syndrome
-    rows have a union strictly smaller than that sum.
+    The cells sum to ``understood``. The interpretation as a union agrees with
+    the source description and its overlapping spoken and gestured totals.
 
     Guards mirror ``load_uk07_four_cell``: a row with any negative cell, or with
     no understood words, carries no composition and is routed to the marginal set.
-    One row of 186 fails (1 spoken, 15 gestured, union 11 — a union smaller than
-    one of its parts, so ``spoken_only`` is negative); its comprehension and spoken
-    marginals still inform the model, and its ``signed`` is masked there on the
-    same reasoning the ``vocab_combined`` view applies.
+    The row with 1 spoken, 15 gestured and a union of 11 has a negative
+    ``spoken_only`` cell. The joint engine retains its comprehension and spoken
+    marginals and masks signing, as the ``vocab_combined`` view does.
 
-    Returns ``(four_cell_df, marginal_df)``. Down syndrome children only — the
+    Returns ``(four_cell_df, marginal_df)`` for Down syndrome children only. The
     matched typically developing group stays out of this relation, as it does in
     the view.
     """

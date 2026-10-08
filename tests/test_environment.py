@@ -21,12 +21,9 @@ CLI_ROOT = "/cli/dir"
 
 
 def _resolved(path: str) -> str:
-    r"""The absolute form the resolver normalises ``path`` to.
+    """Normalise test paths with expanduser and abspath, as the resolver does.
 
-    ``environment`` applies ``expanduser`` then ``abspath``. On POSIX that
-    leaves an already-absolute literal untouched, so comparing against the
-    literal passes — but only by coincidence of platform: on Windows
-    ``/scratch/vg`` picks up the current drive and becomes ``D:\scratch\vg``.
+    On Windows a path beginning with a slash also inherits the current drive.
     """
     return os.path.abspath(os.path.expanduser(path))
 

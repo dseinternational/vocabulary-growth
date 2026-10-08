@@ -10,12 +10,9 @@ its ``models`` / ``comparisons`` subdirectories. ``docs/report/figures/``
 (``REPORT_FIGS_DIR``) is the report-facing cache and deliberately stays in the
 checkout, never under this root.
 
-The resolution *policy* and the disk preflight live in
-:mod:`dse_research_utils.environment` (v0.12.0), shared with the other research
-repositories. What stays here is this repository's configuration — the
-environment-variable name, the repo-local default, and the ``models`` /
-``comparisons`` layout — plus ``str``-returning wrappers, since this package's
-call sites feed ``os.path.join``.
+The shared ``dse_research_utils.environment`` package resolves paths and checks
+free disk space. This module supplies the project paths and string-returning
+wrappers.
 """
 
 import os
@@ -40,18 +37,6 @@ REPORT_FIGS_DIR = os.path.join(REPORT_DIR, "figures")
 # ---------------------------------------------------------------------------
 # Output-root resolution
 # ---------------------------------------------------------------------------
-# Model traces and reporting-quality artefacts are large (a reporting-config
-# ``trace.nc`` exceeds 10 GB), so a reporting-quality run redirects them to
-# another volume without disturbing local development or report rendering. The
-# output root is therefore resolved at *call time*, with this precedence:
-#
-#   1. an explicit override set via ``set_output_root`` (e.g. from ``--output-dir``)
-#   2. the ``DSE_VOCAB_GROWTH_OUTPUT_DIR`` environment variable
-#   3. the repository-local ``<repo>/output`` default (unchanged behaviour)
-#
-# ``docs/report/figures/`` is deliberately *not* under this root: it is the
-# report-facing cache populated by ``scripts/sync_report_figures.py`` and always
-# lives in the checkout so the Quarto report renders without the output volume.
 OUTPUT_DIR_ENV_VAR = "DSE_VOCAB_GROWTH_OUTPUT_DIR"
 
 _DEFAULT_OUTPUT_DIR = os.path.join(ROOT_DIR, "output")
@@ -86,12 +71,12 @@ def describe_output_root() -> str:
 
 
 def models_output_dir() -> str:
-    """``<output root>/models`` — one subdirectory per fitted model."""
+    """Return ``<output root>/models``, with one subdirectory per fitted model."""
     return os.path.join(output_root(), "models")
 
 
 def comparisons_output_dir() -> str:
-    """``<output root>/comparisons`` — cross-model / DS-vs-TD comparison artefacts."""
+    """Return ``<output root>/comparisons`` for model and population comparisons."""
     return os.path.join(output_root(), "comparisons")
 
 
@@ -119,10 +104,8 @@ def preflight_disk(
 ) -> float:
     """Report free disk space and raise ``RuntimeError`` if below ``min_gb`` (GiB).
 
-    Call at the start of any script that writes large artefacts (model traces are
-    >10 GB at reporting configs) so a full volume fails fast rather than after a
-    multi-hour sample. Prints the resolved output location so redirected runs are
-    obvious in job logs. Returns the free space in GiB when the check passes.
+    Call before writing large artefacts, since some reporting traces exceed
+    10 GB. Prints the resolved output location and returns free space in GiB.
     """
     return _shared_preflight_disk(
         min_gb, path or output_root(), label=label, output_root=output_root()

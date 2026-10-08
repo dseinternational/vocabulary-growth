@@ -1,15 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Child-level prior predictive checks (issue #233).
+"""Check child-level prior predictions against the model graph.
 
-The population prior figures set every random effect to zero, so a child-effect
-model's prior figures contained no child and could not test the prior the model
-was added for. These checks fill that gap in NumPy, from draws the model already
-emits — which buys a second implementation of the unseen-child construction, and
-therefore a drift risk. The first test here is the guard on that: it pins the
-correlated branch against the graph's own ``unseen_child_correlated_delta_q`` at
-shared standard normals.
+Population figures set random effects to zero. The unseen-child checks add
+those effects in NumPy, so shared-standard-normal comparisons guard agreement
+with the graph construction.
 """
 
 import numpy as np
@@ -58,15 +54,7 @@ def test_age_varying_scale_reaches_both_declared_anchors():
 
 
 def test_the_correlated_branch_matches_the_graph_construction():
-    """Two implementations of one construction must not diverge.
-
-    `unseen_child_correlated_delta_q` is what the predictive path runs; this
-    module reimplements it in NumPy because the prior check happens before that
-    block exists in the graph. Evaluated at the same standard normals the two
-    must agree exactly, or the prior figures describe a model the fit does not
-    use. The graph expression is evaluated with its own `_z_subj_q_marg`
-    replaced by a constant, so this is arithmetic rather than sampling.
-    """
+    """Compare the NumPy and graph constructions at the same standard normals."""
     import pymc as pm
     import pytensor.tensor as pt
     from pytensor.graph.replace import graph_replace
@@ -96,12 +84,7 @@ def test_the_correlated_branch_matches_the_graph_construction():
     )
 
     class _FixedNormals:
-        """Returns the chosen normals, so the module's own code path runs.
-
-        Restating the arithmetic here instead would test this test, not the
-        module: the point is that `unseen_child_deltas` produces the graph's
-        value, not that two copies of one formula agree.
-        """
+        """Return fixed standard normals while exercising the production code path."""
 
         @staticmethod
         def standard_normal(shape):
@@ -115,7 +98,7 @@ def test_the_correlated_branch_matches_the_graph_construction():
 
 
 def test_the_correlated_branch_reproduces_rho_across_many_draws():
-    """The realised correlation of the module's own deviates must be rho."""
+    """Approximate the stated correlation with many simulated deviates."""
     prior = _prior(
         f_u_plot=np.zeros(4000),
         h_plot=np.zeros(4000),
@@ -155,7 +138,7 @@ def test_structure_dispatch(variables, expected):
 
 
 def test_a_constant_offset_gives_the_same_deviate_at_every_age():
-    """The property that makes the trajectory figure read: no crossings."""
+    """Keep each constant child offset unchanged across ages."""
     prior = _prior(
         f_u_plot=np.zeros(500),
         tau_subj_u=np.full(500, 0.8),
@@ -169,7 +152,7 @@ def test_a_constant_offset_gives_the_same_deviate_at_every_age():
 
 
 def test_a_rate_gives_a_deviate_that_moves_with_age():
-    """And the property that distinguishes VG19 from it."""
+    """Allow child offsets and relative ordering to change with age."""
     prior = _prior(
         f_u_plot=np.zeros(2000),
         tau_subj_u_0=np.full(2000, 0.751),
@@ -186,10 +169,10 @@ def test_a_rate_gives_a_deviate_that_moves_with_age():
     assert not np.allclose(delta_u[:, 0], delta_u[:, 2])
     # tau0 is the spread AT the reference age, which is `ages[1]`.
     assert delta_u[:, 1].std() == pytest.approx(0.751, rel=0.06)
-    # And the spread is a parabola in age, so it is wider away from that age.
+    # With these scales and correlation, spread is greater at the younger age.
     assert delta_u[:, 0].std() > delta_u[:, 1].std()
 
-    # Children must be able to cross, which a constant offset cannot represent.
+    # These non-zero rate draws permit changes in child ordering.
     first, last = delta_u[:, 0], delta_u[:, 2]
     order_changed = np.mean(
         (first[:-1] < first[1:]) != (last[:-1] < last[1:])
@@ -219,15 +202,10 @@ def test_the_slope_reference_age_comes_from_the_definition():
 
 
 def test_the_factor_branch_reads_the_factors_own_reference_age():
-    """VG22's class carries no ``subject_slope_ref_age_months``.
+    """Read the factor reference age from its own definition block.
 
-    The reference age lives on ``subject_factor.ref_age_months``, which is what the
-    graph and the predictive path read. Before this was fixed the check probed the
-    slope field, fell through to its default, and agreed with the graph only
-    because both defaults are 36.0 -- so a variant that moved the factor's
-    reference age mis-centred these figures silently. A loading matrix that is
-    pure *rate* (zero intercept) puts the zero-spread age exactly at the reference
-    age, which is what this asserts.
+    Pure rate loadings give zero spread at that age, which exposes an incorrect
+    fallback to the slope block's reference age.
     """
     n = 4000
     # (b0u, b1u, b0q, b1q): intercepts zero, rates 0.5 per year, rank 1.
@@ -290,9 +268,7 @@ def test_an_explicit_zero_reference_age_is_not_rewritten_to_the_default():
 
 
 def test_spoken_is_drawn_conditional_on_the_understood_draw():
-    """The nesting the likelihood uses. Drawing spoken against the reference
-    inventory instead would let a child say more words than they understand,
-    which is the defect this figure exists to be able to show."""
+    """Draw spoken counts within the understood count, as the nested likelihood requires."""
     n = 400
     prior = _prior(
         f_u_plot=np.zeros(n),

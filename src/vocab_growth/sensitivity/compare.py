@@ -65,20 +65,12 @@ def _read(dirpath: str, name: str) -> pd.DataFrame | None:
 
 
 def load_headlines(dirpath: str, *, unreadable: list[str] | None = None) -> dict[str, pd.DataFrame]:
-    """Return ``{quantity: DataFrame[age_months, median, ci_lo, ci_hi]}`` for
-    every headline series present in ``dirpath`` (missing series are skipped).
+    """Read each available headline series into age, estimate and interval columns.
 
-    A series whose file is present but unusable — missing columns, empty,
-    non-finite, duplicated ages, reversed intervals — raises, so a partial
-    summary cannot quietly shrink the comparison.
-
-    Passing ``unreadable`` collects those quantity names instead and skips only
-    the series that could not be read. One bad file then costs its own series
-    rather than every readable one: ``posterior_summary_p_any.csv`` carries both
-    ``p_any`` and ``Ey_any``, so a fit missing the ``Ey_any`` block used to
-    discard the eight trajectories, ``psi`` and every structural parameter with
-    it. The collected names reach :func:`coverage_report`'s ``missing`` list, so
-    the pairing is still reported as unassessable rather than silently smaller.
+    Malformed, empty or non-finite series raise unless unreadable is supplied.
+    That list collects failing quantities while retaining usable ones, including
+    other quantities from the same CSV. coverage_report then reports the failures,
+    so partial parsing cannot silently reduce the assessed comparison.
     """
     out: dict[str, pd.DataFrame] = {}
     for qty, fname, mcol, lo, hi in _SERIES:
@@ -496,27 +488,11 @@ def merge_retained_rows(
     baseline_fit_utc: str | None,
     order: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Merge a targeted rerun into the standing matrix, marking stale rows.
+    """Merge a targeted rerun while retaining other rows and their provenance.
 
-    A targeted ``--variant`` rerun recomputes one row and leaves the rest
-    standing, which is right: rewriting the matrix down to the single variant
-    just recomputed would silently drop every other verdict. But a row left
-    standing was scored against *whatever baseline existed when it was
-    computed*, and until this function existed nothing said so. Refitting the
-    model of record therefore left a matrix whose rows compared against two
-    different baselines, presented side by side with no way to tell them apart
-    -- the concrete instance recorded on issue #266 was ``vg10``'s matrix, where
-    ``us01-implausible-reinstated`` was scored against the pre-``us_03``
-    baseline and the two rows beside it against the refitted one.
-
-    A retained row whose ``baseline_fit_utc`` differs from the current baseline
-    therefore has its status set to :data:`STALE_BASELINE_STATUS`, and its verdict is
-    prefixed with the baseline it actually used. Its numbers are kept: they are
-    a true record of a comparison that was made, and dropping them would lose
-    the fact that the variant has been fitted at all. Only ``compared`` rows are
-    marked -- a ``not-fitted`` or ``failed`` row says something about the
-    variant rather than about the comparison, and a new baseline does not change
-    it.
+    A retained compared row from another baseline is marked STALE_BASELINE_STATUS
+    and keeps its original numbers. Not-fitted and failed rows keep their status,
+    because they describe the variant rather than an assessed pairing.
     """
     if "variant" not in previous.columns:
         return recomputed
@@ -547,25 +523,11 @@ def merge_retained_rows(
 def _comparable_ages(
     qty: str, base: pd.DataFrame, var: pd.DataFrame
 ) -> tuple[np.ndarray, np.ndarray]:
-    """The baseline ages ``qty`` can be compared at, and the variant's estimate there.
+    """Return baseline ages and corresponding variant estimates for comparison.
 
-    This is the one matching rule, shared by :func:`coverage_report` and
-    :func:`compare_dirs` so the coverage reported is the coverage compared.
-
-    Query-grid series and scalars match exactly: their ages are integer months
-    from ``ages_query`` (or ``-1``), shared by construction. Plot-grid series
-    (:data:`PLOT_GRID_QUANTITIES`) are emitted on ``np.linspace(min_age,
-    max_age, n_plot)``, so two fits share those ages only if they share an age
-    range; a variant that restricts the pool gets a different linspace and an
-    exact intersection collapses to arithmetic accidents -- 3 of 355 rows on
-    2026-08-16, reported as a normal "sensitive: gap" verdict, then 39 of 335
-    for VG10 ``dse-native-only`` on 2026-09-01, reported as partial coverage
-    with nothing to compare. So for those the variant's curve is interpolated
-    onto the baseline's ages inside the variant's own support: the two
-    population curves compared where both exist, on the baseline's grid, which
-    is the population-curve basis #289 task 4.2 asks for. Ages the variant does
-    not reach are not compared and count against coverage, so a variant whose
-    support is genuinely narrower is still reported as partial.
+    Query-grid series and scalars match exactly. Plot-grid series interpolate the
+    variant onto baseline ages inside its support. Ages outside that support are
+    excluded from comparison and count against coverage.
     """
     b = base.set_index("age_months")
     v = var.set_index("age_months")
@@ -589,27 +551,10 @@ def coverage_report(
     required: set[str] | None = None,
     summaries: tuple[FitSummaries, FitSummaries] | None = None,
 ) -> tuple[int, int, list[str]]:
-    """``(baseline_rows, shared_rows, missing_series)`` for a variant pairing.
+    """Count baseline rows, shared rows and missing or unreadable quantities.
 
-    ``baseline_rows`` counts every age the baseline reports across its headline
-    series; ``shared_rows`` counts those :func:`compare_dirs` will actually be
-    able to pair up. ``missing_series`` names quantities the baseline reports and
-    the variant does not at all.
-
-    **This must use exactly the matching rule** :func:`compare_dirs` **uses**, or
-    it reports coverage the comparison does not have; both read it from
-    :func:`_comparable_ages`. Query-grid series match on ``age_months``
-    exactly. The plot-grid ``gap`` series is interpolated onto the baseline's
-    ages inside the variant's support, because a variant that restricts the
-    pool -- ``dse-native-only`` is the live example -- gets a different
-    linspace and an exact intersection keeps only the points that coincide by
-    accident, which had been reported first as a normal "sensitive: gap"
-    verdict (3 of 355 shared, 2026-08-16) and then as partial coverage with
-    nothing to compare (39 of 335, 2026-09-01).
-
-    A quantity either fit could not read is named here too, so isolating an
-    unusable summary file in :func:`load_headlines` costs the pairing its verdict
-    rather than letting the comparison quietly shrink to what parsed.
+    Required quantities are checked even when both fits omit them. Use the same
+    _comparable_ages rule as compare_dirs, including interpolation within support.
     """
     base_summaries, var_summaries = _pair(baseline_dir, variant_dir, summaries)
     base, var = base_summaries.quantities, var_summaries.quantities

@@ -3,40 +3,26 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 <#
 .SYNOPSIS
-    One-command, recoverable full replication run. PowerShell Core port of
-    run_replication.sh, which only ever ran on POSIX: it probes .venv/bin/python
-    and re-execs under setsid, neither of which exists on Windows.
+    Fit selected models, run comparisons, render reports and upload model output.
 
 .DESCRIPTION
-    Fits every registered model at a chosen sampling config, runs the read-only
-    comparisons, syncs report figures, renders the reports, and uploads model
-    output to blob storage. Built for long reporting-config runs, so it is
-    resilient to a dropped session and to mid-run interruption.
+    The default scope selects publication-required roles from the catalogue.
+    -Scope all selects every registered model. Each fit runs in its own process;
+    -MaxParallel and -MinFreeGB limit new launches. The memory check cannot
+    prevent a running fit from exceeding available memory.
 
-    Key properties
-      * Cross-platform: pwsh 7+ on Windows, Linux and macOS. The venv layout
-        (Scripts vs bin) is resolved from $IsWindows rather than assumed.
-      * Detached: -Detach re-launches a disowned child so a closed terminal or a
-        dropped SSH session cannot kill the run.
-      * Per-model isolation: each model fits in its own process, and -MaxParallel
-        controls how many fit at once. Any failure still stops comparisons,
-        rendering and publication for the batch.
-      * Memory-aware: a new fit is not launched while available memory is below
-        -MinFreeGB and something is already running. Reporting-config traces run
-        to double-digit gigabytes and concurrent fits have OOM-killed each other
-        on this project before.
-      * Idempotent / resumable: only complete output made with the requested
-        sampling tier, model definition, data and Git revision is skipped.
-      * Upload decoupled from fitting: a broken blob credential can never sink a
-        multi-hour fit. Uploads run last, using the az CLI credential.
-      * Full logging: a run log, per-model stdout/stderr files, and a status TSV,
-        with a "latest" pointer to the current run's log directory.
+    Reuse complete fits only when the requested definition, data, implementation
+    and sampling tier are compatible. Failures stop dependent phases. Separate
+    fit, comparison, render and upload flags allow checked output to be reused.
+    Logs include a run log, per-model stdout/stderr and a status TSV.
 
-    Blob credential note: DefaultAzureCredential can resolve an identity other
-    than your az CLI login (one that lacks the blob data role), giving
-    AuthorizationPermissionMismatch. The driver sets AZURE_TOKEN_CREDENTIALS=dev
-    unless it is already set, so the interactive az login is used. Requires a
-    valid `az login`.
+    -Detach starts a child process independent of this terminal. System shutdown,
+    process termination and host session policy can still stop it.
+
+    The driver defaults AZURE_TOKEN_CREDENTIALS to dev and respects an existing
+    value. This restricts credential discovery to developer credentials; it does
+    not guarantee selection of the Azure CLI login. Ensure the selected identity
+    has the required blob permissions before enabling uploads.
 
 .EXAMPLE
     ./scripts/run_replication.ps1 -Config rep
@@ -174,12 +160,7 @@ $env:PATH        = $VenvBin + [IO.Path]::PathSeparator + $env:PATH
 # renders them rather than degrading them to '?'.
 $env:PYTHONUTF8 = '1'
 
-# Every per-model log here is a redirected file, and Python block-buffers stdout
-# when it is not a terminal. Without this a fit's log stays empty for its first
-# 8 KB -- so a run cannot be watched, a hung fit is indistinguishable from one
-# that has just started, and, worst, a fit killed by the OOM killer loses the
-# buffered output that would say why. That last case has happened on this
-# project. Unbuffered costs nothing at these volumes.
+# Flush Python logs promptly so progress and failures remain visible.
 $env:PYTHONUNBUFFERED = '1'
 
 # Pin each chain to one thread when fitting a pool. Every fit already runs its

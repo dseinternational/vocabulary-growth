@@ -156,14 +156,7 @@ def test_development_fit_reports_but_does_not_raise(tmp_path):
 
 
 def test_unassessable_parameter_fails_the_hard_tier(tmp_path):
-    """A gated parameter whose R-hat/ESS could not be measured must not publish.
-
-    The shared writer's NaN-skipping reductions leave a constant or unsampled
-    parameter out of the extrema and the failing lists, so before
-    dse-research-utils 0.12.0 such a fit reached publication reporting finite
-    diagnostics and an empty failing list. The shared gate now names those
-    parameters; the hard tier fails closed on them.
-    """
+    """Reject a reporting fit when a gated parameter has unavailable R-hat or ESS."""
     with pytest.raises(ConvergenceGateError):
         enforce_convergence_gate(
             _payload(unassessable=["frozen_term"]),

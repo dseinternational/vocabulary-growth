@@ -277,16 +277,13 @@ def check_fitted_dispersion(output_root: Path) -> None:
 
 
 def check_kernel_share(fit: Path) -> None:
-    """Note §3.3: how much total variance the item-exchangeability kernel carries.
+    """Check the note's stated 40% Binomial-component variance sensitivity.
 
-    Rasch sufficiency means heterogeneous item difficulty can only reach the model
-    through the distribution of the total, so this share bounds the whole concern.
-    It is `1 / VIF` where `VIF = (N + kappa) / (kappa + 1)` is the Beta-Binomial's
-    inflation over its Binomial kernel. An earlier draft of the note quoted VG07's
-    figures as though they were the model of record's, understating the exposure
-    threefold -- hence reading the model of record's own output here. The shares
-    are reported; what is checked is §3.3's claim that the worst case stays under
-    3% of the total standard deviation.
+    The component share is ``(kappa + 1) / (N + kappa)``, the inverse of the
+    Beta-Binomial variance inflation factor. Holding every other component
+    fixed, reduce this share by 40% and check the implied total SD change.
+    This conditional calculation does not bound item-difficulty effects on
+    fitted means, concentration, other variance components or predictions.
     """
     print(f"§3.3 — kernel share of total variance ({FITTED_MODEL})")
     for outcome in ("u", "s"):

@@ -204,9 +204,9 @@ class ModelConfiguration(BaseModelConfiguration):
     kappa_min_dist: Continuous | None = None
     """Prior distribution for the minimum kappa value (kappa_min); legacy form only."""
     a_kappa_dist: Continuous | None = None
-    """Prior distribution for the age slope of kappa (a_kappa); legacy form only."""
+    """Prior for the log-excess intercept a_kappa; legacy form only."""
     b_kappa_mag_dist: Continuous | None = None
-    """Prior distribution for the magnitude of the kappa parameter; legacy form only."""
+    """Prior for the non-negative slope magnitude b_kappa_mag; legacy form only."""
     kappa_anchored: AnchoredKappaPriors | None = None
     """Two-anchor dispersion priors, in place of the three fields above."""
     report_max_age_understood: int | None = None
@@ -435,28 +435,14 @@ S = TypeVar("S", default=ModelSamples)
 
 @dataclass
 class ModelFitContext(Generic[C, S]):
-    """Everything one fit accumulates, passed stage to stage by ``run_fit_pipeline``.
+    """Values accumulated by the fit pipeline and read through guarded properties.
 
-    **Write once, read after.** The nine underscore-prefixed fields below start
-    ``None`` and are filled in by the pipeline stage that produces each one; every
-    read goes through a property that raises if that stage has not run. Nothing in
-    the pipeline is written twice -- a second ``set_*`` for the same field would mean
-    two stages claim to produce it -- with two deliberate exceptions, both re-binding
-    the *frame* while keeping the model data: ``recovery/simulate.py`` swaps in the
-    simulated frame, and ``scripts/kfold_loso.py`` swaps in the held-out one.
+    Fields begin as None. Their properties raise when the stage supplying a value
+    has not run. Recovery and cross-validation callers may replace the prepared
+    frame while retaining model data.
 
-    That shape is why the properties raise rather than returning ``None``. A stage
-    list in the wrong order otherwise fails deep inside a plotting helper on an
-    attribute of ``None``; here it fails at the first read, naming the model and the
-    missing artefact. ``tests/test_fit_artifacts.py`` records the case that motivated
-    it -- an engine author who put the priors stage first got "no analysis DataFrame
-    set" out of a manifest writer they never invoked.
-
-    The two type parameters carry the *engine's* configuration and samples classes
-    (``BivariateContext`` and friends bind them); they default to the univariate
-    pair, so a bare ``ModelFitContext`` annotation silently means "univariate".
-    Shared stages therefore annotate :data:`AnyModelFitContext` instead -- see its
-    comment.
+    The type parameters record the engine's configuration and samples classes.
+    Their defaults are univariate. Shared stages use AnyModelFitContext.
     """
 
     reporting: reporting.ReportingConfiguration
@@ -1122,21 +1108,10 @@ def sample(context: AnyModelFitContext, *, store_observation_deterministics: boo
 
 
 def _element_counts(variables) -> list[int]:
-    """How many elements each variable holds, without a compilation apiece.
+    """Return each variable's element count with at most one graph compilation.
 
-    ``Variable.eval()`` compiles a PyTensor function for its own graph, so
-    asking a model's unobserved RVs for their sizes one at a time compiles one
-    function per variable — about 60 ms each, and the registered models carry
-    30 to 98 of them. Measured on 2026-09-11 that was **75.8 s across the
-    twenty-one models against 6.4 s to build all of their graphs**, which made
-    it twelve times the cost of the thing it was describing and the whole of
-    ``tests/test_prior_table_coverage.py``'s six minutes (issue #331).
-
-    Two cheaper routes, in order. Most of these variables have a fully static
-    type shape — every scalar prior does — and their element count is the
-    product of it, known without touching PyTensor at all. What is left is the
-    variables whose shape is symbolic, and those are evaluated **together** in
-    one compiled function rather than one apiece.
+    Use a static type shape when available. Evaluate remaining symbolic shapes
+    together rather than compiling a separate function for every variable.
     """
     counts: list[int | None] = []
     symbolic: list[int] = []
@@ -1188,24 +1163,11 @@ def emit_loo_summary(
     *,
     reff: float | None = None,
 ) -> pd.DataFrame:
-    """Persist the LOO-CV result, which every fit computed and then discarded.
+    """Write LOO estimates, uncertainty, relative efficiency and Pareto-k counts.
 
-    ``elpd`` was printed to the console and dropped on the floor, while the
-    predictive-calibration section of every model report points the reader at
-    leave-one-out as the out-of-sample counterpart to its in-sample checks. The
-    number the reader was sent to find did not exist anywhere they could reach.
-
-    The Pareto k counts travel with the estimate because without them the
-    estimate cannot be judged: PSIS-LOO is only trustworthy where the importance
-    weights are well behaved, and a handful of observations above the threshold
-    is the signal that a reported ``elpd`` is optimistic. ArviZ's own threshold
-    (``good_k``, sample-size dependent) is recorded rather than a hard-coded
-    0.7, so the bands mean the same thing across fits of different lengths.
-
-    ``reff`` is the relative efficiency every LOO here was computed with — pinned
-    to the sampled parameters (:mod:`vocab_growth.loo_reff`) — recorded because
-    the Pareto-k bands depend on it and a reader comparing fits should be able
-    to see they share the convention.
+    Large Pareto-k values flag unstable importance sampling; they do not determine
+    the direction of score error. The sample-dependent good_k threshold is
+    recorded with the counts so readers can assess each approximation.
     """
     rows = []
     for label, loo in loo_by_label.items():

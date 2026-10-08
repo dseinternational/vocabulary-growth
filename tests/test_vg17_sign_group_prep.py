@@ -33,12 +33,7 @@ def _canonical_keys(outcome):
 
 
 def test_prepare_rows_come_from_the_canonical_loader():
-    """Every prepared row is one the canonical loader admits.
-
-    The old direct-view path admitted 106 extra spoken rows the loader drops
-    (100 of them us_01 ceiling-only children), so this is the assertion that
-    fails if the module ever goes back to reading the view.
-    """
+    """Check that every exploratory prepared row passes the canonical loader."""
     for outcome in ("spoken", "produced"):
         df, _, _ = model_vg17._prepare(outcome)
         prepared = set(
@@ -84,7 +79,7 @@ def test_subject_codes_follow_the_subject_key_convention():
     )
     assert subjects == sorted(set(expected))
     assert sorted(df["subject_code"].unique()) == list(range(len(subjects)))
-    # The child effect only earns its place if children repeat.
+    # This fixture must contain repeated visits to exercise within-child sharing.
     assert (df.groupby("subject_code").size() > 1).sum() > 0
 
 
@@ -120,6 +115,8 @@ def test_vg18_caution_is_prominent_and_names_the_mechanism():
     assert "mechanical" in lowered
     assert "signed" in lowered and "produced" in lowered
     assert "descriptive" in lowered
+    assert "uk_01 is in the unknown group" in model_vg18.CAUTION
+    assert "Unknown status does not imply a spoken-only outcome" in model_vg18.CAUTION
 
 
 def test_vg18_sign_group_is_derived_from_a_component_of_its_outcome():
@@ -150,12 +147,11 @@ def test_vg18_excludes_a_produced_union_with_no_separable_sign_component():
 
 
 def test_the_spoken_outcome_is_not_touched_by_that_exclusion():
-    """The rule is about the produced union, not about the study.
+    """Keep the produced-union source exclusion specific to that outcome.
 
-    VG17's `spoken` outcome does not contain `signed` -- which is why it is the
-    interpretable contrast -- so a source is only excluded where its union hides
-    the sign component. us_03 reaches neither model, but for different reasons:
-    here it simply has no spoken count to pass the outcome filter.
+    A separate spoken count avoids defining the outcome through sign-group
+    membership. It still supports an observational association, not a causal
+    signing contrast. us_03 supplies no spoken count and enters neither frame.
     """
     spoken, _, _ = model_vg17._prepare("spoken")
     assert "us_03" not in set(spoken["study"])

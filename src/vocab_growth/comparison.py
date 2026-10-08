@@ -3,32 +3,16 @@
 
 """Shared utilities for comparing fitted vocabulary-growth models.
 
-This module consolidates the helpers that the ``scripts/compare_*`` and
-``scripts/time_to_milestone`` tools previously each re-implemented (five copies
-of ``first_crossing``, two trace loaders, ad-hoc HDI code). The comparison
-scripts are now thin CLI wrappers around the functions here.
+Registry definitions supply output paths, checklist sizes and populations.
+Each loader supports specific trace structures and applies reporting age limits.
+Callers must also restrict age-aligned comparisons to the common age range.
 
-Everything is **model-agnostic** and **registry-parameterised**: a comparison
-target is a ``MODEL_REGISTRY`` key (e.g. ``"vg11"``, ``"vg10"``). Output
-directories, vocabulary-checklist sizes (``n_trials``) and populations are
-resolved from the model definition rather than hardcoded paths, so a *new*
-model pair -- for example a future TD model with study intercepts -- can be
-compared by adding it to the registry and passing its key. No script edits
-required.
+Comprehension-matched comparisons re-index expected spoken counts by expected
+understood counts. This compares population curves at the same vocabulary level;
+it does not condition on an individual child's measured comprehension.
 
-Two complementary lenses are supported:
-
-* **Age-aligned** -- trajectories / contrasts vs chronological age. Only valid
-  over the age range where *both* models have data (the TD models are fit to
-  8-30 months); callers must restrict to the overlap.
-* **Comprehension-matched** -- the production ratio ``q = E[S]/E[U]`` and
-  derived latencies as a function of *understood vocabulary*, which removes the
-  TD/DS timescale difference.
-
-The population-level trajectories (``p_u_plot``, ``p_s_plot``, ``q_plot`` over
-``X_plot``) read here are the GP+linear means with study/subject random effects
-excluded, and are emitted under the same names by every bivariate model
-(plain, study-RE and subject-RE), so this code is unchanged across them.
+Reference curves exclude study and child effects. Weighted curves average over
+study offsets; new-child distributions integrate child effects and count noise.
 """
 
 from __future__ import annotations
@@ -150,18 +134,13 @@ def load_population_trajectory(
 def load_population_trajectory_weighted(
     path: str, n_trials_: int, frame, *, bandwidth: float = 3.0, definition=None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """``(ages, U, S)`` for the administration-weighted child of a joint RE model.
+    """``(ages, U, S)`` for a study-weighted joint-model reference curve.
 
-    The counterpart of :func:`load_population_trajectory`, which returns the
-    reference child (zero study and child effects: the child in the *average
-    study*). Study effects are centred over studies, and studies are segregated
-    by age, so at a given age the reference child can sit above or below every
-    study sampled there -- 54 words below the Down syndrome pool's median child
-    at 38 months, 46 above the typically developing pool's at 21 -- and a
-    milestone or a delay read off it inherits that. This re-weights the same fit
-    to the studies present at each age (a Gaussian kernel over ``frame``'s
-    administrations, ``bandwidth`` months), which is the child the sample
-    medians describe. Report both; the gap is the study-coverage sensitivity.
+    Study offsets are averaged using a Gaussian kernel over ``frame``'s
+    administrations, with ``bandwidth`` in months. Child effects remain zero.
+    Unlike :func:`load_population_trajectory`, this curve reflects which studies
+    contribute administrations near each age. It is not a sample median or a
+    curve averaged over child effects. The frame must be the fit's verified frame.
     """
     ages, u, s = _weighted_population_trajectory(path, n_trials_, frame, bandwidth=bandwidth)
     return _cap_loaded_trajectory(path, definition, ("understood", "spoken"), ages, u, s)
@@ -212,9 +191,8 @@ def _study_weights(ages_sorted: np.ndarray, frame, bandwidth: float) -> np.ndarr
 
     Shared by the joint and single-outcome weighted loaders so the
     administration-weighted child means the same thing on both sides of a
-    contrast. A study with no administration near an age gets zero weight
-    there; an age with no administration anywhere keeps zero weights rather
-    than dividing by zero.
+    contrast. More distant administrations receive smaller weights. If all
+    kernel values underflow to zero at an age, its weights remain zero.
     """
     codes = np.asarray(frame["study_code"], dtype=int)
     obs_ages = np.asarray(frame["age"], dtype=float)
@@ -227,9 +205,7 @@ def _study_weights(ages_sorted: np.ndarray, frame, bandwidth: float) -> np.ndarr
 
 #: Series the joint sign/speech engine (VG15) reports on the plot grid, as
 #: fractions. ``pi_*`` are the four-cell composition **conditional on the word
-#: being understood**, so they are scaled by ``p_u`` — not by ``n_trials`` alone —
-#: to become word counts. Getting that wrong silently inflates every cell by
-#: ``1 / p_u``, which at 12 months is a factor of fifty.
+#: being understood**, so word counts require ``p_u * pi_* * n_trials``.
 SIGN_SPEECH_SERIES = (
     "p_u_plot",
     "q_plot",
@@ -253,15 +229,13 @@ def load_sign_speech_trajectory(
     ``understood``
         Expected words understood.
     ``spoken``
-        ``p_u * q``. VG15 emits no ``p_s_plot`` — spoken is a ratio of
-        understood in this engine, so it is reconstructed here rather than read.
+        ``p_u * q * n_trials``; reconstructed from the production ratio.
     ``any``
         Total expressive vocabulary, in any modality, with the sign–speech
         association ``psi`` estimated from the data.
     ``any_indep``
-        The same total computed **as if** sign and speech were independent given
-        age — the assumption VG14 has no choice but to make. Shipping both makes
-        the cost of that assumption a visible contrast rather than an argument.
+        The same total with ``psi = 1``, conditional independence of signing and
+        speaking among understood words at the supplied reference effects.
     ``sign_only`` / ``both`` / ``speak_only``
         The composition of expressive vocabulary. ``sign_only`` is the count a
         speech-only assessment would miss entirely.
@@ -303,17 +277,11 @@ def load_univariate_trajectory(
 def load_univariate_trajectory_weighted(
     path: str, n_trials_: int, frame, *, bandwidth: float = 3.0, definition=None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """``(ages, W)`` for the administration-weighted child of a single-outcome RE model.
+    """``(ages, W)`` for a study-weighted single-outcome reference curve.
 
-    The single-outcome analogue of :func:`load_population_trajectory_weighted`,
-    for the typically developing comparators VG11 and VG12 (``f_plot`` plus the
-    dataset-level study offsets ``delta``). Until #289 task 4.5 those had no
-    weighted loader, so the weighted attainment delay was read against the
-    joint comparator VG21 and stopped at its window's edge, about 100 spoken
-    words, where the reference-child delay against VG11 runs on. Both delays
-    now share a comparator. Same kernel, same normalisation, same frame guard
-    as the joint loader; ``frame`` must carry ``study_code`` and ``age`` and
-    should be the fit's own verified frame.
+    Uses ``f_plot`` and the study offsets ``delta``, with the same kernel as
+    :func:`load_population_trajectory_weighted`. Child effects remain zero.
+    ``frame`` must carry ``study_code`` and ``age`` from the fit's verified frame.
     """
     d = az.from_netcdf(path)
     post = _dataset(d, "posterior")
@@ -356,7 +324,7 @@ def population_trajectory(key: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]
 # Crossing / interpolation / HDI helpers
 # ----------------------------------------------------------------------------
 def first_crossing(x: np.ndarray, y: np.ndarray, threshold: float) -> float | None:
-    """Smallest x at which a monotone-ish 1-D curve y first reaches threshold.
+    """First interpolated crossing of ``threshold`` on a one-dimensional grid.
 
     Linear interpolation between grid points. Returns ``None`` if the threshold
     is never reached, *or* if it is already exceeded at the first grid point —
@@ -436,11 +404,9 @@ def evaluate_at_ages(
 
 
 def hdi_from_samples(x: np.ndarray, prob: float) -> tuple[float, float]:
-    """Narrowest-interval HDI of a 1-D sample array, ignoring NaN.
+    """Narrowest-interval HDI of a one-dimensional sample array, ignoring NaN.
 
-    Delegates to the shared :func:`dse_research_utils.statistics.intervals.hdi_1d`
-    (an identical ``floor(prob * n)`` construction); kept as a local name for the
-    existing call sites.
+    Delegates to ``dse_research_utils.statistics.intervals.hdi_1d``.
     """
     return shared_intervals.hdi_1d(x, hdi_prob=prob)
 
@@ -516,22 +482,15 @@ def milestone_table(
     targets=DEFAULT_MILESTONES,
     ci_prob: float = intervals.DEFAULT_CI_PROB,
 ) -> pd.DataFrame:
-    """Posterior age at which the trajectory first reaches each target word count.
+    """Posterior crossing-age summaries for each target word count.
 
-    ``W`` is the ``(n_draw, n_age)`` per-draw population count trajectory (from
-    :func:`load_population_trajectory` / :func:`load_univariate_trajectory`). For
-    each target this computes the crossing age *per draw* (:func:`attainment_ages`)
-    and summarises that distribution — the correct **median-of-crossings**, not
-    the age at which the median curve crosses the target (crossing-of-median),
-    which the two differ for a nonlinear trajectory. The reported interval is the
-    posterior HDI on the milestone age for the population trajectory; it is *not*
-    a spread across individual "percentile children" (that would need new-child
-    posterior-predictive draws — see the predictive-interval caveat in the report).
+    ``W`` contains per-draw expected-count trajectories. Crossings are computed
+    per draw, rather than by inverting the median curve. The resulting intervals
+    describe uncertainty in these trajectories, not variation between children.
 
-    ``prop_reaching`` is the fraction of draws that reach the target anywhere on
-    the modelled age grid; the age summaries are over those draws only, so a low
-    ``prop_reaching`` means the median/HDI ages are conditional and should be read
-    with care.
+    ``prop_reaching`` is the share of draws with an identified crossing on the
+    grid. Draws already above the target at its first age are excluded. Median
+    ages and HDIs are conditional on the retained draws; report the share too.
     """
     A = attainment_ages(W, ages, np.asarray(list(targets), dtype=float))
     rows = []
@@ -546,7 +505,7 @@ def milestone_table(
                 "age_ci_lo": None, "age_ci_hi": None, "prop_reaching": prop,
             })
             continue
-        # Milestone ages are boundary-censored/skewed -> highest-density interval.
+        # Summarise identified crossings with the project's milestone HDI policy.
         lo, hi = hdi_from_samples(reached, ci_prob)
         lo50, hi50 = hdi_from_samples(reached, intervals.INNER_CI_PROB)
         rows.append({
@@ -602,8 +561,7 @@ def plot_summary_band(
     if df_ok.empty:
         return
     if len(df_ok) == 1:
-        # Too few points for a band/line — show the single identified estimate as
-        # a point with its interval so the figure is never silently empty.
+        # A single estimate needs a point and interval instead of a band.
         r = df_ok.iloc[0]
         ax.errorbar(
             [r[x_col]], [r["median"]],
@@ -735,30 +693,22 @@ def _restrict_at_cap(cap, ages, *arrays):
 def product_marginal_kappa(
     p_u: np.ndarray, kappa_u: np.ndarray, q: np.ndarray, kappa_s: np.ndarray
 ) -> np.ndarray:
-    """Concentration of the Beta-Binomial matching the marginal spoken count's variance.
+    """Concentration matching the marginal spoken count's first two moments.
 
-    NumPy port of ``likelihood_utils.product_marginal_concentration`` (the PyMC
-    form the ``product_marginal`` fallback uses in the graph), kept in step by
-    :func:`tests.test_comparison.test_product_marginal_kappa_matches_the_graph_form`.
+    Matches ``likelihood_utils.product_marginal_concentration``. Conditional on
+    the supplied child and study effects, nested Beta-Binomial counts give
+    ``S | theta_U, theta_S ~ Binomial(n, theta_U * theta_S)``, with independent
+    Beta proportions. Their product is generally not Beta-distributed, but::
 
-    The joint models draw ``theta_U ~ Beta(p_U kappa_U)`` and ``theta_S ~ Beta(q
-    kappa_S)`` independently, with ``S | U ~ Bin(U, theta_S)``, so the marginal
-    spoken count is a Binomial mixed over the *product* of two Betas. That
-    product has no Beta form but both moments are elementary::
+        m         = p_U * q
+        E[theta^2] = p * (p * kappa + 1) / (kappa + 1)  for each factor
+        var       = E[theta_U^2] * E[theta_S^2] - m^2
+        kappa_eff = m * (1 - m) / var - 1
 
-        m         = p_U q
-        E[theta^2] = p (p kappa + 1) / (kappa + 1)          for each factor
-        var       = E[theta_U^2] E[theta_S^2] - m^2
-        kappa_eff = m (1 - m) / var - 1
-
-    This is the quantity a DS/TD **spoken** dispersion contrast has to use. VG20's
-    ``kappa_s`` is the dispersion of the ratio ``q`` on the child's own understood
-    count as denominator, and feeding it into ``(kappa + n)/(kappa + 1)`` with
-    ``n = 810`` treats it as though it dispersed counts out of the item pool --
-    which is what VG11's ``kappa`` does, and what the contrast then compared it
-    with (``compare_ds_td_re.py``'s long-standing "known residual"). ``kappa_eff``
-    is on the item-pool denominator and is comparable. It reduces to ``kappa_s``
-    at ``kappa_U -> inf`` and ``p_U = 1``.
+    The ratio concentration ``kappa_s`` uses the understood count as its
+    denominator. A contrast with a univariate spoken model instead needs this
+    marginal concentration on the full item pool. It tends to ``kappa_s`` when
+    ``kappa_U`` tends to infinity and ``p_U = 1``.
     """
     eps = 1e-9
     pu = np.clip(np.asarray(p_u, dtype=float), eps, 1 - eps)
@@ -793,30 +743,24 @@ def load_marginal_spoken_trajectory(
 
 
 def implied_sd_y(p: np.ndarray, kappa: np.ndarray, n: int) -> np.ndarray:
-    """Beta-Binomial implied SD of the word count Y (words).
+    """Conditional Beta-Binomial standard deviation of the word count.
 
-    For ``BetaBinomial(n, alpha=p*kappa, beta=(1-p)*kappa)`` the variance is
-    ``n*p*(1-p)*(kappa+n)/(kappa+1)``; this returns its square root. This is the
-    observable between-child spread at age ``a`` — closer to what clinicians see
-    than ``kappa`` itself, but note it also moves with the mean level ``p``.
+    For ``BetaBinomial(n, p*kappa, (1-p)*kappa)``, the variance is
+    ``n*p*(1-p)*(kappa+n)/(kappa+1)``. This excludes any child-effect variation
+    not already integrated into the supplied distribution. It also changes
+    with the mean proportion ``p``.
     """
     var = n * p * (1.0 - p) * (kappa + n) / (kappa + 1.0)
     return np.sqrt(var)
 
 
 def overdispersion_factor(kappa: np.ndarray, n: int) -> np.ndarray:
-    """Variance inflation vs a Binomial at the same mean: ``(kappa+n)/(kappa+1)``.
+    """Variance inflation over a Binomial with the same mean and denominator.
 
-    A function of ``kappa`` and ``n`` only, so it removes the explicit ``p(1-p)``
-    mean dependence that confounds :func:`implied_sd_y`, which is evaluated where
-    each population sits on the mean-variance curve.
-
-    That is the whole of the claim. It is **not** true that contrasting this factor
-    across populations isolates a pure concentration difference: ``kappa`` is itself
-    level-driven in this family, so a cross-population contrast still carries
-    whatever part of the dispersion difference comes from the two populations being
-    at different vocabulary levels. The reported ratio is robust; it simply does not
-    isolate what the name suggests.
+    ``(kappa+n)/(kappa+1)`` removes the explicit ``p*(1-p)`` term from the
+    variance. A contrast still depends on each model's fitted ``kappa`` and
+    ``n``; it does not isolate a population difference independent of vocabulary
+    level when the concentrations themselves depend on that level.
     """
     return (kappa + n) / (kappa + 1.0)
 
@@ -824,26 +768,12 @@ def overdispersion_factor(kappa: np.ndarray, n: int) -> np.ndarray:
 # ----------------------------------------------------------------------------
 # Between-child heterogeneity (the subject random-effect scale)
 # ----------------------------------------------------------------------------
-# `kappa` — and therefore `overdispersion_factor` above — is an *observation*-level
-# parameter, applied to a child-and-study-specific `p_obs`. In a model carrying
-# subject random effects it is what is left after persistent between-child
-# differences have been absorbed, so it does not answer "how much do children in
-# this population differ from one another": that is the subject scale's job. The
-# two are not merely different, they are complementary — in the TD models they are
-# an explicit reparameterisation of one shared logit-scale scatter budget (see
-# `models.gp_utils.build_variance_partition`), so reading either alone attributes
-# the whole budget to whichever half is being looked at.
-#
-# The obstacle to contrasting the scales directly is that they do not all live on
-# the same latent scale. The univariate TD models put one subject intercept on the
-# logit of the outcome (`tau_subject`); the joint DS models put one on the logit of
-# *understood* (`tau_subj_u`) and one on the logit of the production *ratio*
-# (`tau_subj_q`), with spoken derived as p_u * q. So VG10 has no spoken subject
-# scale to read off, and `tau_subj_q` is not VG11's `tau_subject` in different
-# clothing. What both parameterisations *do* define is the between-child
-# distribution of the child's own logit p for the outcome in question, which is a
-# well-defined estimand in either. The functions below evaluate it — exactly for a
-# single logit intercept, by quadrature for the product form.
+# Observation concentration and persistent child variation are distinct.
+# TD variance-partition models allocate a shared scatter budget to both
+# (models.gp_utils.build_variance_partition), so neither describes the total.
+# Joint models put child effects on comprehension and the production ratio;
+# univariate spoken models put one on spoken directly. Compare their implied
+# spoken-logit spread, not the ratio scale with the spoken scale.
 
 
 def _gauss_hermite_standard_normal(n_nodes: int) -> tuple[np.ndarray, np.ndarray]:
@@ -883,31 +813,17 @@ def child_scale_of_age(
     *,
     ref_age_months: float = 36.0,
 ) -> np.ndarray:
-    """Between-child scale at each age under a child intercept-and-slope block.
+    """Between-child standard deviation for a child intercept-and-slope effect.
 
-    VG19. Where the model of record gives each child one constant offset, the
-    child-slope block gives each child ``b0 + b1 * D`` with
-    ``D = (age - ref) / 12`` in years, so the between-child SD is no longer a
-    number but a curve::
+    With ``D = (age - ref_age_months) / 12`` in years, the child effect is
+    ``b0 + b1*D`` and its standard deviation is::
 
-        sd(age) = sqrt(tau0^2 + 2 rho01 tau0 tau1 D + tau1^2 D^2)
+        sqrt(tau0^2 + 2*rho01*tau0*tau1*D + tau1^2*D^2)
 
-    which is just ``Var(b0 + b1 D)`` with ``Cov(b0, b1) = rho01 tau0 tau1``.
-
-    ``tau0``, ``tau1`` and ``rho01`` are per-draw scalars ``(n_draw,)``; ``ages``
-    is the evaluation grid ``(n_age,)``. Returns ``(n_draw, n_age)``, ready to
-    pass straight to :func:`child_spread_single` or :func:`child_spread_product`,
-    both of which accept an age-varying scale in place of a constant one.
-
-    Two properties worth stating because they are what makes the reported number
-    interpretable. At ``age == ref_age_months`` the scale is exactly ``tau0``,
-    which is why the reference age is a definition field rather than a constant
-    — ``tau0`` is a spread with a stated age attached. And the curve is a
-    square root of a quadratic in age, with its minimum at
-    ``D = -rho01 tau0 / tau1`` when ``tau1 > 0``: a negative
-    ``rho01`` puts the tightest point in the future and children fan out on
-    both sides of it, which is a real qualitative claim the constant-offset model
-    cannot make and should be read off the figure rather than assumed.
+    ``tau0``, ``tau1`` and ``rho01`` are ``(n_draw,)``; ``ages`` is ``(n_age,)``.
+    The result is ``(n_draw, n_age)``, suitable for the child-spread helpers.
+    At the reference age the scale is ``tau0``. If ``tau1 > 0``, its minimum
+    occurs at ``D = -rho01*tau0/tau1``, which may lie outside the reported range.
     """
     d_years = (np.asarray(ages, dtype=float) - float(ref_age_months)) / 12.0
     t0 = np.asarray(tau0, dtype=float)[:, None]
@@ -920,14 +836,11 @@ def child_scale_of_age(
 
 
 def _tau_to_draw_age(tau: np.ndarray, shape: tuple[int, ...], *, what: str):
-    """Accept a per-draw constant scale or a per-draw, per-age one.
+    """Accept a constant or age-varying scale for each draw.
 
-    ``(n_draw,)`` is the constant-offset case every model up to VG20 supplies,
-    and is returned as ``(n_draw, 1)`` to broadcast over ages exactly as before.
-    ``(n_draw, n_age)`` is the VG19 child-slope case from
-    :func:`child_scale_of_age`, and is returned unchanged. Anything else is an
-    error rather than a silent broadcast, because a wrong-shaped scale here
-    produces a plausible curve instead of a failure.
+    ``(n_draw,)`` becomes ``(n_draw, 1)`` for broadcasting. A two-dimensional
+    scale must match ``shape`` exactly. Reject other shapes because a mistaken
+    broadcast can yield plausible but incorrect curves.
     """
     t = np.asarray(tau, dtype=float)
     if t.ndim == 1:
@@ -976,30 +889,21 @@ def child_spread_product(
     rho: np.ndarray | None = None,
     n_nodes: int = 21,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Between-child spread of spoken in a joint ``p_s = p_u * q`` model.
+    """Between-child spread of spoken counts in a ``p_s = p_u * q`` model.
 
-    A child's spoken proportion is ``sigmoid(f_u + tau_u*Z1) * sigmoid(h + tau_q*Z2)``
-    with standard Normal ``Z1``, ``Z2``, so the SD of the child's *spoken* logit is
-    neither ``tau_u`` nor ``tau_q`` and is age-varying even though both scales are
-    constants. Returns the same ``(tau_logit, sd_child_words)`` pair as
-    :func:`child_spread_single`, evaluated on a tensor Gauss-Hermite grid.
+    A child's spoken proportion is
+    ``sigmoid(f_u + tau_u*Z1) * sigmoid(h + tau_q*Z2)``. Even with constant
+    input scales, its logit spread can vary with age as the reference curves
+    change. Returns ``(tau_logit, sd_child_words)`` as in
+    :func:`child_spread_single`, using tensor Gauss-Hermite quadrature.
 
-    ``rho`` is the correlation between the child's two deviations, one value per
-    draw. ``None`` means independent ``Z1``, ``Z2`` — the VG05–VG16 assumption and
-    this function's historical behaviour. Where a model estimates the correlation
-    (VG20's ``rho_uq``), passing it applies to the quadrature nodes the same
-    Cholesky the model samples under, ``Z2 = rho*Z1 + sqrt(1 - rho^2)*Z2'``.
+    ``rho`` is a per-draw correlation of the two child deviations; ``None``
+    assumes independence. Correlated nodes use
+    ``Z2 = rho*Z1 + sqrt(1-rho^2)*Z2_prime``. Omitting an estimated correlation
+    changes the derived spread.
 
-    The correction has a known direction: ``log p_S = log p_U + log q`` gains
-    ``2 Cov``, so assuming independence when the correlation is positive
-    **understates** the spoken between-child spread. That asymmetry was a
-    disclosed limitation of the DS-versus-TD contrast for as long as no DS model
-    estimated the correlation — the TD comparator's single spoken intercept
-    absorbs it whether or not anyone models it.
-
-    This is the quantity that is like-for-like with a univariate model's
-    ``tau_subject``; contrasting ``tau_subj_q`` against it instead would compare the
-    spread of a conversion ratio with the spread of a level.
+    The resulting spoken-logit spread is comparable to a univariate model's
+    ``tau_subject``. The ratio scale ``tau_subj_q`` alone is not.
     """
     p1 = np.zeros_like(f_u)
     p2 = np.zeros_like(f_u)
@@ -1039,12 +943,9 @@ def _product_nodes(
     # the adapter returns (n_draw, 1) for a constant scale, which is also 2-D.
     age_varying = np.asarray(tau_u).ndim == 2 or np.asarray(tau_q).ndim == 2
     if rho is not None and age_varying:
-        # The engine refuses to build this combination (see
-        # `vocab_growth.models.subject_effects.resolve`), so reaching it means a
-        # caller has
-        # paired a child-slope scale with a cross-outcome correlation by hand.
-        # `rho` would then be read as the intercept-intercept element of a 4x4
-        # covariance that was never estimated.
+        # Child slopes plus cross-outcome correlation need a 4x4 covariance.
+        # This quadrature only represents two correlated deviations, matching
+        # the restriction in models.subject_effects.resolve.
         raise ValueError(
             "an age-varying child scale (VG19) cannot be combined with a "
             "cross-outcome correlation (VG20's rho_uq): that is a 4x4 covariance "
@@ -1080,34 +981,18 @@ def subject_heterogeneity(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, int]:
     """Return ``(ages, tau_logit, sd_child_words, n_trials)`` for one outcome.
 
-    The between-child counterpart of :func:`load_outcome_trajectory`: how far
-    children of the same age in this population sit from one another, on the
-    outcome's own logit scale and in expected words. Study effects are excluded
-    throughout, matching every other population-level curve in this module.
+    Integrates child effects while fixing study effects at zero. Univariate
+    models use ``f_plot`` and ``tau_subject``. Bivariate comprehension uses
+    ``f_u_plot`` and ``tau_subj_u``; spoken also uses ``h_plot`` and
+    ``tau_subj_q``, with their estimated correlation where defined.
 
-    Dispatches on model type, mirroring :func:`load_outcome_trajectory`: univariate
-    RE models read ``f_plot`` + ``tau_subject``; bivariate RE models read
-    ``f_u_plot`` + ``tau_subj_u`` for understood, and additionally ``h_plot`` +
-    ``tau_subj_q`` for spoken, which needs :func:`child_spread_product`.
+    Child-slope definitions supply age-varying scales through
+    :func:`child_scale_of_age`. A single-logit standard deviation follows that
+    scale; the product's logit spread also depends on the reference curves.
 
-    Where a model gives its children a *rate* rather than a constant offset
-    (VG19), the scale it reads is not a number but the curve
-    :func:`child_scale_of_age` builds from ``tau_subj_*_0``, ``tau_subj_*_1`` and
-    ``tau_subj_*_rho``, evaluated on the returned grid. Both quadratures accept a
-    ``(n_draw, n_age)`` scale, so the dispatch is the only thing that changes.
-    ``tau_logit`` is then age-varying for two reasons at once — the population
-    logit moves and the child scale moves — where under a constant offset only
-    the first applies.
-
-    ``ages`` evaluates on a caller-supplied grid instead of the model's own plot
-    grid. The population logits are interpolated *before* the quadrature (they are
-    smooth in age; the derived SD need not be), which for a 0.5-month comparison
-    grid also keeps the tensor-quadrature cost an order of magnitude down.
-
-    ``draws`` selects posterior draws (an index array from :func:`align_draws`)
-    *before* the quadrature rather than after. The result is identical either way —
-    draws do not interact — but on a reporting-quality trace the tensor grid is the
-    expensive part, so subsetting first is worth the argument.
+    ``ages`` selects an evaluation grid. Reference logits are interpolated
+    before quadrature; child-slope scales are evaluated directly on that grid.
+    ``draws`` selects posterior draws before quadrature to avoid unused work.
     """
     d = MODEL_REGISTRY[key]
     mt = d.model_type
@@ -1131,26 +1016,12 @@ def subject_heterogeneity(
     def _scale(
         scal: dict[str, np.ndarray], base: str, slope, grid: np.ndarray
     ) -> np.ndarray:
-        """One outcome's between-child scale: a per-draw scalar, or a curve in age.
+        """Read a constant child scale or evaluate its intercept-and-slope curve.
 
-        A model whose child effect carries a *rate* (VG19) has no single
-        between-child scale: the spread is
-        ``sqrt(tau0^2 + 2 rho01 tau0 tau1 D + tau1^2 D^2)`` at ``D`` years from
-        the reference age. Reading its `tau_subj_*` Deterministic and stopping
-        there would report the reference-age spread at every age, discarding
-        `tau1` and `rho01` — the same defect #224 found in the subject-marginal
-        predictive, where a fitted parameter was thrown away by the derived
-        quantity that existed to use it. `tau_subj_*` is *present* in a VG19
-        trace, so nothing would fail; the curve would just be silently flat.
-
-        Keyed off the definition's scale field rather than off which variables
-        the trace happens to contain, so a model that should carry a rate and
-        does not fails loudly in :func:`_load_reshaped_draws`.
-
-        Evaluated on ``grid`` — the caller's age grid once resolved, not the
-        model's native one — because the scale is a function of age and must be
-        computed at the ages actually reported, never interpolated from another
-        grid.
+        Resolve from the definition, not the presence of a trace variable:
+        child-slope traces also contain a reference-age ``tau_subj_*`` value.
+        Evaluate slopes directly on the reporting grid using the fit's reference
+        age, so neither interpolation nor a different reference shifts the scale.
         """
         if slope is None:
             tau = scal[base]
@@ -1254,36 +1125,15 @@ def subject_heterogeneity(
 # ----------------------------------------------------------------------------
 # Total spread: how far apart children's counts sit, without splitting it
 # ----------------------------------------------------------------------------
-# The between-child contrast adopted for publication (#229 option 4, adopted
-# 2026-09-14; #289 task 4.12). The functions above split a population's scatter
-# into a persistent child scale and observation-level dispersion; in the typically
-# developing models that split is identified by the Beta-Binomial's functional form
-# rather than by repeat visits, so it is not reported as a cross-population
-# contrast. What is reported instead is the spread of the counts themselves: the
-# SD, in words, of one administration of one new child at a given age.
+# Published contrasts use the SD in words of a new child's administration at
+# zero study effect and reference sex. TD data have few repeat visits, so the
+# separate child/residual variance components rely strongly on model structure.
+# See notes/202609141600-total-spread-estimand.md for the reporting decision.
 #
-# The new child is the one every engine's own ``y_query`` draws: a fresh child
-# effect, zero study effect (the average study) and sex contrast zero, so the
-# population curves, ``subject_heterogeneity`` and the new-child predictive all
-# describe the same child. The variance is exact, by the law of total variance
-# over the child effect, with the Beta-Binomial's conditional variance in closed
-# form:
-#
-#     Var(Y) = n^2 Var_child(E[theta]) + E_child[n m (1 - m) + n (n - 1) Var(theta)]
-#
-# where ``theta`` is the administration's Beta-distributed proportion and ``m``
-# its mean. The nested spoken count needs no marginal approximation: binomial
-# thinning makes ``S | theta_U, theta_S ~ Binomial(n, theta_U * theta_S)`` exactly,
-# so only the product's first two moments are needed, and those are elementary.
-#
-# It is in words and on no transformed scale, by decision of 2026-09-14. On the
-# 2026-09-08 fits the logit-scale versions disagreed about the direction of the
-# Down syndrome / typically developing spoken contrast at the floor: the two that
-# convert dispersion to logits were dominated by the tiny means there, and the
-# exact SD of the observed log-odds rests on the continuity correction there. The
-# mean dependence a transform was meant to remove is removed instead by comparing
-# the two populations at the same vocabulary level (:func:`value_at_level`) as
-# well as at the same age. See notes/202609141600-total-spread-estimand.md.
+# The law of total variance combines child variation and count noise. Conditional
+# Beta-Binomial moments are exact; child-effect integration uses quadrature.
+# Nested spoken counts are Binomial mixtures over theta_U * theta_S, whose first
+# two moments are available without a Beta approximation to the product.
 
 
 def _beta_second_moment(p: np.ndarray, kappa: np.ndarray) -> np.ndarray:
@@ -1394,14 +1244,12 @@ class ChildScaleSource:
 
 @dataclass(frozen=True)
 class TotalSpreadPlan:
-    """The trace variables one outcome's total spread is computed from.
+    """Trace variables needed to compute one outcome's total spread.
 
-    Resolved from the definition, never from which variables a trace happens to
-    contain, for the reason :func:`subject_heterogeneity` gives: a child-slope
-    model also emits ``tau_subj_u``, so reading whatever is present would
-    silently report a flat scale. Variables are named on one grid (``plot`` or
-    ``query``). Probabilities are read rather than logits because a recovery
-    truth draw carries the probability-scale deterministics and not the logits.
+    Definitions determine the scale structure, so a child-slope model cannot
+    silently use its reference-age scalar at every age. Variables share one
+    ``plot`` or ``query`` grid. Probability curves support recovery truth draws
+    that omit reference logits.
     """
 
     outcome: str
@@ -1679,28 +1527,13 @@ def subject_effect_correlation(
     names: tuple[str, str] = ("delta_subj_u", "delta_subj_q"),
     thin: int = 20,
 ) -> tuple[np.ndarray, int]:
-    """Per-draw correlation *across children* between two subject random effects.
+    """Per-draw empirical correlation across fitted child-effect pairs.
 
-    The joint DS models give each child two deviations — one on comprehension
-    (``delta_subj_u``) and one on the production ratio (``delta_subj_q``). In
-    VG05–VG16 they are drawn as two *independent* standard Normal vectors, and
-    :func:`child_spread_product` derives the spoken between-child scale on
-    exactly that assumption; the univariate TD comparator places a single
-    intercept on the spoken logit and so carries no such constraint, which made
-    the assumption a live asymmetry in the DS-vs-TD ``tau`` contrast rather than
-    an internal detail. VG20 estimates the correlation as a free parameter
-    (``rho_uq``), which is the fix rather than the measurement.
-
-    Returns ``(correlations, n_children)``: the empirical correlation across
-    fitted child effects within each retained posterior draw. This includes
-    uncertainty in those effects, but is not the population correlation parameter.
-    A finite fitted sample need not reproduce that parameter exactly. Shrinkage,
-    differing observation patterns and selection can move empirical correlations
-    in either direction. They are not lower bounds on a population correlation.
-
-
-    ``thin`` keeps every ``thin``-th draw: the correlation is over hundreds of
-    children per draw, so a few thousand draws already resolve the interval.
+    Returns ``(correlations, n_children)`` after keeping every ``thin``-th draw.
+    This includes posterior uncertainty in the fitted effects. It is not the
+    population correlation parameter ``rho_uq``. Shrinkage, observation patterns
+    and sample selection can move empirical correlations in either direction;
+    they are not lower bounds on the population correlation.
     """
     d = az.from_netcdf(trace_path(key))
     post = _dataset(d, "posterior")
@@ -1732,11 +1565,11 @@ def subject_effect_correlation(
 def align_draws(
     n_a: int, n_b: int, *, seed: int = 0
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Index arrays pairing two *independent* posteriors to a common draw count.
+    """Randomly pair draws from two independent posteriors.
 
-    DS and TD models are fit to disjoint data, so the joint posterior factorises
-    and any pairing is valid; permute each and truncate to ``min(n_a, n_b)`` to
-    get an unbiased paired sample for per-draw contrasts.
+    Permute each and retain ``min(n_a, n_b)`` draws. Separate DS and TD fits
+    justify this pairing only when disjoint likelihoods and independent priors
+    yield a factorised joint posterior.
     """
     n = min(n_a, n_b)
     rng = np.random.default_rng(seed)
@@ -1752,7 +1585,11 @@ def interp_draws(ages: np.ndarray, Y: np.ndarray, grid: np.ndarray) -> np.ndarra
 
 
 def learning_rate(ages: np.ndarray, Y: np.ndarray) -> np.ndarray:
-    """Per-draw derivative ``dY/d(age)`` via central differences (shape of ``Y``)."""
+    """Grid derivative of each expected-count curve with respect to age.
+
+    Uses central differences internally and one-sided differences at the edges.
+    This is a derivative of the supplied curve, not a measured child learning rate.
+    """
     return np.gradient(Y, ages, axis=1)
 
 
@@ -1801,11 +1638,9 @@ def summarise_draws(
 # ----------------------------------------------------------------------------
 # Expressive-delay & distributional contrasts (per-draw, separate-model)
 # ----------------------------------------------------------------------------
-# These extend the per-draw DS-vs-TD contrast lens to the "expressive delay"
-# question — is DS production delayed *beyond* its comprehension delay? — and to
-# distributional (not just mean) contrasts. Everything here is a deterministic
-# functional of the already-fitted, disjoint DS and TD posteriors (no joint
-# model / VG16 required); callers pair draws with :func:`align_draws` first.
+# Callers pair independent DS and TD posterior draws with align_draws before
+# comparing attainment delays or predictive distributions. Predictive percentile
+# fractions also have simulation error from the new-child count samples.
 
 
 def attainment_ages(W: np.ndarray, ages: np.ndarray, levels: np.ndarray) -> np.ndarray:
@@ -1821,19 +1656,18 @@ def expressive_specific_delay(
     ages_td: np.ndarray, U_td: np.ndarray, S_td: np.ndarray,
     levels: np.ndarray,
 ) -> dict[str, np.ndarray]:
-    """Level-indexed expressive-specific delay (difference-in-differences).
+    """Difference between spoken and understood attainment delays.
 
     For each vocabulary level ``N`` and paired draw:
 
-    * ``D_U(N)``     = a_U^DS(N) - a_U^TD(N)   — comprehension attainment delay
-    * ``D_S(N)``     = a_S^DS(N) - a_S^TD(N)   — production attainment delay
-    * ``delta_exp``  = D_S(N) - D_U(N)         — the *extra* production delay DS
-      carries beyond its comprehension delay (== latency_DS - latency_TD).
+    * ``D_U = a_U_DS - a_U_TD`` is the comprehension attainment delay.
+    * ``D_S = a_S_DS - a_S_TD`` is the spoken attainment delay.
+    * ``delta_exp = D_S - D_U = latency_DS - latency_TD``.
 
-    A ``delta_exp`` > 0 means DS production lags further behind TD than its
-    comprehension does — an expressive-specific deficit, not just global slowing.
-    All arrays are ``(n_draw, n_level)``. Inputs must be draw-paired and equal
-    length (see :func:`align_draws`).
+    A positive difference means the modelled spoken delay exceeds the modelled
+    comprehension delay at that level. It does not establish an individual
+    deficit or a cause. Arrays are ``(n_draw, n_level)``; inputs must have equal,
+    paired draw counts.
     """
     aU_ds = attainment_ages(U_ds, ages_ds, levels)
     aS_ds = attainment_ages(S_ds, ages_ds, levels)
@@ -2027,11 +1861,10 @@ def new_child_percentile_fraction(ds_inputs, td_inputs, ages, n, *, pct=10.0, ch
 
 
 def peak_growth_age(ages: np.ndarray, W: np.ndarray) -> np.ndarray:
-    """Per-draw age of maximum learning rate dW/da over the grid (n_draw,).
+    """Per-draw grid age of the largest expected-count derivative.
 
-    Note: a value at the first/last grid age is *censored* — the true peak may
-    lie outside the model's plotting range — so callers should report the share
-    pinned at the boundary alongside the contrast.
+    A maximum at either boundary does not locate the peak within the range.
+    Report the boundary share alongside summaries of these grid-based ages.
     """
     rate = learning_rate(ages, W)
     return ages[np.argmax(rate, axis=1)]
@@ -2055,13 +1888,7 @@ def load_p_any_trajectory(
 # Reporting helpers for the matched-comprehension contrast
 # ==========================================================================
 #
-# The findings chapter used to state this contrast's credible window, peak and
-# direction as hand-typed prose, which outlived the fits that produced it: the
-# quoted window and peak came from a superseded denominator and likelihood, and
-# by the current fits the *sign of the trend* had changed too. Deriving those
-# three facts here — from the same written table the chapter tabulates, filtered
-# the same way — means the chapter cannot restate a superseded fit, and the
-# derivation is unit-testable rather than living in a ``.qmd``.
+# Derive report prose from the same coverage-filtered table used for its results.
 
 
 def dq_contrast_facts(
@@ -2071,33 +1898,18 @@ def dq_contrast_facts(
     grid_col: str = "words",
     prefix: str = "dq",
 ) -> dict | None:
-    """Summarise a matched-comprehension difference table for prose.
+    """Summarise a matched-comprehension difference table for report prose.
 
-    ``table`` is a ``summarise_draws``-shaped frame for a difference (as written
-    to ``ds_td_comprehension_q_at_U.csv``), carrying ``<prefix>_median``,
-    ``<prefix>_ci_lo``/``_hi`` and optionally ``<prefix>_coverage``. Grid points
-    whose coverage falls below ``min_coverage`` are dropped, because their
-    summaries are conditional on the subset of draws that attain the level.
+    Expects ``<prefix>_median``, ``_ci_lo``, ``_ci_hi`` and optionally
+    ``_coverage``, with the grid column ``grid_col``. Drop rows below
+    ``min_coverage`` because their summaries condition on the draws reaching
+    each level. Missing or unusable tables return ``None``.
 
-    Returns ``None`` when the table is absent or has no usable rows, so a report
-    can degrade gracefully before the comparison has been run. Otherwise a dict
-    with:
-
-    ``table``
-        The coverage-filtered, grid-sorted frame actually summarised.
-    ``covered``
-        ``(lo, hi)`` grid range retained after filtering.
-    ``positive`` / ``negative``
-        ``(lo, hi)`` grid sub-range where the interval excludes zero in that
-        direction, or ``None``. These are the *extent* of credible points, not a
-        guarantee that every point between them is credible.
-    ``peak``
-        The largest-magnitude row (a ``Series``), signed — not the largest
-        positive row, so a contrast that is credibly negative reports honestly.
-    ``rises``
-        Whether the difference increases with the grid variable, by the sign of
-        the Spearman correlation. ``None`` when fewer than three points remain,
-        where a monotone direction is not meaningful.
+    The result includes the filtered table, its grid extent and the extents of
+    positive and negative intervals excluding zero. These extents need not be
+    contiguous. ``peak`` is the row with the largest absolute median difference.
+    ``rises`` is the sign of the Spearman correlation of median and grid values,
+    or ``None`` for fewer than three rows or an undefined correlation.
     """
     if table is None:
         return None

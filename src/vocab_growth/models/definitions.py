@@ -1,15 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Model definitions for the vocabulary growth model family.
+"""Statistical definitions for the vocabulary growth model family.
 
-Each model is fully determined by its definition: population, outcome(s),
-prior parameters, and data configuration. Procedural code (model building,
-sampling, plotting, reporting) lives in the six engines — common.py,
-common_univariate_re.py, common_bivariate.py, common_bivariate_re.py,
-common_trivariate.py and common_joint_modality.py — with sampling,
-diagnostics and fit orchestration shared from common.py across all of them.
+Definitions record population, outcomes, priors and data and reporting settings.
+The catalogue selects the engine. Shared engines build graphs and run fitting,
+diagnostics and reports. Definition, data and executable-code checks establish
+separate parts of fit compatibility.
 """
 
 from __future__ import annotations
@@ -45,72 +42,25 @@ typically-developing models use.
 
 
 ROMANCE_LANGUAGES = ("Italian", "Spanish (European)")
-"""Non-English Wordbank languages admitted to the typically-developing pool.
+"""Non-English Wordbank languages admitted to the hierarchical TD reference.
 
-The Down syndrome pool is already a quarter non-English by observation — ``es_01``
-(Spanish, 186 children) and ``it_01`` (Italian, 54 children) — while the
-typically-developing reference was drawn from English alone. That asymmetry is what
-these two languages remove: it is a defensibility argument, not a power argument, and
-the added children barely move a contrast that is limited by the Down syndrome sample.
+Italian and European Spanish match languages in the Down syndrome pool.
+Italian also provides corresponding checklist forms. European Spanish uses
+different forms from es_01, so matching language does not establish matching
+measurement. These choices and the excluded languages are documented in
+notes/202608031500-td-romance-extension.md.
 
-Why these two and not the wider Romance set:
-
-- **Italian** is the only pairing that is same-language *and* same-instrument on both
-  sides. ``it_01``'s two form ceilings, 408 and 670, are exactly Wordbank's Italian
-  Words & Gestures and Words & Sentences item counts, so the Italian Down syndrome
-  and typically-developing data are the same instrument. It is a norming sample, and
-  its comprehension reaches 24 months.
-- **Spanish (European)** matches ``es_01``'s language but not its instrument
-  (``es_01`` uses the 651-item CDI-Down; Wordbank's Spanish forms are 309 and 594).
-  It is a norming sample with clean comprehension. Note that ``es_01`` also carries
-  its own 186 mental-age and sex matched typically-developing children on the *same*
-  CDI-Down, which remain the better Spanish comparison for a matched analysis.
-
-Excluded, with reasons:
-
-- **French (French)** fails on two counts. Its Words & Gestures form carries 713 word
-  items where every other Words & Gestures adaptation in Wordbank has 309-457, so it
-  is a Words & Sentences-sized inventory administered at 8-16 months; and on rows with
-  comprehension >= 20 (excluding all-zero rows, so this is not a low-count
-  coincidence) **20.9% record comprehension exactly equal to production** — the same
-  proxy-defect signature that retired VG06. The four admitted or considered Romance
-  Words & Gestures forms sit at 0.000 by comparison, cleaner than English (American)
-  Words & Gestures at 0.001.
-- **Catalan** and **Portuguese (European)** are clean but are neither norming samples
-  nor matched to any Down syndrome study, and Portuguese would have contributed 45%
-  of the added observations on its own.
-
-Two measurement checks were run before admitting these, both reported in
-``notes/202608031500-td-romance-extension.md``. Ceiling exposure is no worse than the
-existing pool: the Italian and Spanish Words & Gestures forms sit within 90% of their
-own ceiling less often (1.5% and 2.9%) than English Words & Gestures (3.1%) or the
-Oxford CDI (8.0%), and no row exceeds its own ceiling. And the fixed 810-item
-denominator survives — across the 8-15 month window these forms share, language
-medians align **better** on raw counts than on proportion-of-own-form (mean
-coefficient of variation 0.206 against 0.244, raw tighter at 7 of 8 ages), which is
-what the nesting argument predicts and the first test of that assumption across
-languages rather than within English.
+The 810-item reference denominator remains an assumption. Checks of count
+distributions and form ceilings cannot establish item-level equivalence.
 """
 
 ENGLISH_AND_ROMANCE_LANGUAGES = ENGLISH_LANGUAGES + ROMANCE_LANGUAGES
-"""Widened typically-developing scope: English plus :data:`ROMANCE_LANGUAGES`.
+"""English, Italian and European Spanish for the hierarchical TD models.
 
-Used by the hierarchical typically-developing models (VG11, VG12, VG13), whose
-dataset random intercepts can absorb between-language variation. **Not** used by
-VG03/VG04: those carry no random effects, so the between-language spread — about
-±20% at matched age, with 15-month medians running 108 to 159 across candidate
-languages — would be absorbed by the Beta-Binomial dispersion instead and reported as
-child-level dispersion. They stay English-only as the simple baselines they are
-documented to be.
-
-Language is very nearly collinear with dataset here (each added language contributes
-one dataset per form: Italian WG = Caselli, Italian WS = CLEX, Spanish = Karousou),
-so a language effect cannot be separated from a sample effect and will be estimated
-as between-dataset heterogeneity. Report it as such. One consequence to watch: the
-``CLEX`` dataset label spans several languages in Wordbank (it supplies Italian here,
-but also Croatian, Danish, Russian, Swedish and Turkish). Only its Italian rows enter
-the pool today, so the study label is unambiguous — but admitting a further CLEX
-language would silently pool two languages under one study intercept.
+VG03 and VG04 remain English-only because they have no study effects.
+Language and dataset are largely confounded, so study effects describe dataset
+differences and cannot isolate language effects. Adding another language with
+an existing dataset label, such as CLEX, would pool it under that study effect.
 """
 
 KNOWN_TD_LANGUAGES = ENGLISH_AND_ROMANCE_LANGUAGES
@@ -153,37 +103,12 @@ CLAMP_Q_ONLY = "q_only"
 
 
 def clamp_targets(value: bool | str) -> tuple[bool, bool]:
-    """Return ``(clamp_understood, clamp_q)`` for a ``clamp_mean_above_hi_anchor``.
+    """Return (clamp_understood, clamp_q) for the configured mean clamp.
 
-    The flag started as a single boolean applied to both means. Measurement on
-    2026-08-14 showed the saturation it was added for is ``q``'s alone:
-    extrapolating VG10's own fitted anchors past the clamp gives ``q`` 0.996 at
-    115 months with ``P(mean > 0.99) = 0.999``, while the understood mean reaches
-    0.962 and **never** crosses 0.99 in any posterior draw. The unclamped DS
-    controls agree — VG01 and VG02 share this pool and these anchors with no
-    clamp, and neither saturates nor shows a corner at 84 months.
-
-    Because spoken is ``p_U(a) * q(a)``, clamping both means compounds: the
-    spoken trajectory inherits two levelled-off factors, which is what makes the
-    corner at 84 months so much sharper than either factor alone.
-
-    ``"q_only"`` is spelled as a string rather than added as a second boolean
-    field on purpose. ``fit_manifest.json`` fingerprints the definition field by
-    field, so a *new* field would add a key to every definition of every class that
-    declares it and invalidate every one of their fits at once — which for this
-    field is every class that declares it: the whole ``BivariateModelDefinition``
-    tree, ``TrivariateModelDefinition`` and ``JointModelDefinition``, sixteen of
-    the twenty-two registered models (the six univariate ones do not declare it,
-    which is why ``common_univariate_re`` reads it through ``getattr``). Widening this
-    field's domain leaves ``True``/``False`` serialising exactly as before, so only
-    a definition that actually opts in changes. Stated as the rule rather than a
-    count: the count was written as "fifteen" and stayed there through five
-    registrations, then briefly as "all twenty", which is the reach of
-    ``report_max_age_understood`` rather than of this field, and went stale again
-    at VG25 -- which is why the test asserts the *list* and the count here is only
-    ever a reading aid. Both are asserted in
-    ``tests/test_ds_joint_shared_priors.py``.
-    See ``notes/202608141200-clamp-q-only.md``.
+    CLAMP_Q_ONLY levels only the spoken-share trend. True levels both trends,
+    and False leaves both unclamped. The string extends the existing field
+    without adding a key to every serialised definition that declares it.
+    See notes/202608141200-clamp-q-only.md for the design rationale.
     """
     if value == CLAMP_Q_ONLY:
         return False, True
@@ -218,47 +143,26 @@ class KappaPriorParams:
 
 @dataclass(frozen=True)
 class KappaAnchorPriorParams:
-    """Two-anchor dispersion prior: `kappa` pinned at two reference ages.
+    """Dispersion priors on the positive excess at two reference ages.
 
-    Same curve as :class:`KappaPriorParams` — an asymptote plus an exponential
-    age term, ``kappa(z) = kappa_min + exp(a_kappa + b_kappa * z)`` — but
-    ``(a_kappa, b_kappa)`` are *derived* from priors on the age term at two
-    reference **ages in months** instead of being given priors of their own. This
-    is the same move the mean trajectory already makes through ``slope_anchors``.
+    The curve is kappa(z) = kappa_min + exp(a_kappa + b_kappa * z).
+    Priors specify kappa_min and the excess above it at two ages in months;
+    the intercept and slope follow from linear interpolation of the log excess.
 
-    Four things follow, and all four are the reason for the change (see
-    notes/202608020829-kappa-and-eta-q-prior-recalibration.md, sections 8 and 17):
-
-    * **The priors are checkable.** ``kappa_min + excess_young`` is total `kappa`
-      at ``anchor_ages[0]``, directly comparable with a per-age Beta-Binomial fit
-      to the analysis frame. ``a_kappa`` is not: it is the age term at ``z = 0``,
-      i.e. at whatever the *pool mean age* happens to be.
-    * **They do not move when the pool does.** ``a_kappa`` is defined at the pool
-      mean, so resampling or a study filter silently changes what its prior means.
-      Ages do not move.
-    * **The tails are interpolated, not extrapolated.** Both anchors sit inside
-      the data, so the prior on `kappa` between them is a blend of two checked
-      values rather than an intercept and a slope whose tails compound as
-      ``exp(2b)`` at the ends of the range.
-    * **The sign is free.** ``b_kappa_mag >= 0`` forces `kappa` to fall with age,
-      which the typically-developing comprehension data reject. Two free anchors
-      admit either direction.
-
-    Place the anchors where the age term is about an order of magnitude above the
-    floor and where it has fallen back to it: between them the exponential carries
-    the curve, outside them the floor does, so both priors sit where the data
-    identify them.
+    The anchors retain their age meaning when the analysis frame's age mean and
+    standard deviation change. Either slope sign is possible. Between the anchors,
+    the log excess interpolates; outside them it extrapolates. kappa_min is a
+    lower bound throughout, approached in the direction where the excess decays.
+    See notes/202608020829-kappa-and-eta-q-prior-recalibration.md.
     """
 
     anchor_ages: tuple[float, float]
     """Reference ages (months), ordered (young, old), for the two kappa anchors."""
     kappa_min_mu: float
-    """LogNormal mu for kappa_min, the dispersion asymptote.
+    """LogNormal mu for the positive lower bound kappa_min.
 
-    Which end of the age range it applies at follows the sign of the derived
-    ``b_kappa``, so it is a floor only when dispersion falls with age. Where it
-    rises — the typically-developing comprehension models — it is the young-age
-    asymptote instead, and carries real weight: VG13's is 30, not 3.
+    It is the old-age asymptote when concentration falls with age and the young-age
+    asymptote when concentration rises.
     """
     kappa_min_sigma: float
     """LogNormal sigma for kappa_min."""
@@ -309,151 +213,68 @@ class SubjectVariancePartitionParams:
 
 @dataclass(frozen=True)
 class SubjectSlopePriorParams:
-    """A child-level random *slope*: each child gets an intercept and a rate.
+    """Priors for a child's correlated intercept and per-year slope.
 
-    VG19 (``notes/202608141900-child-slope-implementation-plan.md``). This is the
-    structure Gate 1 selected on the fitted residuals, against two alternatives:
-    a random slope is worth ``2 x delta logL = 36.05`` on spoken over a constant
-    intercept and survives restriction to the 334 children with repeated spoken
-    measures (20.81), while an AR(1) transient collapses to zero persistence on
-    both outcomes. So the missing structure is drift, not an autocorrelated
-    child process.
+    The non-centred graph is::
 
-    The graph, non-centred, with the Cholesky written out::
-
-        tau0    ~ HalfNormal(tau0_sigma)     # spread at the reference age
-        tau1    ~ HalfNormal(tau1_sigma)     # spread of rates, PER YEAR
-        rho_raw ~ Beta(rho_eta, rho_eta);  rho01 = 2 * rho_raw - 1
+        tau0    ~ HalfNormal(tau0_sigma)
+        tau1    ~ HalfNormal(tau1_sigma)
+        rho_raw ~ Beta(rho_eta, rho_eta); rho01 = 2 * rho_raw - 1
         z       ~ Normal(0, 1), dims (subject_id, 2)
         L       = [[tau0, 0], [rho01 * tau1, tau1 * sqrt(1 - rho01 ** 2)]]
         b       = z @ L.T
         shift(obs) = b[subject, 0] + b[subject, 1] * (age - ref_age) / 12
 
-    Three properties are the point of the design, and none is incidental.
+    At tau1 = 0, the child block reduces to a constant intercept. At perfect
+    correlation it uses one deviate with an affine age loading, which differs
+    from A1's exponential scale. Whole-model nesting also requires matching covariates and dispersion.
+    Tests of boundary variances need an appropriate reference distribution.
 
-    **The constant child-intercept block is nested at ``tau1 = 0``**.
-    Correlation one gives one deviate with a scale linear in age. It does not
-    reproduce Proposal A1's exponential scale, despite both being rank one.
-    Whole-model nesting also requires the same covariates and dispersion form.
-    Boundary comparisons need their own calibration; an ordinary chi-square
-    reference need not apply when testing a variance or perfect correlation.
-
-    **``tau1`` is per year.** In logit/month the fitted values are 0.02-ish and a
-    prior on that scale is unreadable; per year they are 0.12-0.29.
-
-    **For a 2x2 matrix, ``(rho01 + 1) / 2 ~ Beta(eta, eta)`` is exactly
-    LKJ(eta)**, so this is the standard prior written in the one form that keeps
-    ``tau0``, ``tau1`` and ``rho01`` named free variables the posterior
-    summaries, the comparators and the recovery scorer can read — rather than
-    elements of a packed Cholesky vector. Same reasoning as
-    :class:`BivariateCorrelatedSubjectREModelDefinition`.
-
-    Supplied **in place of** a scalar ``tau_subj_*_sigma``, exactly as
-    :class:`AgeVaryingSubjectScale` is, so the field it replaces already selects
-    the subject-effect scale and no new field appears on the parent definition.
+    For a 2x2 correlation matrix, the transformed Beta prior is exactly LKJ(eta).
+    The explicit form preserves named scales and correlation parameters in traces.
+    This object replaces a scalar tau_subj_*_sigma without adding a shared
+    definition field. See notes/202608141900-child-slope-implementation-plan.md.
     """
 
     tau0_sigma: float
-    """HalfNormal scale for the between-child spread AT THE REFERENCE AGE. Set it
-    to the scalar ``tau_subj_*_sigma`` this object replaces, so the model of
-    record's own prior is what the intercept keeps."""
+    """HalfNormal scale for child variation at the reference age."""
     tau1_sigma: float
-    """HalfNormal scale for the spread of per-year rates. ``HalfNormal(0.5)`` has
-    median 0.34, covers both ML-fitted values (0.12-0.29) comfortably, and keeps
-    mass near zero so a slope the data do not support shrinks away."""
+    """HalfNormal scale for child variation in slopes, in logits per year."""
     rho_eta: float = 2.0
-    """LKJ concentration for the intercept-slope correlation. ``eta = 1`` is
-    uniform on (-1, 1); ``eta = 2`` biases gently toward zero. The ML estimate to
-    compare against is +0.43."""
+    """LKJ concentration for the intercept-slope correlation.
+
+    eta = 1 is uniform on (-1, 1); larger values favour correlations near zero.
+    """
 
 
 @dataclass(frozen=True)
 class SubjectFactorPriorParams:
-    """VG22: the four child effects as ``b = L z``, a low-rank factor form.
+    """VG22's low-rank covariance over four child effects.
 
-    VG19 gives each child an intercept and a rate on **each** outcome, in two
-    independent 2x2 blocks; VG20 correlates the two **intercepts** and holds the
-    rates at zero. Their union is a 4x4 over ``(b0u, b1u, b0q, b1q)`` with four
-    scales and six correlations. Gate 1
-    (``notes/202608221000-four-by-four-gate1.md``) fitted that 4x4 on the
-    residuals and returned two negatives:
+    The effects are (b0u, b1u, b0q, b1q), comprehension level and rate, then
+    spoken-share level and rate. With z ~ Normal(0, I_rank) and b = L z,
+    their covariance is L L', which is positive semidefinite.
 
-    * the element that motivated it -- ``corr(b1u, b1q)``, do children who gain
-      comprehension faster also convert faster -- is the **weakest** of the six
-      (2.47 across all children, 0.57 on repeat-measured children, where a
-      within-child rate coupling would have to show if it existed); and
-    * the 4x4 is **not identified** by these data. Its maximum-likelihood
-      correlation matrix is singular to 2.1e-08, a rank-3 fit reaches an
-      identical likelihood to four decimal places, and rank 2 costs only 2.60 on
-      2 df.
+    Loading rows are normalised and scaled by tau_i. A numerical floor protects
+    rows whose unscaled norm approaches zero.
+    A lower-triangular anchor block with positive diagonal removes rotational
+    redundancy. The anchor order is comprehension level, spoken-share level,
+    spoken-share rate, then comprehension rate. The level correlation has the
+    explicit prior described by rho_uq_eta; other correlations are derived.
 
-    So the successor is not a correlation matrix of any shape. It is a factor
-    form, in which ``k`` latent dimensions drive all four effects::
+    At rank one, every effect is a scaled copy of one deviate. This does not
+    reproduce A1's exponential age scale. VG20's child covariance can be recovered
+    with zero rate loadings at rank at least two. VG19's two full-rank 2x2 blocks
+    require rank four and are not nested within the supported ranks one to three.
 
-        b_child = L z_child,   z ~ Normal(0, I_k),   L is (4, k)
-
-    giving ``Sigma = L L'`` -- positive semi-definite by construction, with **no
-    positive-definiteness constraint to hand-write into the graph**, which is
-    the awkward part of a constrained correlation matrix and the reason §5 of
-    the note rejects one.
-
-    **Scale and direction are separated**, so the marginal spreads keep the
-    names, the priors and the meanings they have in VG19 and VG20. Each row of
-    ``L`` is a marginal SD times a unit direction::
-
-        tau_i        ~ HalfNormal(sigma_i)          # marginal SD of effect i
-        w_i          ~ Normal(0, 1) on R^k, then normalised to unit length
-        L[i, :]      = tau_i * w_i / ||w_i||
-
-    so ``Sigma_ii = tau_i ** 2`` exactly and ``tau_subj_u_0`` still means "the
-    between-child spread of comprehension standing at the reference age",
-    comparable across ``rank`` and against both parents. The correlations become
-    named deterministics rather than sampled parameters.
-
-    **The free-parameter count reproduces the note's rank table exactly**, which
-    is the check that this parameterisation is the one the gate analysed. Row
-    directions live on a ``(k-1)``-sphere and ``L`` is fixed against rotation by
-    taking ``k`` anchor rows and constraining their ``k x k`` block to be
-    lower-triangular with a positive diagonal, so the covariance carries
-    ``4 + (k - 1) * (k / 2 + 4 - k)`` free parameters: **4** at ``k = 1``,
-    **7** at 2, **9** at 3 and **10** at 4 -- against the note's 4, 7, 9, 10.
-
-    Without that triangular constraint ``L`` and ``L Q`` are the same covariance
-    for any orthogonal ``Q``, which leaves the loadings on a rotational ridge and
-    is a sampling problem rather than merely an interpretive one. The anchors
-    are ``(b0u, b0q, b1q, b1u)`` -- the two levels, then the production-ratio
-    rate, with the comprehension rate last -- because a diagonal only pins its
-    column's sign if the row it sits on has real between-child variance, and
-    ``b1u``'s is ~0 in every fit of this family. Anchoring on it is what split
-    the first ``rep`` fit into mirror modes (``gp_utils.build_child_factor``,
-    ``notes/202608231420-vg22-factor-anchor-bimodality.md``). The anchor order
-    is a gauge choice: it changes neither ``Sigma`` nor the counts.
-
-    **What is nested, and what is not.** ``rank = 1`` makes every child's four
-    effects one deviate scaled four ways -- perfect correlation throughout, the
-    rank-one case Proposal A1 assumes. VG20 is the special case with the two
-    rate loadings at zero. **VG19 is not nested here at any rank below 4**: two
-    independent 2x2 blocks are a full-rank 4x4 with cross terms at zero, and a
-    factor form reaches zero cross-correlation only by giving the two outcomes
-    orthogonal directions, which at ``k < 4`` it cannot do for all four effects
-    at once. This is a different family, not a strict generalisation, and the
-    comparison with VG19 is therefore between models rather than within one.
-
-    **``rank`` is a definition field because the data cannot choose it.** Rank 2
-    and rank 3 are 2.60 apart on 2 df and rank 3 and rank 4 are identical, so 2
-    and 3 are both defensible and 4 is not. Fit ``rank = 1, 2, 3`` as a
-    registered sensitivity family; they differ by one column of ``L``.
-
-    One caveat the note is explicit about and this docstring should not soften:
-    residual maximum likelihood sits on the singularity boundary and a Bayesian
-    fit will not. The finding is **not** "the fourth dimension is zero" but that
-    **the data carry almost no information about it, so the prior supplies
-    nearly all of it** -- which is why ``rank`` is declared rather than inferred.
+    Rank is specified in the definition and checked by sensitivities. The
+    exploratory residual fit motivated this family but does not prove its rank or
+    recoverability in the registered model. See
+    notes/202608221000-four-by-four-gate1.md and the current model inventory.
     """
 
     rank: int
-    """Number of latent dimensions ``k``. Gate 1 supports 1-3; 4 is refused,
-    because rank 3 already reaches the free 4x4's likelihood exactly."""
+    """Number of latent dimensions. Supported ranks are one, two and three."""
 
     tau1_u_sigma: float
     """HalfNormal scale for the spread of per-year comprehension rates. Per year,
@@ -469,33 +290,16 @@ class SubjectFactorPriorParams:
     restating them."""
 
     rho_uq_eta: float = 2.0
-    """LKJ concentration for the level-level correlation ``rho_uq``.
+    """LKJ concentration for the two level effects' correlation at rank >= 2.
 
-    **Designed, not induced, since issue #266 finding 5.** Before this, the
-    loading rows were sampled independently and normalised, which left
-    ``rho_uq`` with whatever prior the geometry happened to give: exactly the
-    **arcsine** distribution, whose density piles at the extremes.
-    ``P(|rho_uq| > 0.8) = 0.410`` and the 89% interval was ``[-0.985, +0.985]``,
-    against ``0.056`` and ``[-0.715, +0.715]`` under the ``LKJ(2)`` VG20 places
-    on the same quantity -- so the two models' posteriors were not
-    prior-comparable, and a difference between them was partly a difference
-    between their priors. It also depended on the anchor order, which the
-    2026-08-23 change had documented as a pure gauge choice.
+    The first level direction is e_0 and the second starts with
+    (rho, sqrt(1 - rho**2)). Thus (rho_uq + 1) / 2 ~ Beta(eta, eta),
+    matching VG20's two-dimensional LKJ prior. Matching this prior does not match
+    the models' other assumptions.
 
-    The design is exact rather than approximate. The first anchor row is
-    ``e_0``, so ``rho_uq`` **is** the second anchor row's first coordinate; that
-    row is parameterised as ``(rho, sqrt(1 - rho^2))`` with
-    ``(rho + 1) / 2 ~ Beta(eta, eta)``, which for a 2x2 is exactly ``LKJ(eta)``
-    -- the form VG20 uses, written the same way so ``rho_uq_raw`` carries the
-    same meaning in both.
-
-    ``eta = 2`` matches VG20 deliberately, for the reason VG23's registration
-    gives for matching it there: the correlations are then estimated under the
-    same prior in both models and their comparison is not a prior artefact.
-
-    Applies from ``rank >= 2``. At ``rank = 1`` every effect is one deviate
-    scaled four ways, so ``|rho_uq| = 1`` by construction and no prior over
-    ``(-1, 1)`` can be placed on it; the field is then unused."""
+    At rank one, abs(rho_uq) = 1 and this field is unused.
+    See gp_utils.build_child_factor and the prior correction in issue #266.
+    """
 
     def __post_init__(self) -> None:
         if self.rank not in (1, 2, 3):
@@ -664,7 +468,7 @@ class UnivariateModelDefinition:
     population: Population
     outcome: Outcome
     n_trials: int
-    """Number of words on the vocabulary checklist."""
+    """Number of trials on the common reference vocabulary scale."""
     slope_anchors: tuple[float, float]
     """Reference ages (months) for the slope parameterisation."""
     ages_query: tuple[int, ...]
@@ -702,8 +506,7 @@ class UnivariateModelDefinition:
     kappa: KappaPriorParams | KappaAnchorPriorParams = field(
         default_factory=KappaPriorParams
     )
-    """Dispersion priors, in either parameterisation; only the univariate spoken
-    models have migrated to the two-anchor form so far."""
+    """Dispersion priors in the intercept-and-slope or two-anchor form."""
 
     # -- Study-level random intercepts --
     tau_study_sigma: float = 0.5
@@ -718,19 +521,12 @@ class UnivariateModelDefinition:
     """If True, add a subject-level random intercept to account for repeated
     assessments of the same child."""
     tau_subject_sigma: float | AgeVaryingSubjectScale = 1.5
-    """HalfNormal scale for the subject intercept SD (logit scale).
+    """HalfNormal scale for the child intercept SD, in logits.
 
-    Calibrated, 1.5 rather than the 0.5 every model carried until section 23 of
-    ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md``. The conditional
-    dispersion estimator reports `tau` alongside `kappa` for every pool, so this
-    scale has had a calibration available since section 19 and was simply never
-    read off it. It puts the subject scale between 0.74 and 1.15 across the
-    family, against a HalfNormal(0.5) whose median is 0.34 — which left all
-    fourteen subject-scale parameters in the registry at prior CDF 0.86 to 0.994.
-    HalfNormal(1.5) has median 1.01 and lands every one of them between 0.38 and
-    0.64 while keeping the mass near zero that lets a subject effect the data do
-    not support shrink away. The *study* scales stay at 0.5: their posteriors sit
-    at prior CDF 0.43-0.82 already and need nothing."""
+    An AgeVaryingSubjectScale instead selects the registered A1 sensitivity.
+    The scale calibration is recorded in
+    notes/202608020829-kappa-and-eta-q-prior-recalibration.md.
+    """
     one_observation_per_subject: bool = False
     """If True, retain one reproducibly sampled administration per subject. This
     is a clustering sensitivity analysis, not the default estimand."""
@@ -777,39 +573,22 @@ class UnivariateModelDefinition:
 
 @dataclass(frozen=True)
 class UnivariateREModelDefinition(UnivariateModelDefinition):
-    """A univariate model with random effects, plus the two sampling-geometry options.
+    """Single-outcome random effects and optional sampling parameterisations.
 
-    These live on a subclass rather than on
-    :class:`UnivariateModelDefinition` for a concrete reason. A fit is validated
-    against the current registered definition by comparing
-    ``dataclasses.asdict`` field for field, so **adding a field to a definition
-    class invalidates every existing fit of that class** — including models that
-    never set it. VG01-VG04 are plain univariate models with no random effects at
-    all; putting these two fields on the shared base would have made four
-    published models of record stale for no modelling reason, VG03 alone costing a
-    2h50m refit. Only VG11, VG12 and the exploratory VG17 use the random-effect
-    engine, so only they carry the fields.
-
-    The engine reads both through ``getattr`` with a default, so a plain
-    :class:`UnivariateModelDefinition` still builds — VG17 derives its definition
-    from VG01 and never becomes a subclass instance.
+    Subclass fields keep options that the random-effect engine implements off the
+    plain univariate definitions. The engine reads absent optional fields with
+    their documented defaults. VG17 has a separate exploratory fitting path.
+    See fit_identity for the rules governing added definition fields.
     """
 
     centred_study_re: bool = False
-    """If True, sample the study intercepts directly as
-    ``ZeroSumNormal(sigma=tau * sqrt(K/(K-1)))`` rather than as ``tau`` times a
-    unit-scale ``ZeroSumNormal``.
+    """Sample study offsets directly instead of scaling unit-scale offsets.
 
-    Prior-preserving: scaling a zero-sum Gaussian's sigma and scaling its variate
-    give the same distribution, so this changes the sampler's coordinates and
-    nothing else. The non-centred form of issue #65 is the wrong side of the
-    funnel trade-off once each study carries thousands of observations.
-
-    Measured on VG12 at ``test``: ``tau`` ESS 310 -> 6,950, max R-hat 1.0133 ->
-    1.0057, divergences 59 -> 31. Energy BFMI unchanged (0.203 -> 0.194), exactly
-    as predicted — ``tau`` ranks 13th on energy correlation at -0.023, so this was
-    never a BFMI fix. See ``notes/202608050900-td-hierarchical-geometry.md``
-    §§2-3."""
+    Both forms give ZeroSumNormal(sigma=tau * sqrt(K/(K-1))). They preserve
+    the prior but change the sampler's coordinates. The centred form is used by
+    VG11 and VG12; its sampling assessment is in
+    notes/202608050900-td-hierarchical-geometry.md.
+    """
     subject_variance_partition: SubjectVariancePartitionParams | None = None
     """If set, sample a shared scatter budget and a subject share rather than
     giving ``tau_subject`` and the young ``kappa`` anchor competing priors.
@@ -904,7 +683,7 @@ class BivariateModelDefinition:
     """Banner text printed at fit start."""
     population: Population
     n_trials: int
-    """Number of words on the vocabulary checklist."""
+    """Number of trials on the common reference vocabulary scale."""
     slope_anchors: tuple[float, float]
     """Reference ages (months) for the slope parameterisation."""
     ages_query: tuple[int, ...]
@@ -945,7 +724,7 @@ class BivariateModelDefinition:
     eta_u_sigma: float = 0.4
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
+    eta_q_sigma: float = 0.8  # Calibration history: notes/202608041730-ds-spoken-q-trajectory-prior.md.
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(
@@ -1042,9 +821,12 @@ class BivariateModelDefinition:
     administration wave (issue #242). Uses the subject understood intercept,
     so requires use_subject_re_u=True for the 'within' baseline."""
     lag_baseline: str = "within"
-    """Baseline for the lag residual. 'within' subtracts the child's own understood
-    intercept (RI-CLPM within-child effect); 'population' subtracts only the
-    population+study level (robustness companion; blends within/between)."""
+    """Reference level subtracted from earlier comprehension on the logit scale.
+
+    within also subtracts the child's fitted comprehension intercept.
+    population subtracts population and study terms only, so it can mix
+    between-child and within-child associations.
+    """
     beta_lag_mu: float = 0.0
     """Normal mean for the cross-lag coefficient beta_lag (0 = no direction imposed)."""
     beta_lag_sigma: float = 0.5
@@ -1098,36 +880,21 @@ class BivariateModelDefinition:
 
     # -- Mean extrapolation above the high anchor --
     clamp_mean_above_hi_anchor: bool | str = False
-    """Level the logit-linear mean off above the high slope anchor instead of
-    extrapolating the line.
+    """Softly level the mean above the high slope anchor.
 
-    **Not a plain boolean.** ``True`` clamps both the understood mean and ``q``;
-    ``CLAMP_Q_ONLY`` (``"q_only"``) clamps only ``q``. Resolve with
-    :func:`clamp_targets` rather than testing truthiness -- ``"q_only"`` is truthy,
-    so ``if definition.clamp_mean_above_hi_anchor:`` silently clamps the understood
-    mean as well.
-
-    The transition is a soft minimum, so the mean stays differentiable and the
-    fitted curve inherits no elbow; a hard ``min`` made the VG10 spoken curve
-    briefly non-monotone at the anchor. One-sided: below the low anchor the line
-    still extrapolates, which is accurate there. Applied to the Down syndrome
-    models, whose GP domain runs to 115 months against a high anchor at 84 -- see
-    ``gp_utils.trend_and_gp`` and notes/202608042030-q-mean-extrapolation.md."""
+    True clamps understood and q. CLAMP_Q_ONLY clamps q alone. Resolve the value
+    through clamp_targets because the sentinel string is truthy. Below the low
+    anchor the line still extrapolates; the GP can still change the combined curve.
+    """
 
     # -- Reporting range --
     report_max_age_understood: int | None = None
-    """Highest query age (months) at which comprehension quantities are reported.
+    """Reporting cap in months for comprehension and quantities that depend on it.
 
-    Trims the understood and ``q`` summary tables and the production-ratio figure
-    to where their evidence stops, leaving spoken on the full grid. Purely
-    post-processing: the query grid, the model graph and the fitted trace are
-    untouched, so changing this cannot move the posterior — proved by refitting
-    VG10 across the change at a fixed seed and reproducing its diagnostics
-    bit-for-bit. It does still require re-running the fit: the summary tables are
-    written during the fit pipeline and ``--render-only`` does not regenerate
-    them, and this field is part of the recorded definition, so a fit produced
-    under a different value is correctly reported as stale. None reports every
-    query age. See ``posterior_analysis.trim_reported_ages``."""
+    None keeps the query grid. This changes reporting, not the likelihood, but it
+    remains part of the fit definition. render-only does not regenerate fit-stage
+    summary tables.
+    """
 
     # -- Data age filtering --
     max_age_months: int | None = None
@@ -1370,24 +1137,12 @@ class BivariateChildSlopeModelDefinition(BivariateModelDefinition):
 
 @dataclass(frozen=True)
 class BivariateFactorSubjectREModelDefinition(BivariateModelDefinition):
-    """Bivariate definition whose four child effects share latent factors.
+    """Bivariate definition with shared factors for child levels and rates.
 
-    VG22, the successor to VG19 and VG20 selected by
-    ``notes/202608221000-four-by-four-gate1.md`` §5. See
-    :class:`SubjectFactorPriorParams` for the structure and the evidence.
-
-    Inherits from ``BivariateModelDefinition`` rather than from either parent,
-    for the reason recorded on :class:`BivariateChildSlopeModelDefinition`: it is
-    gated against VG10, so VG10 is its parent, and neither
-    ``subject_re_correlation_eta`` nor the slope seam is a field it should be
-    able to set. Both structures are special cases of this one at the covariance
-    level, but expressing either *through* this class would give two ways to
-    write the same model.
-
-    The field lives on a **subclass** so that VG05, VG07-VG10, VG16, VG19 and
-    VG20 keep their serialised definitions and therefore their fitted output;
-    ``None`` means "behave exactly as the parent", so the subclass is inert until
-    a definition sets it.
+    The subclass keeps the factor option off other bivariate definitions.
+    None retains independent constant offsets. The factor replaces the two
+    outcome blocks and cannot be combined with their separate slope or correlation
+    options. See SubjectFactorPriorParams for rank and nesting limits.
     """
 
     subject_factor: SubjectFactorPriorParams | None = None
@@ -1433,7 +1188,7 @@ class TrivariateModelDefinition:
     """Banner text printed at fit start."""
     population: Population
     n_trials: int
-    """Number of words on the vocabulary checklist."""
+    """Number of trials on the common reference vocabulary scale."""
     slope_anchors: tuple[float, float]
     """Reference ages (months) for the slope parameterisation."""
     ages_query: tuple[int, ...]
@@ -1455,27 +1210,14 @@ class TrivariateModelDefinition:
     p_slope_hi_q_alpha: float = 2.0
     p_slope_hi_q_beta: float = 1.2
 
-    # -- Signed ratio (r) mean prior: THREE-ANCHOR HUMP --
-    # r(a) = P(sign | understood) is a developmental HUMP: near zero at young ages
-    # (signing just emerging), peaking in the preschool years, then receding as words
-    # move into speech. It is anchored at THREE reference ages (sign_anchor_ages) —
-    # young / peak / old — with the mean built as two logit-linear segments meeting
-    # at the peak anchor, clamped flat outside (see gp_utils.tent_and_gp). This makes
-    # the prior MEDIAN a hill — unlike the intercept-only mean (flat median, so words
-    # signed = understood x r rose monotonically) and unlike a free monotone slope
-    # (which extrapolated to a spurious ~58% signed at 12 mo). The GP now only models
-    # smooth departures, so eta_sign reverts toward standard (below).
-    #
-    # Anchor ages/levels come from the INDEPENDENT DS sign literature, not the fitted
-    # data: signing peaks ~mental age 17 mo (Miller 1992 via Clibbens: signed = 2x
-    # spoken there, declining by MA ~26 mo) which at a DS DQ ~0.5 is chronological
-    # ~34 mo; the inverted-U shape is corroborated by Zampini (parabolic gesture
-    # trajectory -- shape only, since that cohort overlaps it_01); DS retain signs
-    # longer than TD (Te Kaat-van den Os review), so the
-    # old anchor stays modest (not near-zero) and uk_06 has real 60-115 mo signers.
-    # The peak LEVEL is kept broad because the peak AGE is only weakly identifiable.
+    # Three independent signing heights define a piecewise logit-linear mean.
+    # The priors favour a middle-age rise but do not require it in every draw.
+    # A mental-to-chronological-age conversion informed the middle-age choice;
+    # it is an assumption, not a measured peak for this sample. The literature
+    # rationale is in docs/models/PRIORS.md. The Zampini cohort overlaps it_01,
+    # so it cannot provide independent validation of the fitted trajectory.
     sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
-    """Young / peak / old reference ages (months) for the signed-ratio hump."""
+    """Reference ages for the three signed-ratio trend anchors, in months."""
     p_slope_low_sign_alpha: float = 2.0
     p_slope_low_sign_beta: float = 20.0
     """Young anchor r(~15 mo): Beta(2, 20), median ~0.08 (signing just emerging)."""
@@ -1492,19 +1234,12 @@ class TrivariateModelDefinition:
     eta_u_sigma: float = 0.4
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
-    # Signed GP favours a shorter lengthscale (~9 mo) than U/q so the signing
-    # peak can stand apart from the post-60 mo collapse to near-zero, rather than
-    # being smoothed into a monotone decline. (Shorter still only adds wiggle
-    # without moving the population peak past ~30 mo: the late-preschool data
-    # spike is too sparse/overdispersed to pull the population ratio there.)
+    eta_q_sigma: float = 0.8  # Calibration history: notes/202608041730-ds-spoken-q-trajectory-prior.md.
+    # The signed GP uses a shorter-scale prior than the other trajectories.
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
     eta_sign_sigma: float = 0.4
-    """HalfNormal scale for the signed-ratio GP amplitude. Reverted to the standard
-    ~0.4 now that the three-anchor mean carries the rise-then-fall hump: the GP only
-    needs to model smooth departures. (It was inflated to ~1.0 only to force a hump
-    out of a flat intercept-only mean; that hack is no longer needed.)"""
+    """HalfNormal scale for smooth GP departures from the three-anchor signed trend."""
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     # -- Child-outcome rows with no usable understood count (issues #266, #240) --
@@ -1550,62 +1285,28 @@ class TrivariateModelDefinition:
 
     # -- Mean extrapolation above the high anchor --
     clamp_mean_above_hi_anchor: bool | str = False
-    """Level the logit-linear mean off above the high slope anchor instead of
-    extrapolating the line.
+    """Softly level the mean above the high slope anchor.
 
-    **Not a plain boolean.** ``True`` clamps both the understood mean and ``q``;
-    ``CLAMP_Q_ONLY`` (``"q_only"``) clamps only ``q``. Resolve with
-    :func:`clamp_targets` rather than testing truthiness -- ``"q_only"`` is truthy,
-    so ``if definition.clamp_mean_above_hi_anchor:`` silently clamps the understood
-    mean as well.
-
-    The transition is a soft minimum, so the mean stays differentiable and the
-    fitted curve inherits no elbow; a hard ``min`` made the VG10 spoken curve
-    briefly non-monotone at the anchor. One-sided: below the low anchor the line
-    still extrapolates, which is accurate there. Applied to the Down syndrome
-    models, whose GP domain runs to 115 months against a high anchor at 84 -- see
-    ``gp_utils.trend_and_gp`` and notes/202608042030-q-mean-extrapolation.md."""
+    True clamps understood and q. CLAMP_Q_ONLY clamps q alone. Resolve the value
+    through clamp_targets because the sentinel string is truthy. Below the low
+    anchor the line still extrapolates; the GP can still change the combined curve.
+    """
 
     # -- Reporting range --
     report_max_age_understood: int | None = None
-    """Highest query age (months) at which comprehension quantities are reported.
+    """Reporting cap in months for comprehension and quantities that depend on it.
 
-    Trims the understood and ``q`` summary tables and the production-ratio figure
-    to where their evidence stops, leaving spoken on the full grid. Signed has its
-    own cap, ``report_max_age_signed``; before 2026-08-13 it did not, and the
-    sign-derived figures silently borrowed this one.
-    Purely post-processing: the query grid, the model graph and the fitted trace
-    are untouched, so changing this cannot move the posterior — proved by
-    refitting VG10 across the change at a fixed seed and reproducing its
-    diagnostics bit-for-bit. It does still require re-running the fit: the
-    summary tables are written during the fit pipeline and ``--render-only`` does
-    not regenerate them, and this field is part of the recorded definition, so a
-    fit produced under a different value is correctly reported as stale. None
-    reports every query age. See ``posterior_analysis.trim_reported_ages``."""
+    None keeps the query grid. This changes reporting, not the likelihood, but it
+    remains part of the fit definition. render-only does not regenerate fit-stage
+    summary tables.
+    """
 
     report_max_age_signed: int | None = None
-    """Highest query age (months) at which signed quantities are reported.
+    """Reporting cap in months for signed counts.
 
-    The trivariate counterpart of ``JointModelDefinition.report_max_age_signed``,
-    added 2026-08-13. The cap was introduced for VG15 alone (``feat(vg15)``), so
-    VG14 -- the only trivariate model, and the one whose signed results uk_07
-    moved most -- never had one. Its two consequences were wrong in the same
-    direction:
-
-    * ``plot_signed_rate`` and ``plot_sign_speech_crossover`` were passed
-      ``report_max_age_understood``, so the signed figures were trimmed by the
-      *comprehension* cap. Raising that cap from 72 to 84 moved VG14's signed
-      figures as a side effect, which nobody decided.
-    * the ``r(a)`` summary table was not trimmed at all, so it ran to the top of
-      the query grid at 90 while the figure beside it stopped at 72 -- the
-      table/figure disagreement ``tests/test_reporting_age_caps.py`` exists to
-      catch, inverted.
-
-    Set to 84 on VG14, matching VG15 on the same evidence: uk_07 rebuilt the
-    signed tail, the study owner raised VG15's cap from 60 to 84 in #212, and 84
-    is the high trend anchor above which the mean is levelled off rather than
-    fitted. Purely post-processing, but part of the recorded definition, so
-    changing it requires a refit. None reports every query age."""
+    Ratios and union quantities also use the comprehension cap through reporting_ages.
+    This is reporting policy, not a data exclusion or a change to the likelihood.
+    """
 
     @property
     def model_type(self) -> ModelType:
@@ -1619,19 +1320,15 @@ class TrivariateModelDefinition:
 
 @dataclass(frozen=True)
 class JointModelDefinition:
-    """Complete definition for the joint sign/speech model (VG15).
+    """Joint understood, spoken and signed vocabulary with sign-speech overlap.
 
-    Extends the trivariate structure (understood + within-understood sign/speak
-    ratios r, q) with a scalar Plackett association `psi` (identified from the
-    uk_02 four-cell cross-tab) and study random intercepts on each latent
-    trajectory. The r/q/p_U prior specs are seeded from the (uk_06-included)
-    VG14 fit (same hump-capable signed-ratio spec).
+    A Plackett odds ratio psi links spoken and signed shares within understood
+    words. Four-cell sources and the produced-only source have different
+    conditioning sets. Each contributing study has its own association offset.
 
-    Optionally (flag-gated, defaults off) also carries subject-level random
-    intercepts on each trajectory (`use_subject_re_u/q/sign`) and VG10's
-    per-draw GP anchor at a reference age (`anchor_g_u/q/sign_at_ref` +
-    `gp_anchor_age_months`), which together remove the GP<->intercept
-    redundancy once subject REs add another level-carrying term.
+    Optional study and child effects and GP anchors are selected by the definition.
+    Child effects enter marginal counts, not cell likelihoods. See composition
+    for those likelihoods and docs/models/PRIORS.md for prior assumptions.
     """
 
     model_id: str
@@ -1645,10 +1342,8 @@ class JointModelDefinition:
     """Fixed HSGP age domain. ``None`` uses the observed age range; reporting
     query ages never determine the approximation domain."""
 
-    # -- Understood (U) slope priors (matching VG05 and the rest of the DS joint
-    # family, including the 2026-08-04 anchor recalibration: see VG05 and
-    # notes/202608041216-ds-understood-trajectory-prior.md). VG15 is the only
-    # model built from this dataclass, so these defaults are its anchor priors. --
+    # Understood priors match the DS joint family. See
+    # notes/202608041216-ds-understood-trajectory-prior.md.
     p_slope_low_u_alpha: float = 1.5
     p_slope_low_u_beta: float = 8.0
     p_slope_hi_u_alpha: float = 3.0
@@ -1660,56 +1355,33 @@ class JointModelDefinition:
     p_slope_hi_q_alpha: float = 2.0
     p_slope_hi_q_beta: float = 1.2
 
-    # -- Sign-given-understood (r) mean prior: THREE-ANCHOR HUMP (matching VG14) --
-    # r(a) = P(sign | understood) is a developmental hump (near zero young, peaking
-    # in the preschool years, receding as words move into speech), anchored at three
-    # reference ages (sign_anchor_ages) and built as a tent meeting at the peak
-    # anchor (gp_utils.tent_and_gp) so the prior median is a hill. Anchor ages/levels
-    # come from the independent DS sign literature (peak ~MA 17 mo ~= chronological
-    # ~34 mo, Miller/Clibbens; inverted-U shape, Zampini, whose cohort overlaps
-    # it_01 so shape only; DS retain signs longer, Te Kaat) — see the VG14
-    # (TrivariateModelDefinition) comment for the full
-    # rationale. Study REs carry between-study level; the GP (anchored at 54 mo,
-    # below) carries smooth departures.
+    # Signing uses three logit-linear anchors plus a GP. The prior favours
+    # a middle-age rise but does not constrain every curve to a hump.
+    # Source rationale is shared with TrivariateModelDefinition.
     sign_anchor_ages: tuple[float, float, float] = (15.0, 36.0, 96.0)
-    """Young / peak / old reference ages (months) for the signed-ratio hump.
+    """Outer ages and middle knot of the signed-ratio trend, in months.
 
-    When ``sign_peak_prior`` is set the middle entry is the *initial* peak position
-    rather than a fixed one -- the peak's position between the outer two is then
-    sampled. The outer two always bound it."""
+    sign_peak_prior can move the middle age between the fixed outer ages. Independent
+    height priors do not require the middle height to exceed the outer ones.
+    """
     sign_peak_prior: tuple[float, float] | None = None
-    """Beta(alpha, beta) on the signed peak's POSITION between the outer sign
-    anchors, or None to fix it at ``sign_anchor_ages[1]``.
+    """Beta prior on the middle signing anchor's position between the outer ages.
 
-    Adopted for VG15 on 2026-08-06. With the peak fixed, `r(a)` peaked at the
-    middle anchor by construction -- 77% of posterior draws within a month of it --
-    so its height was estimated and its age simply asserted. "Signing peaks around
-    three years" was a statement about knot placement, not a finding.
-
-    Sampling the position rather than the age keeps ``z_low < z_mid < z_hi`` true by
-    construction, which a prior on the age could not. Measured on VG15 at `test`:
-    the peak age is identifiable (contraction 0.481) at 29.4 months, 89% ETI
-    [23.9, 46.2], against a prior interval of [21.5, 67.5] -- and the free knot
-    samples better than the fixed one (0 divergences against 2), despite making the
-    GP's nuisance basis draw-dependent.
-
-    The peak HEIGHT is unmoved (0.319 -> 0.314), so this changes shape, not level.
-
-    Note this does not extend to VG14, whose lack of study random effects means its
-    age curve must absorb between-study composition -- the reason
-    notes/202606151700 found the peak age unidentifiable there. That finding stands
-    for the model it was made about. See
-    notes/202608060900-three-prior-conflicts.md section 5.
+    None fixes the middle age at sign_anchor_ages[1]. Otherwise the position is
+    sampled and converted to an age between the fixed outer anchors. The name
+    refers to the trend's middle anchor, not necessarily the maximum of the
+    combined trend and GP curve. Its posterior uncertainty does not by itself
+    establish identification. See notes/202608060900-three-prior-conflicts.md.
     """
     p_slope_low_sign_alpha: float = 2.0
     p_slope_low_sign_beta: float = 20.0
-    """Young anchor r(~15 mo): Beta(2, 20), median ~0.08 (signing just emerging)."""
+    """Beta prior parameters for the young signed-ratio anchor."""
     p_slope_mid_sign_alpha: float = 3.0
     p_slope_mid_sign_beta: float = 4.0
-    """Peak anchor r(~36 mo): Beta(3, 4), median ~0.42, broad 5-95% ~[0.15, 0.72]."""
+    """Beta prior parameters for the middle signed-ratio anchor."""
     p_slope_hi_sign_alpha: float = 2.0
     p_slope_hi_sign_beta: float = 16.0
-    """Old anchor r(~96 mo): Beta(2, 16), median ~0.11 (declined, but not to zero)."""
+    """Beta prior parameters for the old signed-ratio anchor."""
 
     # -- Shared GP / amplitude priors (sign GP looser + shorter, per VG14) --
     ell_unit_u_alpha: float = 3.0
@@ -1717,44 +1389,23 @@ class JointModelDefinition:
     eta_u_sigma: float = 0.6  # aligned with the recalibrated VG02 understood trajectory
     ell_unit_q_alpha: float = 3.0
     ell_unit_q_beta: float = 3.0
-    eta_q_sigma: float = 0.8  # widened 2026-08-04 from 0.20, itself tightened from 0.4 to curb the q-GP<->slope_q/intercept_q competition (VG09-note Option B). That tightening was mis-scoped: every DS joint model sits at prior CDF 0.95-0.99 with contraction 0.03-0.16 whether or not it has subject REs on q or the Option D anchoring, because logit(q) is S-shaped across 8-115 mo and only the GP can supply that. Short-window VG13 does not press it and keeps 0.20. See notes/202608041730-ds-spoken-q-trajectory-prior.md
-    # `ell_unit_sign` had little spread reduction in the dated VG15 fit
-    # (contraction 0.033). This alone does not establish non-identification. It is
-    # DELIBERATELY left sampled, settled 2026-08-06. Fixing it at its prior median
-    # changes nothing measurable -- a maximum median shift of 0.0023 on r(a), +0.1%
-    # band width, convergence unchanged -- and removing the signed GP is worse: it
-    # fails the hard convergence tier and narrows the band 63% at 96 months,
-    # stripping the model's only honest signal of ignorance where signed data have
-    # run out. Neither is an improvement, so neither is selectable: the joint
-    # engine's `sign_gp_mode` probe was removed once it was clear no definition
-    # class declared the field and no variant could set one. Reinstating either
-    # alternative means adding a real field -- here (invalidating every VG15 fit) or
-    # on a sibling subclass via `_as_definition_subclass` (invalidating nothing).
-    # See notes/202608060900 section 5b.
+    eta_q_sigma: float = 0.8  # Calibration history: notes/202608041730-ds-spoken-q-trajectory-prior.md.
+    # Retain a sampled signing length scale. Dated fixed-length and no-GP
+    # comparisons are in notes/202608060900-three-prior-conflicts.md, section 5b.
+    # Their results do not establish identification or future fit quality.
     ell_unit_sign_alpha: float = 2.0
     ell_unit_sign_beta: float = 5.0
-    eta_sign_sigma: float = 0.4  # reverted to standard (matches VG14): the three-anchor mean now carries the hump, so the GP only models smooth departures
+    eta_sign_sigma: float = 0.4
     ell_months_range: tuple[int, int] = (6, 18)
     n_plot: int = 500
     # -- Child-outcome rows with no usable understood count (issues #266, #240) --
     spoken_fallback: str = SPOKEN_FALLBACK_PRODUCT
-    """How child-outcome rows that cannot condition on an observed understood
-    count are modelled. One of
-    :data:`~vocab_growth.models.likelihood_utils.SPOKEN_FALLBACK_TREATMENTS`,
-    documented individually there, and applied to the **signed** rows as well as
-    the spoken ones on this engine.
+    """Missing-parent treatment for both spoken and signed likelihoods.
 
-    Exposed here by issue #266 finding 8, which is explicit that the
-    approximation is a methodological exposure rather than a detail: the default
-    gives such a row ``BB(810, p_U*q, kappa)``, which is mean-correct but is not
-    the marginal implied by the paired model, and the affected rows are older and
-    clustered by study. The bivariate engines have carried the choice since #240;
-    this engine hard-coded the default, so no sensitivity could be run at all.
-
-    Part of the model graph: changing it requires a refit. Adding the field does
-    **not** invalidate existing fits -- ``resolve_fallback_treatment`` returned
-    this same default for every fit made before it existed, and
-    :data:`~vocab_growth.models.fit_identity.BACKFILL_DEFAULTS` records that."""
+    See likelihood_utils.SPOKEN_FALLBACK_TREATMENTS. The product-mean default generally
+    does not match the nested model's full marginal distribution. Historical defaults
+    are recorded in fit_identity.BACKFILL_DEFAULTS.
+    """
     spoken_fallback_kappa_sigma: float = 0.5
     """Normal SD for the fallback branch's log concentration offset. Read only
     under ``spoken_fallback="separate_dispersion"``; see the bivariate
@@ -1762,13 +1413,8 @@ class JointModelDefinition:
 
     kappa_u: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
     kappa_s: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
-    # `kappa_sign` deliberately stays on the legacy dispersion form for VG15,
-    # settled 2026-08-06. Unlike VG05/VG07/VG08/VG14 -- migrated because their
-    # `b_kappa_mag_s` sat about four standard deviations beyond its prior with the
-    # posterior wider than it -- the signed block is well identified (contraction
-    # 0.429) at prior CDF 0.276, and the form's non-increasing-with-age constraint
-    # is not binding. The asymmetry with VG14 is two separate correct calls, not an
-    # inconsistency. See notes/202608060900-three-prior-conflicts.md section 5b.
+    # Signing retains the legacy non-increasing concentration. The dated
+    # comparison is in notes/202608060900-three-prior-conflicts.md, section 5b.
     kappa_sign: KappaPriorParams | KappaAnchorPriorParams = field(default_factory=KappaPriorParams)
 
     # -- Association (Plackett log odds-ratio) --
@@ -1786,35 +1432,13 @@ class JointModelDefinition:
     tau_q_sigma: float = 0.5
     tau_sign_sigma: float = 0.5
     tau_psi_sigma: float = 1.0
-    """HalfNormal sigma for the between-study SD of log psi.
+    """HalfNormal scale for between-study variation in log association.
 
-    Wider than the other three (0.5) because the measured heterogeneity is wider.
-    Mantel-Haenszel odds ratios over the cross-tab sources run from 0.90 (es_01) to
-    about 14 (uk_07, nz_01) — roughly 2.8 on the log scale, so a between-study SD
-    near 1 is what the data show, and a HalfNormal(0.5) would fight it.
-
-    **Why this is a study term and not an age term.** The obvious alternative --
-    that the association varies with age, and the sources differ only because they
-    cover different ages -- was tested and rejected. uk_07's psi-informing rows have
-    a median age of 60 months against 38 for uk_02 and 32 for es_01, and fitted
-    without a study term age looks strong (+0.381 per year, z = +5.78). But age
-    alone fits worse than study alone (weighted SSR 2688 against 1640) and adds
-    nothing on top of it (1640 -> 1640); and in the 34-56 month window where all
-    three within-understood sources overlap, es_01 and uk_02 are matched at exactly
-    41 months and still differ six-fold (1.00 against 5.94, with uk_07 at 11.89).
-    Coverage would not have supported an age term regardless: three-way overlap
-    exists only at 30-60 months, so any curvature in the tails would be one study's
-    intercept re-labelled as a trend. See
-    notes/202608121030-psi-heterogeneity-and-age-invariance.md and
-    scripts/psi_heterogeneity_audit.py.
-
-    Only four studies inform psi, so ``tau_psi`` is weakly identified and the prior
-    does real work. That is a reason to report it with its interval and treat the
-    per-study values as the primary read, not a reason to pool them: pooling does
-    not make the heterogeneity go away, it hides it in a headline that then moves
-    with source composition (psi went 1.80 to 2.49 on adding uk_07 alone). The
-    non-centred ``tau * z`` parameterisation keeps the funnel manageable at this
-    group count."""
+    Only studies with cell counts inform it. The wider prior reflects the dated
+    audit in notes/202608121030-psi-heterogeneity-and-age-invariance.md. That audit
+    does not establish age invariance or measurement equivalence. Report study
+    associations and uncertainty alongside the centre.
+    """
 
     # -- Subject-level random intercepts (VG08-VG10 pattern, issue #59) --
     #
@@ -1829,9 +1453,7 @@ class JointModelDefinition:
     tau_subj_q_sigma: float = 1.5
     """HalfNormal scale for the subject intercept SD on q (logit scale)."""
     use_subject_re_sign: bool = False
-    """If True, add subject-level random intercepts on the sign ratio r. Signing is
-    the sparsest modality, so this is gated: inspect tau_subj_sign and fall back to
-    study-RE-only on r (set False) if it pins near its prior with poor diagnostics."""
+    """Whether marginal signed counts include a persistent child intercept."""
     tau_subj_sign_sigma: float = 1.5
     """HalfNormal scale for the subject intercept SD on r (logit scale)."""
 
@@ -1848,36 +1470,21 @@ class JointModelDefinition:
 
     # -- Mean extrapolation above the high anchor --
     clamp_mean_above_hi_anchor: bool | str = False
-    """Level the logit-linear mean off above the high slope anchor instead of
-    extrapolating the line.
+    """Softly level the mean above the high slope anchor.
 
-    **Not a plain boolean.** ``True`` clamps both the understood mean and ``q``;
-    ``CLAMP_Q_ONLY`` (``"q_only"``) clamps only ``q``. Resolve with
-    :func:`clamp_targets` rather than testing truthiness -- ``"q_only"`` is truthy,
-    so ``if definition.clamp_mean_above_hi_anchor:`` silently clamps the understood
-    mean as well.
-
-    The transition is a soft minimum, so the mean stays differentiable and the
-    fitted curve inherits no elbow; a hard ``min`` made the VG10 spoken curve
-    briefly non-monotone at the anchor. One-sided: below the low anchor the line
-    still extrapolates, which is accurate there. Applied to the Down syndrome
-    models, whose GP domain runs to 115 months against a high anchor at 84 -- see
-    ``gp_utils.trend_and_gp`` and notes/202608042030-q-mean-extrapolation.md."""
+    True clamps understood and q. CLAMP_Q_ONLY clamps q alone. Resolve the value
+    through clamp_targets because the sentinel string is truthy. Below the low
+    anchor the line still extrapolates; the GP can still change the combined curve.
+    """
 
     # -- Reporting range --
     report_max_age_understood: int | None = None
-    """Highest query age (months) at which comprehension quantities are reported.
+    """Reporting cap in months for comprehension and quantities that depend on it.
 
-    Trims the understood and ``q`` summary tables and the production-ratio figure
-    to where their evidence stops, leaving spoken (and signed) on the full grid.
-    Purely post-processing: the query grid, the model graph and the fitted trace
-    are untouched, so changing this cannot move the posterior — proved by
-    refitting VG10 across the change at a fixed seed and reproducing its
-    diagnostics bit-for-bit. It does still require re-running the fit: the
-    summary tables are written during the fit pipeline and ``--render-only`` does
-    not regenerate them, and this field is part of the recorded definition, so a
-    fit produced under a different value is correctly reported as stale. None
-    reports every query age. See ``posterior_analysis.trim_reported_ages``."""
+    None keeps the query grid. This changes reporting, not the likelihood, but it
+    remains part of the fit definition. render-only does not regenerate fit-stage
+    summary tables.
+    """
 
     # -- Signed data inclusion (inherits VG14's decision) --
     include_uk01_signed: bool = False
@@ -1890,84 +1497,19 @@ class JointModelDefinition:
     on the primary frame this flag has nothing left to exclude. Use
     ``include_implausible_production`` below to interrogate that exclusion."""
     dse_native_only: bool = False
-    """Restrict the pool to administrations recorded natively on the 810 reference.
+    """Restrict observations to forms recorded natively on the 810-item inventory.
 
-    The models score every count against ``n_trials = 810``, so a 416-item Oxford
-    CDI count enters on the same denominator as an 810-item DSE Checklists count.
-    That harmonisation assumes the shorter form's items are the easier ones, and
-    aggregate totals can still depend on item difficulties. Sufficiency for
-    ability treats item difficulties as fixed; it does not prove that totals
-    contain no information about them. Without linked items or respondents,
-    form composition and ability distributions are hard to separate. This flag
-    checks sensitivity by retaining only native forms (issue #190).
-
-    It is the widest-scoped sensitivity in the registry, and deliberately so: on
-    2026-09-15 the prepared joint frame keeps 153 of 1,707 rows, from ie_01 (its
-    810 wave only), uk_02 (DSE form only) and uk_06. ie_02 left the native set
-    that day, when its Checklists 1 + 2 administrations were given their own
-    476-word ceiling (``data_utils.DSE_SHORT_FORM_CEILINGS``), and it was the
-    largest signing source: the sign block keeps 50 signed observations, from
-    uk_02 and uk_06 alone.
-
-    The cost is legible in what leaves. es_01, nz_01 and uk_07 are all on shorter
-    forms, so the only cross-tab source left is uk_02's DSE form -- all 56 of its
-    four-cell rows are that form -- and ``psi`` falls back to its single-study
-    branch with no ``delta_psi`` or ``tau_psi`` to estimate. The variant therefore
-    answers the denominator question and the between-study question together and
-    cannot separate them. Read it against the model of record for the trajectory
-    shapes, not for ``psi``.
+    Short-form totals otherwise use the common reference scale under the project's
+    item-difficulty assumption. This sensitivity changes the study and age mix as
+    well as cell evidence. It cannot isolate inventory-size effects from all other
+    source differences. See the data guide and prior guide.
     """
     report_max_age_signed: int | None = None
-    """Highest query age (months) at which signed quantities are reported.
+    """Reporting cap in months for signed counts.
 
-    The signed counterpart of ``report_max_age_understood``, and it exists for the
-    same reason: a model's ``ages_query`` grid is shared by every outcome, but the
-    outcomes are not observed over the same range. Signed is still the sparsest
-    outcome, and the Down syndrome grid runs to 115 months, so a cap is still
-    needed -- but **where** it belongs changed when uk_07 (PACT-DS) entered the
-    pool on 2026-08-12.
-
-    The cap was 60. Its justification was a count: of 593 signed observations, 46
-    were above 60 months and **none above 72** -- so beyond about 60 months
-    ``r(a)`` was the tent's extrapolation rather than an estimate. Two changes on
-    2026-08-12 rebuilt that tail. uk_07 contributes 82 signed observations spanning
-    34-95 months from 30 children, and uk_06's 11 observations at 60-115 months
-    were unmasked once the source confirmed its signing field is a total (see
-    ``data_utils.UNCERTAIN_SIGN_STUDIES``). The count now reads:
-
-    ======================  ==========  =========
-    band                    before      after
-    ======================  ==========  =========
-    60-72 months            46          69
-    72-84 months            **0**       17
-    84-96 months            **0**       8
-    96-120 months           **0**       4
-    above 60 months, total  46          98
-    above 72 months, total  **0**       29
-    ======================  ==========  =========
-
-    So the cap is 84: the 72-84 band now carries 17 observations from two
-    independent sources rather than nothing, and reporting it is no longer
-    extrapolation. Above 84 is left out deliberately -- 12 observations from 10
-    children, thinning to one source per band, is evidence but not enough to
-    publish a curve on, and 84 is also the Down syndrome models' high trend anchor
-    (see ``clamp_above_hi``), above which the mean is clamped rather than fitted.
-    Those records still inform the fit; they are only withheld from the tables.
-
-    This is not a cosmetic widening. At 72 months the refit puts ``r`` at 0.198
-    against 0.156 before, and at 90 months 0.182 against 0.098 -- the post-peak
-    decline is real but far shallower than the pre-uk_07 fits showed, and at 60
-    months that finding was entirely hidden. See
-    notes/202608120030-uk07-pactds-integration-and-ds-refit.md §5.
-
-    Applies to the signed counts, the signed ratio `r`, and total expressive
-    `p_any`, which is a function of the signed ratio and can only be reported where
-    signed evidence reaches.
-
-    Post-processing only, so it cannot move a posterior -- but it is part of the
-    recorded definition and the tables are written during the fit, so a change
-    needs a refit and `--render-only` will not pick it up. Same caveats as the
-    comprehension cap; see ``posterior_analysis.trim_reported_ages``.
+    The signed ratio and union also depend on comprehension, so callers apply the
+    tighter relevant cap through reporting_ages. Later observations still inform
+    the fit. See notes/202608120030-uk07-pactds-integration-and-ds-refit.md.
     """
     include_implausible_production: bool = False
     """Reinstate the us_01 production counts masked as implausible by default.
@@ -2066,130 +1608,30 @@ class JointModelDefinition:
 
     # -- es_01 (Galeote) within-understood cross-tab inclusion --
     include_es01_cells: bool = True
-    """Whether es_01's within-understood four-cell cross-tab enters the
-    Dirichlet-Multinomial that identifies psi. **Default True** since 2026-08-12,
-    when psi gained a study-level term.
+    """Include es_01's within-understood gesture/speech partition in the cells.
 
-    es_01's cells are derivable — its fourth column is a recorded union. The
-    original table's columns are TOTAL COMPREHENSIÓN, TOTAL PRODUCTION, TOTAL
-    GESTURES and WORD PRODUCED + GESTURES ONLY, the last being what Galeote et al.
-    (2011) call "total lexical production combining the two modalities" — so the
-    four cells follow by subtraction and 185 of 186 rows yield a valid partition at
-    11-71 months. They more than double the rows identifying psi and anchor it at
-    the young end, where uk_02 is otherwise alone.
+    The source records item-specific symbolic gestures, including taught signs and
+    spontaneous gestures. It does not establish equivalence with other sources'
+    sign measurements. Study offsets do not resolve that construct question.
 
-    It defaulted False for the nine days before that, and the reason recorded then
-    was never the construct — it was the heterogeneity handled below. On the
-    construct itself the position has moved three times, and now rests on two
-    full readings of the source (notes/202609021903-es01-gesture-construct-revisited.md,
-    superseding notes/202608271551): es_01's third column scores "gestures
-    representing specific lexical items", each tied to one of the 651 checklist
-    words — a per-word lexical marker on an adapted CDI, structurally the same
-    coding uk_02 and uk_07 use. Its definition includes spontaneous symbolic
-    gestures alongside taught signs, which the source does not separate (its own
-    typically developing group averages 23.6 gestured words with no sign
-    instruction), and the authors use "signed" and "gestured" interchangeably.
-    Whether the sign sources' columns were ticked more narrowly is not recorded
-    anywhere, so no construct distinction can be drawn on either side.
-
-    The reason was that the sources already informing ``psi`` disagree about it
-    substantially, and ``psi`` had nowhere to put that. Mantel-Haenszel odds ratios
-    over the same cells, stratified by administration (a dated descriptive audit):
-
-    =======  =====  =========  =================  ==========  ===============
-    source   rows   MH OR      reference set      per-child   non-vocal words
-                                                  OR < 1      also spoken
-    =======  =====  =========  =================  ==========  ===============
-    uk_02      56     6.09     within understood     4%          50.4%
-    uk_07      82    13.90     within understood    11%          72.2%
-    nz_01     111    14.63     all 675 items         4%          44.8%
-    es_01     185     0.90     within understood    45%          30.8%
-    =======  =====  =========  =================  ==========  ===============
-
-    Two caveats on that table. MH is a crude descriptive statistic on the observed
-    cells, not ``psi`` itself, which is a population-conditioned quantity defined
-    against the fitted r and q. And nz_01 has no comprehension total, so its
-    "neither" cell spans all unproduced items rather than understood-but-unproduced,
-    which inflates its OR — on the same data uk_07 reads 13.90 within understood and
-    40.72 over all 674 items. Magnitudes are therefore only comparable within a
-    reference set. The direction of the odds ratio also needs the "neither"
-    cell and can change with the reference set. Only the share-also-spoken
-    column omits that cell; it describes overlap rather than an odds ratio.
-
-    What survives every control is that es_01 sits at independence while the three
-    sign sources are positive: by age band it runs 0.30-1.12 against 4.4-41.6 for
-    uk_02 and 4.4-18.1 for uk_07, with no overlap in any band, and matched on
-    expressive vocabulary (30-300 words) it is 1.05 against 4.80 and 9.68. On the
-    conditioning-free share-also-spoken measure it is the low end of a continuous
-    gradient rather than categorically apart. Either way the spread across sources
-    is large, and why is not established. Three candidates of unknown size stand:
-    what parents counted (above); the source's elimination of eleven of its 21
-    word categories from the gesture data, which — if the supplied totals carry
-    it, pending the author — records a word signed and said in an eliminated
-    category as spoken-only and so deflates the odds ratio toward independence;
-    and signing instruction. The spread among the three sign sources is not
-    identified either. Signing instruction is the obvious
-    candidate, but no source records whether its children were taught to sign, so
-    that contrast is background assumption rather than measurement; and uk_07, the
-    one source with experimental variation in instruction, carries the *higher*
-    association in its control arm (17.93 against 11.65), which cuts against the
-    mechanism rather than for it. Treat the residual spread as unexplained.
-
-    That heterogeneity was disqualifying only because **``psi`` was the only latent
-    in this model with no study-level term.** ``delta_u``, ``delta_q`` and ``delta_sign``
-    are all study random intercepts; ``log_psi`` was a bare global scalar. So a pooled
-    ``psi`` was a precision-weighted average over whichever sources happened to be in
-    the pool — which is why it moved from 1.80 to 2.49 when uk_07 arrived, and why
-    adding es_01's 185 rows (more than the uk_02 and uk_07 four-cell rows combined)
-    would have dragged the headline toward independence as an artefact of composition
-    rather than a finding.
-
-    That is now handled: ``delta_psi`` is a zero-sum study random intercept over the
-    psi-informed studies, so each source carries its own association and the reported
-    population value is a shrunk centre with ``tau_psi`` quantifying the spread. With
-    the heterogeneity modelled rather than averaged away, pooling these cells adds
-    evidence instead of moving the headline by composition, and the flag defaults
-    True — es_01 stays in as its own study, whose differences from the sign
-    sources in what was counted are unmeasured rather than established, not
-    because it is known to be the same measurement (see
-    notes/202608281147-study-term-pooling-licence.md for what the
-    study terms do and do not guarantee). Setting it False isolates es_01's
-    contribution to the association only: the rows fall back to the merged view,
-    where the gestured totals re-enter the signed *marginal* and keep informing r,
-    so this flag does not express a gesture-is-not-sign scenario. See
-    data/vocab_data_es_01.md,
-    notes/202608120030-uk07-pactds-integration-and-ds-refit.md,
-    notes/202608271551-es01-gesture-construct.md and
-    notes/202609021903-es01-gesture-construct-revisited.md."""
+    If False, es_01 returns to marginal likelihoods and gestured totals still inform
+    the signed trajectory. This flag checks its cell-association contribution,
+    not exclusion of gesture data. See data/vocab_data_es_01.md and
+    notes/202609021903-es01-gesture-construct-revisited.md.
+    """
 
     # -- Sex as a covariate (issue #324) --
     sex_effect_sigma: float | None = None
-    """Prior SD of the sex coefficients, or ``None`` for no sex term.
+    """Normal prior SD for each sex coefficient, or None to omit sex terms.
 
-    The joint counterpart of :attr:`BivariateModelDefinition.sex_effect_sigma`,
-    which carries the rationale: a girls ``+1/2`` / boys ``-1/2`` contrast,
-    constant in age, a child of unrecorded sex at contrast zero, and population
-    trajectories reported at that midpoint with the girls' and boys' either side.
-    Here there are three coefficients, ``beta_sex_u``, ``beta_sex_q`` and
-    ``beta_sex_sign``, one per latent trajectory, all ``Normal(0, sigma)``.
+    Girls use +1/2, boys -1/2 and unrecorded sex zero. Zero is a logit midpoint, not
+    an arithmetic probability average. The three coefficients enter marginal and
+    cell likelihoods. Cell association is conditional on these sex and study terms;
+    other child offsets remain excluded from cells.
 
-    **They enter the cross-tab compositions as well as the marginals**, which is
-    the opposite of what the child effects do, and deliberately so. The child
-    effects are kept out of the Dirichlet-Multinomials because a free offset per
-    child, on those thin rows, is co-identified with ``psi`` and pulled it from
-    1.78 to about 2.8 when it was let in. A sex coefficient is one scalar per
-    trajectory multiplying a covariate the data fix -- the same argument that
-    lets VG25's lag into the cells -- so it adds three dimensions rather than one
-    per child, and leaving it out would model a girl's composition with a boy's
-    marginals. ``psi`` becomes the association conditional on the child's sex as
-    well as their study, which on the three cell-partition sources that record
-    sex (``uk_02``, ``uk_07``, ``es_01``) is the more accurate reading; ``nz_01``
-    records none and takes contrast zero.
-
-    The cross-tab rows are read from their own CSVs rather than the merged view,
-    so the frame builder takes each such child's sex from the merged view by
-    study and child, where it is recorded once per child.
-    ``fit_identity.BACKFILL_DEFAULTS`` records ``None``."""
+    The frame builder joins cross-tab children's recorded sex from the merged view
+    by study and child. fit_identity.BACKFILL_DEFAULTS records None.
+    """
 
     @property
     def model_type(self) -> ModelType:
@@ -2198,146 +1640,71 @@ class JointModelDefinition:
 
 @dataclass(frozen=True)
 class JointCorrelatedSubjectREModelDefinition(JointModelDefinition):
-    """Joint definition that also correlates the three subject random effects.
+    """Joint definition with a correlated three-outcome child block.
 
-    VG24 (issue #296). The field lives on a **subclass** for the reason
-    :class:`BivariateCorrelatedSubjectREModelDefinition` records: a fit is
-    validated by comparing the serialised definition field for field, so adding
-    a field to ``JointModelDefinition`` invalidates every fit of it. VG15 is
-    today the only direct instance, so a ``BACKFILL_DEFAULTS`` entry would also
-    have been valid; the subclass is the established precedent for this seam and
-    keeps the excuse registry to the three entries that need it.
-
-    ``None`` means "behave exactly as the parent class", so the subclass is inert
-    until a definition sets the field; the engine reads it through ``getattr``.
+    A subclass keeps this option off VG15's definition. None retains the parent's
+    independent child effects. See fit_identity for added-field rules.
     """
 
     subject_re_correlation_eta: float | None = None
-    """LKJ concentration for the correlation among the three subject intercepts.
+    """LKJ concentration for the three child-intercept correlations, or None.
 
-    ``None`` disables the correlation, leaving the three blocks independent as in
-    VG15. When set, the 3x3 correlation matrix over a child's (understood, ``q``,
-    signed) deviations is ``LKJCorr(eta)`` and the three off-diagonals are
-    exposed as the named deterministics ``rho_uq``, ``rho_u_sign`` and
-    ``rho_sign_q``, which is what the summaries and the recovery scorer read.
+    The block keeps the three HalfNormal scale priors and emits rho_uq, rho_u_sign
+    and rho_sign_q. At identity correlation its child distribution matches
+    independent intercepts.
 
-    **The scales stay the three ``tau_subj_*`` HalfNormals.** Only the
-    correlation is estimated here, so ``tau_subj_u``, ``tau_subj_q`` and
-    ``tau_subj_sign`` keep their names, their priors and their per-child meaning,
-    and VG15's are directly comparable with VG24's.
-
-    ``eta = 2`` matches VG20 and VG23 so that the three models' ``rho_uq`` are
-    prior-comparable. Note the marginal is **not** identical: for an ``n x n``
-    LKJ(eta) matrix each correlation has ``(rho + 1) / 2 ~ Beta(eta + (n - 2)/2,
-    eta + (n - 2)/2)``, so at ``n = 3`` the per-correlation prior SD is 0.41
-    against VG20's 0.45 at ``n = 2``. Close enough that the comparison is fair,
-    different enough that the model page should say so rather than imply the
-    priors are the same object.
-
-    The nesting is exact: at the identity correlation the block emits
-    ``tau * z``, which is what VG15's independent blocks emit, op for op.
-    ``tests/test_joint_correlated_subject_re.py`` asserts that numerically
-    rather than by inspection.
+    Equal eta does not give equal marginal correlation priors across dimensions.
+    For an n by n LKJ(eta) matrix, (rho+1)/2 follows
+    Beta(eta+(n-2)/2, eta+(n-2)/2). At eta=2 the correlation SD is about 0.41
+    for n=3 and 0.45 for n=2.
     """
 
 
 @dataclass(frozen=True)
 class JointCrossLagModelDefinition(JointCorrelatedSubjectREModelDefinition):
-    """Joint definition that also carries a sign -> speech within-child cross-lag.
+    """Joint correlated child effects with an optional earlier-signing predictor.
 
-    VG25 (issue #297): the joint-engine analogue of VG16's understood -> ``q``
-    term. A child's prior-wave **signed share of comprehension**, relative to a
-    baseline, shifts the logit of their current production ratio ``q`` through
-    one coefficient, ``beta_sign_lag``. The parent is nested exactly at
-    ``beta_sign_lag = 0``.
+    A child's prior-wave signed share, relative to the selected baseline, shifts
+    the logit of the current spoken share through beta_sign_lag. The parent
+    likelihood is recovered at coefficient zero.
 
-    It derives from :class:`JointCorrelatedSubjectREModelDefinition` rather than
-    from :class:`JointModelDefinition`, so VG25 is VG24 plus a lag and not VG15
-    plus a lag. That is deliberate and it is the whole reason the coefficient is
-    interpretable: VG24's ``rho_sign_q`` is the *persistent* sign-speech
-    association between children, so with the correlated block in the model the
-    lag has the persistent part taken away from it and is left measuring the
-    prospective, occasion-level quantity it is named for. Without it,
-    ``beta_sign_lag`` is a noisy proxy for ``rho_sign_q``
-    (``notes/202608151140-cross-lag-not-for-models-of-record.md`` s4 makes the
-    argument for the understood lag; it transfers unchanged).
-
-    A subclass for the reason :class:`JointCorrelatedSubjectREModelDefinition`
-    records: a fit is validated field for field, so putting these seven fields on
-    the parent would invalidate every VG24 fit. The engine reads all of them
-    through ``getattr``, and no ``BACKFILL_DEFAULTS`` entry is needed or would be
-    honest -- no fit predating these fields exists to excuse.
+    The correlated child block describes persistent between-child associations.
+    Subtracting the fitted child signing level aims to isolate a within-child
+    predictor, but it does not guarantee separation from measurement error or
+    other persistent differences. The lag remains observational.
     """
 
     use_sign_cross_lag: bool = False
-    """If True, add the sign -> speech cross-lag: the child's prior-wave signed
-    share of comprehension predicts their current production ratio ``q``.
+    """Use the previous signed share of comprehension to predict current q.
 
-    The lag source is assigned per complete ``(subject, age)`` administration
-    wave, as VG16's is (issue #242), and where a source wave offers several
-    signed-share measurements the one with the largest comprehension denominator
-    is taken -- the least-truncated-measurement rule, said of a ratio.
+    Sources come from strictly earlier recorded-age waves. Selection uses the largest
+    comprehension denominator within a source wave. This does not establish
+    measurement equivalence across forms.
 
-    **nz_01 supplies no source.** Its cross-tab partitions *produced* words, so
-    the only share it measures is the signed share of production, which is a
-    different variable rather than a differently-denominated version of this one.
-    Redefining the predictor for those children would put two variables under one
-    coefficient, which is the one thing a single scalar cannot report. Their rows
-    still enter every likelihood they always did; they simply carry no lag.
-
-    **This costs real support and is taken on the argument rather than on the
-    count.** 28 of nz_01's 33 children have more than one wave, and admitting a
-    produced denominator would take the coefficient from 191 supporting
-    observations over 129 children to 269 over 157 -- measured on the 2026-09-11
-    frame, and the 28 children the proposal on #297 anticipated. A rule adopted
-    because it happened to be free would not survive the next nz_01 follow-up;
-    this one is meant to."""
+    nz_01 partitions produced words and lacks a comprehension denominator, so its
+    rows supply no lag source. Their likelihood contributions remain unchanged.
+    """
 
     sign_lag_baseline: str = "within"
-    """Baseline for the lag residual, one of ``likelihood_utils.LAG_BASELINES``.
+    """Reference level subtracted from the earlier signed share.
 
-    ``within`` (the registered choice) subtracts the child's own signed-ratio
-    subject intercept, giving the prospective within-child effect net of
-    persistent standing -- the quantity closest to the +0.19 SD of
-    ``notes/202608160930-early-signing-and-later-speech.md``, and the one that is
-    not already carried by ``rho_sign_q``. ``population`` subtracts only the
-    population + study level and is the registered sensitivity.
-
-    Note this differs from VG16, which registered ``population`` as its headline.
-    The reason the two differ is the correlated block: VG16 has no ``rho_uq``, so
-    its population baseline still had a between-child association to measure,
-    while VG25 inherits VG24's ``rho_sign_q`` and its population baseline does
-    not."""
+    within subtracts population, study and fitted child signing terms.
+    population subtracts population and study terms only. The default is within.
+    These baselines define different predictors; child correlations do not by
+    themselves remove persistent differences from a population lag.
+    """
 
     sign_lag_in_cells: bool = False
-    """Whether the lag term also enters the cross-tab composition likelihoods.
+    """Whether the speech lag also enters the cell likelihoods.
 
-    ``False`` (the registered choice since 2026-09-15) confines ``beta_sign_lag *
-    x`` to the spoken marginal, which is where VG15's *subject shifts* are
-    confined. ``True`` also adds it to the ``q`` used by the four-cell and
-    produced-cell Dirichlet-Multinomials.
+    False confines it to spoken marginals. With a within baseline, the predictor
+    contains an estimated prior-wave child signing effect, so True carries that
+    effect into cells that otherwise exclude child offsets.
 
-    **Why the default changed.** VG25 was registered with ``True``, on the
-    argument that ``beta_sign_lag`` is one scalar against a fixed covariate and so
-    has no per-child freedom to chase a composition with -- the reason VG15's
-    subject shifts are kept out of the cells does not apply to it. That premise
-    holds only for the ``population`` baseline. Under ``within`` the predictor
-    subtracts the child's own *estimated* signing intercept, so the term carries a
-    per-child quantity into exactly the likelihoods the subject shifts are kept
-    out of. VG25's first ``rep`` fit (2026-09-15) was bimodal: four chains at
-    ``beta_sign_lag`` +0.69 and two at -0.50, max R-hat 1.61, with
-    ``tau_subj_sign`` and ``rho_u_sign`` reshaped away from VG24's in both
-    modes. Twelve-chain probes on the real frame found two modes for ``within`` in
-    the cells and one for each of the other three combinations, with ``within`` on
-    the marginal leaving VG24's child block and ``psi`` where VG24 has them.
-    ``notes/202609151930-vg25-lag-out-of-the-cells.md`` records the fits and the
-    probes; ``scripts/experiments/vg25_sign_lag_modes.py`` reproduces the probes.
-
-    The cost is support: on the 2026-09-15 frame the lag rests on 110 supporting
-    observations from 79 children rather than 190 from 128, and uk_07, whose rows
-    carry no spoken marginal, contributes none. The ``sign-lag-in-cells``
-    sensitivity puts the term back in the cells under the ``population``
-    baseline, the combination in which the covariate really is fixed."""
+    The default follows probes in notes/202609151930-vg25-lag-out-of-the-cells.md.
+    The sign-lag-in-cells sensitivity uses the population baseline. Read support
+    from each fit's audit rather than assuming the same rows inform both.
+    """
 
     beta_sign_lag_mu: float = 0.0
     """Normal mean for ``beta_sign_lag`` (0 imposes no direction)."""
@@ -2391,87 +1758,11 @@ _YOUNG_TD_GP_DOMAIN_MONTHS = (8, 18)
 # ------------------------------------------------------------------
 # Production-outcome dispersion, two-anchor form (2026-08-02)
 # ------------------------------------------------------------------
-# The spoken models were recalibrated in the legacy (a_kappa, b_kappa_mag)
-# parameterisation earlier the same day and then reparameterised, because
-# recalibrating that form could not be finished: no setting of its three
-# parameters both admits the slope the data want and keeps young-age dispersion
-# plausible, since the intercept and slope tails compound as exp(2b) at the ends
-# of the age range. See notes/202608020829-kappa-and-eta-q-prior-recalibration.md
-# (sections 8, 17 and 18) for the full argument and the audit trail.
-#
-# Both blocks below are centred on a three-parameter fit of the model's own
-# dispersion curve, kappa(z) = kappa_min + exp(a - b z), to a *saturated* mean —
-# a free proportion per integer-age cell, every cell with at least 15
-# observations — so the dispersion estimate is not contaminated by a choice of
-# mean model:
-#
-#   pool             n      cells  kappa_min      b     kappa at the two anchors
-#   DS spoken     1,114       25       3.54    2.78     49.1 @ 18 mo, 7.7 @ 36 mo
-#   TD spoken     4,075       23       3.08    1.78     37.1 @ 12 mo, 6.2 @ 20 mo   (VG03 frame)
-#   TD spoken    16,235       23       3.08    1.50     29.9 @ 12 mo, 6.6 @ 20 mo   (VG11 frame)
-#
-# Anchors go where the age term is roughly an order of magnitude above the floor
-# and where it has fallen back to it: between them the exponential carries the
-# curve and outside them the floor does, so both priors sit where the data can
-# identify them. The excess medians below are those fitted totals minus the
-# floor, rounded.
-#
-# sigma 0.7 throughout (a 5-95% range of about +/- 3.2x), set so each anchor's
-# range covers the spread of defensible estimates for it — the two TD frames'
-# fitted values, and the per-age cells on either side of the anchor age, which
-# scatter more than the smooth fit does. At the typically-developing young anchor
-# the 11/12/13-month cells give total kappa of 20.3, 89.4 and 37.0, on profile
-# intervals that do not overlap ([12.2, 31.2] on 86 administrations, [65.6,
-# 119.1] on 162, [29.4, 45.7] on 271): the scatter is real between-study
-# composition rather than noise, and no smooth curve passes through all three.
-# sigma 0.6 would have put the high cell at the 96th prior percentile; 0.7 covers
-# it. Erring wide is deliberate — the failure this replaces was a prior too tight
-# to let the data speak (contraction 0.82, prior CDF 0.93-1.00).
-#
-# kappa_min is carried over unchanged (LogNormal(log 3, 0.8), median 3, 5-95%
-# [0.80, 11.2]) so this is a single-factor change against the recalibrated legacy
-# fits. Three independent pools put the floor at 3.08-3.54. Note that the
-# anchored form leans on it harder — beyond the old anchor the floor alone sets
-# the level, where before the exponential term propped it up — so its 8% of prior
-# mass below kappa = 1 now shows at old ages, and tightening kappa_min_sigma is a
-# candidate follow-up rather than something folded into this change.
-#
-# One prior per population, not one shared block: b_kappa_mag is a slope per unit
-# *standardised* age, so a single prior on it is about 3.5x tighter on the DS
-# pool (sd 20.8 months) than on the TD pool (sd 5.9 months) in per-month terms —
-# the units problem recorded in section 15. Anchors stated in months are immune
-# to it, and to the pool's age distribution moving under a resample or a study
-# filter.
-#
-# The blocks in this section are calibrated *marginally* and so belong only to
-# models with no grouping structure — VG01, VG02, VG03 and VG04, all of which run
-# on the plain univariate engine and give `kappa` every source of spread to carry.
-# Everything with study and subject random intercepts is calibrated conditionally
-# instead; see the next section.
-#
-# The two comprehension blocks were added later, from the same estimator run with
-# its subject and study effects switched off (scripts/kappa_conditional_calibration.py
-# records which effects each pool's model has and mirrors them). Both are stable
-# across every mean model tried — VG02 gives 14.8-15.4 at 18 months and 7.1-7.2 at
-# 36, VG04 11.6-11.8 at 12 months and 11.1-11.4 at 18 — so the thinness of the
-# Down syndrome comprehension frame (346 usable rows) does not undermine them the
-# way it does the conditional fits in the next section. Nothing has to be
-# separated from a random effect here, which is what that frame could not support.
-#
-# Two things about comprehension differ from the spoken blocks above:
-#
-#   * **VG04's dispersion is flat.** 11.8 at 12 months against 11.3 at 18, and
-#     per-age cells scattering 5.8-15.6 with no trend across 8-24 months. Its two
-#     anchors are therefore near-equal and the implied slope prior is near
-#     symmetric about zero — P(kappa rising) 0.476, against 0.007 for DS spoken.
-#     This is the case the legacy b_kappa_mag >= 0 could not represent at all.
-#   * **The floor is not identified for either.** VG02's fitted kappa_min ranges
-#     over 0.76-6.01 depending on the mean model while its anchor totals move by
-#     under 4%, and VG04's curve is flat enough that any (floor, excess) split
-#     reproducing the level fits equally well. Both keep the shared weak
-#     LogNormal(log 3, 0.8) and let the anchors carry the level — which is the
-#     ridge the two-anchor parameterisation exists to sidestep.
-
+# Marginal dispersion calibration for models without study or child effects.
+# Reference-age excesses avoid a prior whose month-scale meaning changes with
+# the frame's age standardisation. These priors use the fitted data.
+# Estimator checks, values and limitations are recorded in
+# notes/202608020829-kappa-and-eta-q-prior-recalibration.md.
 _DS_SPOKEN_KAPPA = KappaAnchorPriorParams(
     # Implied b_kappa_mag: median 2.80, 5-95% [0.91, 4.67], P(kappa rising) 0.007.
     # The empirical slope is 2.78 on 25 age cells and 2.17 on the 12-cell subset
@@ -2545,62 +1836,12 @@ _TD_UNDERSTOOD_KAPPA = KappaAnchorPriorParams(
 # ------------------------------------------------------------------
 # Dispersion for the random-effect models, calibrated conditionally (2026-08-02)
 # ------------------------------------------------------------------
-# A marginal calibration answers "how much do counts vary at this age?". A model
-# carrying study and subject random intercepts has already removed most of that
-# variation by the time its likelihood runs, so its kappa answers a different
-# question — "how much is left once this child's own level is known?" — and the
-# marginal number is a lower bound. On VG11 it was out by a factor of ten: the
-# prior sat at kappa(12) = 30 while the fit went to 312, at prior CDF 1.000.
-#
-# scripts/kappa_conditional_calibration.py estimates the right quantity, by
-# fitting the same saturated mean with the random effects present and the subject
-# effect integrated out:
-#
-#     logit p_ij = m_c(ij) + s_k(i) + b_i,   b_i ~ N(0, tau^2)
-#     y_ij       ~ BetaBinomial(N_ij, p_ij, kappa(a_ij))
-#
-#   pool                        n     obs/child   tau    kappa at the anchors
-#   VG11 spoken            16,235       1.32     1.06    317 @ 12 mo, 50 @ 20 mo
-#   VG12 understood         5,997       1.26     0.74     43 @ 12 mo, 66 @ 20 mo
-#   VG13 understood         5,406       1.19     0.77     42 @ 12 mo, 124 @ 17 mo
-#   VG13 q | understood     5,320       1.19     1.12     36 @ 12 mo, 30 @ 17 mo
-#
-# Every one is 3-10x its marginal counterpart, and two of them rise with age,
-# which the legacy b_kappa <= 0 cannot represent at any setting. The medians below
-# are those totals, split into a floor and an excess per anchor.
-#
-# Three things had to be established before reading a prior off this (section 19
-# of the note has the detail, and --recover / --mean-sweep re-run the checks):
-#
-#  * **tau and kappa are separable here.** For a child measured once both add
-#    variance to the same single number, and 84% of VG11's children are measured
-#    once; what separates them is the shape of the count distribution each
-#    implies, which pins a large tau but not a small one, so the children with a
-#    repeat are what make the estimate precise. Simulating from a subject-heavy
-#    truth and a dispersion-heavy truth on the real design returns each
-#    correctly, an order of magnitude apart.
-#  * **The answer does not depend on the mean model.** Saturated, spline and even
-#    a linear mean agree to within a few percent on all four pools — so the gap
-#    against VG12's and VG13's posteriors (both near 16) is not an artefact of
-#    this estimator fitting the age curve more closely than an HSGP does.
-#  * **The DS joint frame recovers only a lower bound.** Section 22 replaces
-#    section 19's blanket exclusion with a measurement. Holding tau at its fitted
-#    value and varying only the truth, the estimator returns kappa *below* it by
-#    an amount that grows with the level — -2% at kappa(24) = 12, -4% at 41, -26%
-#    at 82, -36% at 163 — because a large kappa is near-binomial and the data stop
-#    distinguishing bigger from biggest. The estimates are therefore lower bounds
-#    rather than noise, and the block below uses them with the bias measured at
-#    the operating point divided back out and a deliberately wide sigma. tau
-#    itself recovers to within 6%, which is what section 23 calibrates from.
-#
-# sigma is 0.7 for the spoken and ratio anchors, as in the marginal blocks, and
-# 0.9 for the two understood ones. The wider setting is not caution for its own
-# sake: TD understood kappa per age cell runs 19.6, 21.0, 110.7 at 14, 15 and 16
-# months, so the log-linear fit is smoothing a genuinely jagged profile and the
-# fitted rise should not be stated more confidently than that. Why the 16-18 month
-# cells sit so far above their neighbours is not yet understood and is recorded as
-# a follow-up.
-
+# Conditional calibration includes study and child effects because kappa
+# describes residual variation after those effects. A marginal calibration
+# cannot be substituted for it. Recovery and mean-model checks are recorded in
+# notes/202608020829-kappa-and-eta-q-prior-recalibration.md; the registered-frame
+# TD recheck is in notes/202609062330-vg11-vg13-calibration-regenerated.md.
+# Those checks apply to their tested designs, not to every concentration level.
 _TD_SPOKEN_KAPPA_RE = KappaAnchorPriorParams(
     # VG11. Its posterior already found 310 @ 12 mo and 50.0 @ 20 mo against this
     # calibration's 317 and 50.5 — the likelihood was overwhelming the old prior
@@ -2631,31 +1872,11 @@ _TD_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
 )
 
 _TD_UNDERSTOOD_VARIANCE_PARTITION = SubjectVariancePartitionParams(
-    # Calibrated for VG12, 2026-08-05. NOT YET ATTACHED to any registered model:
-    # the reparameterisation is expected to fix VG12's energy BFMI but that has not
-    # been demonstrated, and attaching it is a graph change requiring a refit. See
-    # notes/202608050900-td-hierarchical-geometry.md §7.1 and §9 item 1.
-    #
-    # p0 is the observed comprehension proportion in the 11-13 month band, 84.3 of
-    # 810 items over 1,106 rows -- which independently reproduces the ~83-word
-    # Wordbank 12-month norm this model's low anchor is already tied to. It gives
-    # c = 1 / (p0 (1 - p0)) = 10.72.
+    # Variance-budget sensitivity calibrated on the fitted data. See
+    # notes/202608050900-td-hierarchical-geometry.md, section 7.
     reference_proportion=0.1041,
-    # Chosen so the induced marginals stay recognisably the current beliefs while
-    # the prior moves onto the budget and the split. Against the priors these
-    # replace -- tau_subject ~ HalfNormal(1.5), excess_young ~ LogNormal(log 40,
-    # 0.9) -- the induced 5/50/95 are:
-    #     tau_subject         0.38 / 0.79 / 1.59   (was 0.09 / 1.01 / 2.94)
-    #     kappa_excess_young  7.25 / 34.7 / 212    (was 9.10 / 40.0 / 176)
-    # The dispersion marginal is nearly unchanged. The subject marginal is tighter,
-    # necessarily: a shared budget cannot let both parameters range over 30x
-    # independently, and refusing to is the entire point.
-    #
-    # The share prior is deliberately NOT centred where the old priors implied
-    # (median 0.79). VG12's posterior implies a share of 0.598, so centring there
-    # would manufacture a prior-data conflict at prior CDF 0.04-0.12. Beta(3.9,
-    # 2.1) spans 0.33-0.92 across its 5-95% range and puts that posterior at CDF
-    # 0.368, with the total at CDF 0.383 -- both central, neither asserted.
+    # The budget changes the induced priors on scale and concentration.
+    # Check their marginals against the original independent priors.
     total_mu=0.0,
     total_sigma=0.8,
     share_alpha=3.9,
@@ -2663,30 +1884,9 @@ _TD_UNDERSTOOD_VARIANCE_PARTITION = SubjectVariancePartitionParams(
 )
 
 _TD_SPOKEN_VARIANCE_PARTITION = SubjectVariancePartitionParams(
-    # VG11's counterpart of _TD_UNDERSTOOD_VARIANCE_PARTITION. The budget and share
-    # priors are *identical* to VG12's; the only model-specific input is p0, which
-    # is an empirical quantity rather than a choice. That is the design working as
-    # intended -- the priors are stated in units of logit-scale scatter, which is
-    # comparable across outcomes, while p0 carries the outcome's level.
-    #
-    # p0 = 9.57/810, the observed spoken proportion in the 11-13 month band over
-    # 1,177 rows. Spoken vocabulary at 12 months is tiny, so c = 1/(p0 (1-p0)) =
-    # 85.65 against VG12's 10.72.
-    #
-    # Induced marginals against the priors they replace -- tau_subject ~
-    # HalfNormal(1.5), excess_young ~ LogNormal(log 311, 0.7):
-    #     tau_subject         0.38 / 0.79 / 1.59   (was 0.09 / 1.01 / 2.94)
-    #     kappa_excess_young  57.9 / 277  / 1689   (was 98.3 / 311  / 984)
-    # Both medians land within ~20% of the ones they replace.
-    #
-    # CAUTION, and it is a real one: unlike VG12 there is no VG11 posterior to
-    # check the share prior against -- VG11 has never completed a fit. VG12's data
-    # implied a share of 0.598 where its old priors implied 0.79, so centring on
-    # the old implication would have manufactured a conflict. VG11 has an even
-    # lower repeat rate (13.4% against 17.2%), hence even less information about
-    # the split, so the share prior is deliberately left weak -- Beta(3.9, 2.1)
-    # spans 0.33-0.91 -- rather than centred anywhere in particular. Revisit once
-    # VG11 has a posterior. See notes/202608050900-td-hierarchical-geometry.md §7.
+    # Same budget and share priors as VG12. p0 uses the spoken mean in the
+    # 11-13-month calibration band, so it changes the dispersion mapping.
+    # Calibration is in sample and does not validate coverage or convergence.
     reference_proportion=0.0118,
     total_mu=0.0,
     total_sigma=0.8,
@@ -2750,95 +1950,16 @@ _TD_WINDOW22_Q_KAPPA_RE = KappaAnchorPriorParams(
     excess_old_sigma=0.7,
 )
 
-# Down syndrome joint frame -- the models fitted to it, and therefore sharing one
-# dispersion calibration target. Directly: VG09, VG10, VG15 and VG16; through
-# `_as_definition_subclass` from VG10: VG19, VG20 and VG22; plus VG14. Eight in all,
-# not the four this comment named for as long as there were eight --
-# `tests/test_ds_joint_shared_priors.py` asserts the set, so it cannot drift again.
-#
-# Seven of the eight carry subject random intercepts on both outcomes, which is what
-# the conditioning in the calibration assumes. VG14 does not: its class declares no
-# `use_subject_re_*` or `tau_subj_*` field at all, and its own registration records
-# that as a KNOWN MISMATCH twenty lines below. It shares the block because it fits
-# this frame, not because it shares this structure. 671 understood and 645 nested-spoken rows over 8-115 months,
-# 387 children at 1.73 administrations each.
-#
-# Section 19 left these on the legacy form because the frame failed its recovery
-# check. Section 22 re-runs that check properly and reaches a different verdict.
-# The failure was not scatter: the estimator is biased *downward* by a measured,
-# mean amount in those simulations. This does not make estimates lower bounds. Correcting each
-# by the bias measured at it -- kappa(24) 81.6 / 0.74 = 110 and kappa(48)
-# 20.3 / 0.62 = 33 for understood, 13.8 / 0.83 = 17 and 7.6 / 0.70 = 11 for the
-# ratio -- gives the medians below.
-#
-# What is *not* in doubt is that the legacy prior is wrong. All eight Down
-# syndrome joint models put b_kappa_mag_u at prior CDF 0.993-0.9999 against
-# HalfNormal(0.3), well mixed (ESS 313-3,028), and several put b_kappa_mag_s
-# there too with *negative* contraction -- the posterior wider than the prior,
-# the likelihood pushing outward against it. That is the pathology section 18
-# built the two-anchor form to remove, and removing it needs no view on the level
-# at all, since the anchored form has no slope prior to get wrong.
-#
-# sigma is 1.0 on all four anchors, wider than anywhere else in the family
-# (0.7 spoken, 0.8-0.9 understood). That is the honest width for this frame: the
-# bias correction is itself uncertain, the mean sweep moves the ratio's young
-# anchor by a factor of 1.8 across spline knot counts (the understood one is
-# stable to 0.4%), and 1.0 leaves the prior spanning 5-95% of 24-551 at the
-# understood young anchor, which covers the uncorrected estimate, the corrected
-# one and the current posterior alike. The floor keeps the shared weak default.
+# Shared conditional dispersion calibration for the DS joint family.
+# VG14 has no study or child effects, so this is a known prior mismatch there;
+# its registration records the limitation. Dated estimator checks and bias
+# assessments are in notes/202608020829-kappa-and-eta-q-prior-recalibration.md.
 
 _DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
-    # Recalibrated 2026-08-19 (#229), promoted from VG20's
-    # `kappa-anchor-18-72-floor` variant. Shared by the eight named at the section
-    # header above -- VG09, VG10, VG14, VG15, VG16, VG19, VG20 and VG22 -- and
-    # changed here rather than on VG20 alone so all eight
-    # keep a common dispersion treatment -- VG20 is defined as VG10 plus a
-    # correlated subject block and nothing else, an invariant two tests
-    # enforce, and a VG20-only change would have made that description false
-    # and `compare_vg10_vg20.py` a two-factor contrast.
-    #
-    # Two changes, made together because only the pair sampled cleanly.
-    #
-    # Anchors move from (24, 48) to (18, 72), so the reporting range is
-    # interpolation between two priored points rather than extrapolation onto
-    # the asymptote. 84 was considered and rejected: 18 administrations on 12
-    # children sit within +-6 months of it, against 51 on 46 children at 72.
-    #
-    # The floor's prior median moves from 3.0 to 7.8, where the conditional
-    # calibration puts it (`scripts/kappa_conditional_calibration.py --anchors
-    # 18,72 --mean spline`, stable at 7.5-8.0 across 6, 8, 10 and 14 knots;
-    # only the saturated per-cell mean collapses it, which is what that pool's
-    # "frame too thin" note is about). These blocks had kept the generic
-    # log(3.0) that VG11 was moved off. That was a considered position rather
-    # than an oversight -- notes/202608020829 §22 measured `kappa_min_s`'s
-    # posterior at 9.23 against the same prior median with contraction -0.05
-    # and left it, on the ground that only the sum at the anchors is
-    # identified, which remains true. Re-centring it is worth doing for the
-    # geometry and for saying what the data say, not because the old value
-    # biased anything.
-    #
-    # Excess medians are the calibrated TOTAL at each anchor minus the floor
-    # prior's median: totals 92.6 at 18 months and 14.0 at 72.
-    #
-    # NOTE: these are the *uncorrected* calibration. The values they replace
-    # were each estimate divided by the recovery bias measured at its level
-    # (81.6/0.74 = 110 at 24 months, 20.3/0.62 = 33 at 48), because recovered
-    # mean recovered `kappa` was low in those simulations -- -2% at a truth of 12
-    # rising to -67% at 100. Dropping that a priori correction was noticed only
-    # after the promotion. §22 reports it "was not needed" on understood and
-    # under-corrected the ratio, and the measured consequence here is under 1%
-    # on reported kappa below 48 months, so it is left dropped -- but as a
-    # stated position, not an accident. See
-    # notes/202608191800-kappa-components-not-estimands.md §9.
-    #
-    # Expect little movement in what is reported. On a like-for-like `test`
-    # pairing all 395 checks fall inside the baseline's 89% interval (max
-    # |delta| 1.48), and reported kappa moves under 1% below 48 months, +6.5%
-    # at 72 and +13.8% at 84 -- a prior elasticity of 0.04 to 0.09. What the
-    # change buys is sampling geometry and honest prior placement, not a
-    # different answer: it is the only one of baseline, anchor-only, floor-only
-    # and both to sample with zero divergences.
-    # See notes/202608191800-kappa-components-not-estimands.md.
+# The 18/72-month anchors and floor prior follow the dated calibration in
+# notes/202608191800-kappa-components-not-estimands.md. The old anchor lies
+# close to the floor, so the two components are weakly separated.
+# Historical simulations and fit comparisons apply to their tested settings.
     anchor_ages=(18.0, 72.0),
     kappa_min_mu=math.log(7.8),
     kappa_min_sigma=0.8,
@@ -2849,20 +1970,10 @@ _DS_JOINT_UNDERSTOOD_KAPPA_RE = KappaAnchorPriorParams(
 )
 
 _DS_JOINT_Q_KAPPA_RE = KappaAnchorPriorParams(
-    # The production ratio on the nested scale the engines use: spoken out of
-    # that child's own observed understood count, mean q. 469 of 1,114 spoken
-    # rows fall back to the marginal out-of-810 likelihood because the
-    # understood count is missing or violated, so this calibration covers the
-    # 58% on the nested scale and kappa_s governs both.
-    #
-    # Recalibrated 2026-08-19 alongside the understood block above; see there
-    # for the anchor and floor rationale. Calibrated totals 18.2 at 18 months
-    # and 8.4 at 72, against a floor of 7.8 -- so the old excess is 0.6, very
-    # nearly the floor restated, and its calibration log-scale SE is 1.429.
-    # `excess_old_sigma` is 1.5 rather than the family's 1.0 for exactly that
-    # reason: a prior narrower than the estimate it is drawn from would assert
-    # more than the estimate supports. The anchor move helps comprehension more
-    # than it helps q, and that is visible here rather than hidden.
+    # Calibrated on spoken counts conditional on observed comprehension.
+    # The same concentration also serves marginal fallback rows, whose
+    # implied variance need not equal the paired model's marginal variance.
+    # The small old-anchor excess has a wider prior; see the note above.
     anchor_ages=(18.0, 72.0),
     kappa_min_mu=math.log(7.8),
     kappa_min_sigma=0.8,
@@ -2877,19 +1988,9 @@ _DS_JOINT_Q_KAPPA_RE = KappaAnchorPriorParams(
 # Shared DS joint trajectory-prior and reporting values
 # ============================================================
 #
-# Seven registrations -- VG05, VG07-VG10, VG14 and VG16 -- passed all eleven of the
-# fields below with byte-identical values, for 386 lines of literal repetition: six
-# of them above a verbatim copy of the rationale, VG14 above an abbreviated summary
-# pointing at VG05's copy. VG15 shares the q and reporting groups; VG19, VG20 and
-# VG22 inherit them through `_as_definition_subclass` from VG10. VG21 and VG23 do
-# NOT -- they derive from the typically-developing VG13 and keep its anchors, which
-# is the whole point of the DS/TD contrast, and a test asserts they do not carry
-# these values.
-# Splatting these dicts leaves every serialised field value exactly as it was, so no
-# fit is invalidated -- it is the pattern `_DS_JOINT_UNDERSTOOD_KAPPA_RE` already
-# uses, and for the reason stated at VG20's derivation: deriving rather than
-# restating is what stops one model's recalibration drifting away from another's.
-# `tests/test_ds_joint_shared_priors.py` pins which models share each group.
+# Shared prior and reporting groups keep related DS definitions consistent.
+# tests/test_ds_joint_shared_priors.py checks which registrations inherit each
+# group. TD models retain their own age anchors and priors.
 
 
 class _DSJointUnderstoodAnchors(TypedDict):
@@ -3418,30 +2519,16 @@ VG11 = UnivariateREModelDefinition(
     p_slope_low_beta=30.0,
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
-    # NARROWED from 0.5 to 0.4 on 2026-09-16 (study-owner decision, #357), back to
-    # the standard GP amplitude; VG03 keeps the widened 0.5. VG11's GP is
-    # orthogonalised against the constant and the line, and every admissible
-    # length scale leaves nearly the same residual shape, so the data identify
-    # how much curvature there is but not its split between amplitude and length
-    # scale (notes/202609160500 §2). At 0.5 the model of record failed the hard
-    # R-hat gate on that ridge twice -- 1.0125 in August, 1.0116 on `ell` on
-    # 2026-09-16 -- while every reported quantity converged. The registered
-    # `eta-narrow` arm measured the remedy at `rep` on 2026-08-15: 16 -> 3
-    # divergences, max R-hat 1.0125 -> 1.0075, and the eight reported ages within
-    # 0.22% (largest difference 0.44 words at 30 mo), every point inside the
-    # 0.5 fit's own 89% interval (notes/202608142000 §5c). The old value stays
-    # reachable as the `eta-wide` sensitivity arm. See
+    # Retain eta-wide as a sensitivity to this amplitude prior.
+    # The study-owner decision and dated sampling comparisons are in
     # notes/202609161440-vg11-eta-sigma-0.4.md.
     eta_sigma=0.4,
     # Use all bivariate-capable rows (WG + Oxford CDI) plus WS production rows.
-    # Study REs absorb between-lab variation, so subsampling is not needed.
+    # Use the full admitted pool; study offsets allow between-study level differences.
     sample_fraction=1.0,
-    # Widen the reference pool beyond English (issue: DS-TD language symmetry).
-    # The DS pool is already a quarter non-English (es_01 Spanish, it_01 Italian)
-    # while this reference was English-only; the study REs below absorb the
-    # between-language variation. See ROMANCE_LANGUAGES for the admission criteria
-    # and the two measurement checks, and note that VG03/VG04 stay English-only
-    # because they carry no random effects to absorb it.
+    # Include the selected English, Italian and Spanish reference sources.
+    # Study offsets allow level differences, not arbitrary language-by-age
+    # differences or measurement equivalence. See ROMANCE_LANGUAGES.
     td_languages=ENGLISH_AND_ROMANCE_LANGUAGES,
     # Study-level random intercepts on the spoken trajectory
     tau_study_sigma=0.5,
@@ -3454,12 +2541,9 @@ VG11 = UnivariateREModelDefinition(
     # GP–intercept ridge that arises when study REs are present.
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
-    # Sampling geometry, enabled 2026-08-05 after the VG12 test-config trial in
-    # notes/202608050900-td-hierarchical-geometry.md §7. Centring the study block
-    # took tau's ESS from 310 to 6,950 and max R-hat from 1.0133 to 1.0057; the
-    # partition cut divergences from 59 to 14. Neither moves the energy BFMI --
-    # that is driven by missing within-child replication and is not reparameterisable
-    # away -- so this model is still expected to need the caveated publication path.
+    # Centred study effects and a variance partition follow the dated
+    # comparisons in notes/202608050900-td-hierarchical-geometry.md.
+    # They do not guarantee convergence or resolve sparse child replication.
     centred_study_re=True,
     subject_variance_partition=_TD_SPOKEN_VARIANCE_PARTITION,
     kappa=_TD_SPOKEN_KAPPA_RE,
@@ -3493,37 +2577,16 @@ VG12 = UnivariateREModelDefinition(
     p_slope_low_beta=8.0,
     p_slope_hi_alpha=1.3,
     p_slope_hi_beta=1.3,
-    # REVERTED to 0.5 on 2026-08-05, having been widened to 1.0 earlier the same
-    # day. The widening was a calibration fix: at 0.5 the fitted amplitude sat at
-    # prior CDF 0.913 with contraction 0.106. This records location and
-    # spread changes; it does not establish that the posterior restates the prior.
-    #
-    # It was withdrawn because it cost convergence. Three rep fits isolate it:
-    #     original (eta 0.5, no geometry changes)      2 divergences, BFMI 0.202
-    #     centring + partition + eta 1.0              29 divergences, BFMI 0.208
-    #     centring + partition + eta 0.5               2 divergences, BFMI 0.201
-    # The wider-prior arm had 27 more divergences in these runs. This is
-    # a sampling comparison, not a proof of a unique geometric cause.
-    # It was already the only arm to raise divergences in the test-config trial
-    # (76 against 59). Widening a weakly identified parameter gave it room to
-    # wander: even at 1.0 it only reached prior CDF 0.810 with contraction 0.166,
-    # so the calibration was not actually bought.
-    #
-    # Divergences bias the whole posterior, while the miscalibration is local to a
-    # GP smoothing hyperparameter that is not a reported developmental quantity --
-    # so the trade is not worth taking. The calibration defect is real and stands
-    # recorded in notes/202608050900-td-hierarchical-geometry.md §5; fixing it
-    # needs a change that identifies the amplitude rather than merely freeing it.
+    # Keep the narrower amplitude following the dated sampling comparisons
+    # in notes/202608050900-td-hierarchical-geometry.md. Their divergence counts
+    # do not prove one geometric cause or establish fit quality for future runs.
     eta_sigma=0.5,
     # WG + Oxford CDI only (WS comprehension is a production proxy).
-    # Study REs absorb between-lab variation, so subsampling is not needed.
+    # Use the full admitted pool; study offsets allow between-study level differences.
     sample_fraction=1.0,
-    # Widen the reference pool beyond English (issue: DS-TD language symmetry).
-    # The DS pool is already a quarter non-English (es_01 Spanish, it_01 Italian)
-    # while this reference was English-only; the study REs below absorb the
-    # between-language variation. See ROMANCE_LANGUAGES for the admission criteria
-    # and the two measurement checks, and note that VG03/VG04 stay English-only
-    # because they carry no random effects to absorb it.
+    # Include the selected English, Italian and Spanish reference sources.
+    # Study offsets allow level differences, not arbitrary language-by-age
+    # differences or measurement equivalence. See ROMANCE_LANGUAGES.
     td_languages=ENGLISH_AND_ROMANCE_LANGUAGES,
     # Study-level random intercepts on the understood trajectory
     tau_study_sigma=0.5,
@@ -3535,12 +2598,9 @@ VG12 = UnivariateREModelDefinition(
     # Anchor the GP at the midpoint of slope_anchors (19 months).
     anchor_g_at_ref=True,
     gp_anchor_age_months=19.0,
-    # Sampling geometry, enabled 2026-08-05 after the VG12 test-config trial in
-    # notes/202608050900-td-hierarchical-geometry.md §7. Centring the study block
-    # took tau's ESS from 310 to 6,950 and max R-hat from 1.0133 to 1.0057; the
-    # partition cut divergences from 59 to 14. Neither moves the energy BFMI --
-    # that is driven by missing within-child replication and is not reparameterisable
-    # away -- so this model is still expected to need the caveated publication path.
+    # Centred study effects and a variance partition follow the dated
+    # comparisons in notes/202608050900-td-hierarchical-geometry.md.
+    # They do not guarantee convergence or resolve sparse child replication.
     centred_study_re=True,
     subject_variance_partition=_TD_UNDERSTOOD_VARIANCE_PARTITION,
     # Comprehension reporting stops at 25 months, 2026-08-17 (#228), for the same
@@ -3625,14 +2685,11 @@ VG13 = BivariateModelDefinition(
     # content with. See notes/202608041730-ds-spoken-q-trajectory-prior.md.
     eta_q_sigma=0.20,
     # Use all available bivariate rows in the 8–18 month window; study REs
-    # absorb between-lab variation so no subsampling is required.
+    # allow between-study level differences.
     sample_fraction=1.0,
-    # Widen the reference pool beyond English (issue: DS-TD language symmetry).
-    # The DS pool is already a quarter non-English (es_01 Spanish, it_01 Italian)
-    # while this reference was English-only; the study REs below absorb the
-    # between-language variation. See ROMANCE_LANGUAGES for the admission criteria
-    # and the two measurement checks, and note that VG03/VG04 stay English-only
-    # because they carry no random effects to absorb it.
+    # Include the selected English, Italian and Spanish reference sources.
+    # Study offsets allow level differences, not arbitrary language-by-age
+    # differences or measurement equivalence. See ROMANCE_LANGUAGES.
     td_languages=ENGLISH_AND_ROMANCE_LANGUAGES,
     # Dataset-level study random intercepts on both trajectories
     tau_u_sigma=0.5,
@@ -3702,10 +2759,8 @@ VG14 = TrivariateModelDefinition(
     # which is where VG05's copy of it went, and
     # notes/202608041730-ds-spoken-q-trajectory-prior.md has the measurements.
     **_DS_JOINT_Q_ANCHORS,
-    # Signed ratio r uses the three-anchor tent + GP defined above.  uk_01's
-    # signed-only field and uk_06's unverified field are excluded from the signed
-    # likelihood by default; their understood/spoken observations remain.
-    # Mean clamp + comprehension reporting cap -- rationale at the constant.
+    # uk_01's signed-only field is excluded from total signing by default.
+    # Confirmed uk_06 totals remain included; other outcomes follow their masks.
     **_DS_JOINT_REPORTING,
     # Signed gets its own cap rather than inheriting the comprehension one, which
     # is what it did until 2026-08-13. 84 matches VG15's report_max_age_signed on
@@ -3875,25 +2930,12 @@ VG16 = BivariateModelDefinition(
 # ============================================================
 
 
-# Derived from VG10 so the two differ in exactly one thing, which is what makes
-# the comparison in #224 readable: VG10 is nested at rho_uq = 0, so the reported
-# population trajectories should sit close to VG10's. Since 2026-09-13 they differ
-# in two: VG20 also carries the sex covariate (#324), which VG10, a development
-# step, does not. The #224 comparison was made before that, on the one-factor pair.
-#
-# That closeness is an empirical stability check, NOT a mathematical correctness
-# invariant, and #233 was right to flag the earlier wording here as too strong.
-# Two reasons it cannot be one. The population curves are evaluated at zero child
-# effects, so they are not the quantity the correlation acts on -- while every
-# subject-MARGINAL expectation is a nonlinear function of those effects and
-# therefore moves with rho_uq by construction, as it should. And a refit is a
-# refit: when the child block's geometry changes, the fixed effects and the
-# marginal scales can legitimately reallocate between themselves. Read movement
-# in a population trajectory as something to explain against the interval widths
-# and the predictive scores, not as proof of a defect.
-#
-# Deriving rather than restating the priors also means VG10's anchor
-# recalibrations cannot drift away from VG20's.
+# The correlated child block reduces to VG10's at rho_uq=0. VG20 also adds
+# sex, so the registered models do not differ in only one term.
+# Zero-child curves do not directly use rho; their fitted parameters can still
+# move when the child likelihood changes. At fixed parameters, marginal u and
+# q expectations retain their individual distributions; the product can depend
+# on their correlation. Compare fitted curves and predictive checks.
 VG20 = _as_definition_subclass(
     VG10,
     BivariateCorrelatedSubjectREModelDefinition,
@@ -3903,14 +2945,9 @@ VG20 = _as_definition_subclass(
         "Fitting Model VG20: VG10 + correlated subject random effects on U and q"
         " (rho_uq) - Down syndrome"
     ),
-    # eta = 2: a gentle pull toward independence, so a correlation has to be
-    # evidenced. The quantity this model exists to estimate is already known to be
-    # positive and small from two independent directions -- VG16's realised
-    # intercepts still correlate at +0.135 [0.087, 0.180] with its cross-lag
-    # fitted (measured on the pre-#242 fit, whose lag construction was later
-    # corrected), and VG10's own fitted deviations at +0.152 [0.105, 0.195] with
-    # no cross-lag at all -- so a prior that made a large correlation cheap would
-    # be assuming the answer. See notes/202608151120-vg16-crosslag-quantified.md.
+    # eta=2 favours correlations near zero. Dated fitted child-deviate
+    # correlations motivated the design but are not independent validation.
+    # See notes/202608151120-vg16-crosslag-quantified.md.
     subject_re_correlation_eta=2.0,
     # Sex as a covariate for the by-sex predictions (#324); see the constant.
     sex_effect_sigma=_SEX_EFFECT_SIGMA,
@@ -3949,38 +2986,16 @@ VG19 = _as_definition_subclass(
     # spoken far better determined than either alone.
     tau_subj_u_sigma=SubjectSlopePriorParams(tau0_sigma=1.5, tau1_sigma=0.5),
     tau_subj_q_sigma=SubjectSlopePriorParams(tau0_sigma=1.5, tau1_sigma=0.5),
-    # The age at which tau0 IS the between-child spread. 36 months is the Down
-    # syndrome pool's median age; centring at the design's centre is what stops
-    # the intercept and slope trading off in the sampler, and it gives tau0 a
-    # stated age rather than an extrapolated value at age zero.
+    # Reference age for the intercept scale; slopes use years from this age.
+    # Centring can reduce intercept/rate coupling but does not guarantee it.
     subject_slope_ref_age_months=36.0,
 )
 
-# Promotion of the `window-22` sensitivity variant to a numbered model, per
-# notes/202608211100-window-22-adopted.md (adoption) and
-# notes/202608211545-window-22-prior-gate-passed.md (prior gate). VG13 stops at
-# 18 months and so runs out of matched comprehension at ~221 understood words;
-# this window reaches 328, which is what the DS/TD matched contrast needs.
-#
-# 22 and not 25. The Oxford CDI's 418-item ceiling bites unevenly: below 19
-# months 1-5% of administrations sit within 10% of their form's ceiling, at 19-22
-# it is 7-8%, and at 23, 24, 25 it jumps to 20.2%, 27.7%, 36.1%. Compressing
-# understood at the ceiling while spoken keeps rising inflates q = S/U, so a
-# contaminated window reads HIGH -- and `window-25` does, by 0.098 at 328 words.
-# `window-25` remains fitted as the measurement of that exposure and must not
-# supply a reported number.
-#
-# The finding this carries is that the DS/TD gap in q CLOSES by 300 understood
-# words (Delta q = -0.00, P(TD>DS) = 0.49) where `window-25` keeps it open at
-# +0.09. That closure was gated against its own priors under a rule fixed before
-# the fit -- `window-22-vague-anchors` widened both high slope anchors in the
-# direction that would reopen it -- and survived, moving P(TD>DS) by at most
-# 0.0085 anywhere on the grid.
-#
-# Two weaknesses are inherited and unresolved (adoption note §6): the high-anchor
-# priors come from in-sample medians rather than published norms, because no CDI
-# comprehension norm exists above 18 months, and the kappa magnitudes are VG12's
-# rather than recalibrated for the wider window.
+# Wider-window TD reference derived from VG13. The Oxford CDI ceiling at
+# older ages motivated the 22-month limit. Anchors and GP priors also change;
+# this is not a window-only contrast. Some priors use in-sample values.
+# See notes/202608211100-window-22-adopted.md and
+# notes/202608211545-window-22-prior-gate-passed.md for the dated assessments.
 VG21 = _as_definition_subclass(
     VG13,
     BivariateModelDefinition,
@@ -4012,27 +3027,12 @@ VG21 = _as_definition_subclass(
 )
 
 
-# Derived from VG10 for the same reason VG19 and VG20 are: it is gated against
-# VG10, so any movement in the reported population trajectories is a red flag
-# rather than a benefit, and VG10's anchor recalibrations cannot drift away from
-# this model's. See notes/202608221000-four-by-four-gate1.md.
-#
-# `rank = 3` is the registered default, moved from 2 by the study owner on
-# 2026-08-24. Gate 1 could not choose between them -- rank 2 is within 2.60 on 2 df
-# of rank 3, and rank 3 within 0.0000 of the free 4x4, so 4 is excluded outright and
-# 2 and 3 are both defensible on the residual likelihood. The fits decided it, in
-# two ways Gate 1 could not see. Rank 3 cleared the convergence gate on the plain
-# `rep` configuration with 8 divergences where rank 2 needed a hightune to reach 18
-# (178 without it): the larger factor model is the easier geometry, rank 2 having to
-# press four child effects into a two-dimensional space. And the two disagree on the
-# spoken child-slope scale -- 0.348 (sd 0.047) at rank 2 against 0.576 (sd 0.066) at
-# rank 3, about 2.8 combined standard errors on shared data -- so the rank is not a
-# free choice for any reading about how differently children's spoken trajectories
-# steepen. The intercept-level quantities agree closely across both and are not at
-# stake. See notes/202608231420-vg22-factor-anchor-bimodality.md SS5, SS7.
-#
-# The sensitivity family is 1, 2 and 3 throughout; only which of them is the
-# registered default has moved.
+# Rank-three child-factor candidate derived from VG10. Population curves may
+# change after refitting because the child structure changes the likelihood.
+# The rank sensitivities compare one, two and three; exploratory residual
+# likelihoods do not by themselves establish rank or parameter recovery.
+# See notes/202608221000-four-by-four-gate1.md and
+# notes/202608231420-vg22-factor-anchor-bimodality.md for the design history.
 VG22 = _as_definition_subclass(
     VG10,
     BivariateFactorSubjectREModelDefinition,
@@ -4064,36 +3064,12 @@ VG22 = _as_definition_subclass(
 )
 
 
-# Derived from VG13 so the two differ in exactly one thing, which is the whole
-# point: VG13 is nested at rho_uq = 0, so the pair is a one-factor contrast on
-# the typically-developing side of exactly the kind VG20 gives on the Down
-# syndrome side. Since 2026-09-13 VG23 also carries the sex covariate (#324) and
-# VG13, superseded, does not; the one-factor reading ("it moves nothing else")
-# was taken on the 2026-09-02 and 2026-09-08 fits, before that.
-#
-# Why this matters more here than it does on the DS pool. #229 is about a split
-# the typically-developing data barely identify: separating between-child from
-# within-child variance when the average child contributes 1.16 administrations.
-# Only 15.1% of VG13's children have a repeat visit, so the split currently rests
-# on the Beta-Binomial's functional form rather than on replication -- and the
-# between-child scale comes back low in 9 of 9 recovery replicates across three
-# models (#225).
-#
-# The correlation opens a second channel that needs no repeat visit at all. Every
-# VG13 administration yields *two* counts, understood and spoken, from one child
-# on one day; a child's persistent ability moves both, while the Beta-Binomial
-# noise is assumed independent across them, so their agreement identifies the
-# child effect on 100% of rows rather than the 15% with a second visit.
-#
-# The catch is stated rather than discovered later: both counts come from one
-# questionnaire completed by one parent, so shared reporter tendency is
-# indistinguishable from shared child ability and biases rho_uq -- and through it
-# the child scales -- **upward**. The variance partition biases the same quantity
-# **downward**. The two therefore bracket the truth rather than resolving it, and
-# neither is a point estimate to publish unqualified. See #229 option 3.
-#
-# `eta = 2` matches VG20 deliberately, so the two populations' correlations are
-# estimated under the same prior and their comparison is not a prior artefact.
+# Correlated TD child intercepts derived from VG13. VG23 also includes sex,
+# so rho_uq = 0 alone does not reproduce the registered VG13 likelihood.
+# Paired counts inform correlation, but shared reporting can also contribute.
+# The model cannot separate reporter effects from vocabulary differences or
+# establish upper and lower bounds on the true child correlation.
+# eta = 2 matches VG20's correlation prior, not its full model or likelihood.
 VG23 = _as_definition_subclass(
     VG13,
     BivariateCorrelatedSubjectREModelDefinition,
@@ -4108,49 +3084,14 @@ VG23 = _as_definition_subclass(
     sex_effect_sigma=_SEX_EFFECT_SIGMA,
 )
 
-# VG24 (issue #296) is to VG15 what VG20 is to VG10: the same graph with the
-# child effects allowed to correlate, derived from VG15 so its priors cannot
-# drift away and so VG15's own fingerprint is untouched.
-#
-# What it exists to estimate is `rho_sign_q` -- do children who persistently sign
-# a larger share of what they understand also persistently say a larger share of
-# it? Nothing in the registry answers that. VG15's three subject blocks are
-# independent scales with no correlation structure, and VG16's cross-lag runs
-# understood -> q, not sign -> speech.
-#
-# Gate 1 ran before any of this was written and is positive: VG15's own fitted
-# subject intercepts correlate at +0.198 (89% ETI [0.107, 0.289]) across the 146
-# children carrying both a signed and a spoken marginal -- larger than the
-# realised u-q correlation on the same fit (+0.165 over 365 children) that sits
-# under VG20's fitted rho_uq of 0.39. See
-# notes/202609041722-sign-speech-modelling-proposals.md.
-#
-# That is not the zero-to-negative concurrent substitution result of
-# notes/202608141500-sign-speech-additivity-and-cross-lag.md §3, and the two do
-# not conflict: that analysis used the three cell-partition sources (uk_02,
-# uk_07, es_01), which are exactly where VG15's subject effects do not enter, so
-# the children are almost disjoint. It is also a different quantity from the
-# prospective +0.19 of notes/202608160930-early-signing-and-later-speech.md,
-# which conditions on earlier speech. Having all three on the record is what lets
-# the report say which is which.
-#
-# WHICH CHILDREN INFORM IT. The subject shifts enter the marginal likelihoods
-# only; the four-cell and produced-cell Dirichlet-Multinomials are fed
-# population + study marginals with no subject shift, deliberately, so the
-# subject block cannot pull `psi` (see the engine comment at the cell DMs).
-# Under that design `rho_sign_q` is identified by the children carrying both a
-# signed and a spoken marginal, not by every child in the frame. Extending the
-# subject shifts into the cell likelihoods would bring the es_01, uk_07 and
-# nz_01 children in, but it changes what `psi` means and is a separate proposal.
-# The model page states the support rather than leaving a reader to assume the
-# whole frame informs the correlation.
-#
-# A sign -> speech CROSS-LAG is the other obvious model and is deliberately not
-# this one (#297, deferred on #242). The argument is
-# notes/202608151140-cross-lag-not-for-models-of-record.md §4, unchanged: within-
-# child deviations have no memory beyond the occasion, so a population-baseline
-# lag mostly absorbs the covariance between *persistent* standings through a
-# noisy proxy. This is the between-child estimate, and it comes first.
+# Correlate VG15's child intercepts while retaining its other priors.
+# rho_sign_q concerns persistent signed and spoken shares across children.
+# It differs from psi's association across words within an administration
+# and from VG25's prospective lag coefficient.
+# Child intercepts enter marginal counts, not cell likelihoods. Paired signed
+# and spoken marginals therefore provide the direct correlation evidence.
+# See docs/models/vg24/index.qmd and
+# notes/202609041722-sign-speech-modelling-proposals.md for source support.
 VG24 = _as_definition_subclass(
     VG15,
     JointCorrelatedSubjectREModelDefinition,
@@ -4199,40 +3140,12 @@ VG25 = _as_definition_subclass(
     sign_lag_zero_handling=LAG_ZERO_CONTINUITY,
 )
 
-# VG26 (#240) is to VG21 what VG23 is to VG13: the same graph with the two child
-# effects allowed to correlate, derived from VG21 so VG21's window-calibrated
-# priors cannot drift away from it and VG21 is nested exactly at rho_uq = 0.
-#
-# WHY IT EXISTS. The project draws two Down syndrome / typically developing
-# contrasts against different typically developing models. The trajectory and
-# matched-comprehension contrast pairs VG20, which correlates its child effects,
-# with VG21, which does not; the between-child correlation contrast pairs VG20
-# with VG23. VG23 is the evidence that VG21's independence assumption is wrong
-# -- rho_uq 0.128 [0.096, 0.160] on 5,496 children -- and VG21 inherits that
-# assumption from VG13. VG26 carries the correlation on the window the
-# matched-comprehension contrast needs, so one model could serve both contrasts.
-#
-# WHY IT IS NOT "VG23 WITH A WIDER WINDOW". VG21 is not VG13 with
-# `max_age_months` widened: beyond naming, the query grid and the sex covariate,
-# nine fields differ -- the window (`gp_domain_months`, `max_age_months`), four
-# anchor fields re-placed on it (`slope_anchors`, `gp_anchor_age_months`, and
-# the anchor ages inside `kappa_u` and `kappa_s`) and three priors re-centred for
-# it (`p_slope_hi_u_beta`, `p_slope_hi_q_beta`, `eta_q_sigma`). Widening VG23
-# would not reproduce VG21, so the correlation is added to VG21 instead.
-#
-# WHAT TO CHECK BEFORE IT REPLACES ANYTHING. Four things, recorded on #240. (1)
-# Report rho_uq on 8-18 months (VG23) and 8-22 months (this model) side by side:
-# 19-22 months is where Words & Sentences stops supplying comprehension and the
-# Oxford CDI's 418-item ceiling starts to bind, and a correlation between a
-# child's comprehension offset and their conversion offset is the quantity most
-# exposed to a change in how comprehension is measured. (2) The shared-reporter
-# confound travels with it: one parent completes both counts, which biases
-# rho_uq upward, as it does for VG20 and VG23. (3) VG13's unfitted sensitivity
-# debt transfers here rather than disappearing. (4) VG21 keeps its TD-reference
-# role until this model has a fit and a role of its own.
-#
-# `eta = 2` matches VG20 and VG23, so the three correlations are
-# prior-comparable.
+# Add correlated child intercepts to VG21's 8-22-month specification.
+# VG21's anchors and GP priors differ from VG13's, so simply widening VG23
+# would not reproduce this model. The zero-correlation child block matches
+# VG21's. Shared reporting and age-related measurement differences still
+# limit interpretation; compare with VG23's narrower-window estimate.
+# Registration does not replace VG21's reporting role.
 VG26 = _as_definition_subclass(
     VG21,
     BivariateCorrelatedSubjectREModelDefinition,
@@ -4504,23 +3417,8 @@ def validate_model_definition(definition) -> None:
     # should be a registered variant that says so, not an unvalidated flag
     # combination.
     #
-    # Why the joint family is checked here and the bivariate one is not. The
-    # bivariate models get both of these guarantees from
-    # `subject_effects.resolve`, which `common_bivariate_re` calls before it
-    # builds anything. That resolver is built around the (u, q) PAIR and its
-    # per-outcome specs; the joint family is three outcomes with no specs, so it
-    # has no plan to resolve and no such gate. Rather than widen the resolver to
-    # a shape only one model needs, the rule the joint engine relies on is stated
-    # where every definition passes: here.
-    #
-    # The positivity check deliberately covers BOTH families -- it duplicates the
-    # resolver's rather than contradicting it, and it fires at definition time,
-    # which is earlier. `_validate_positive_scale_fields` cannot do it: that keys
-    # on the `_alpha`/`_beta`/`_sigma` suffixes and has never seen this field.
-    # Same defect class as `sign_peak_prior`: the engines hand it straight to an
-    # LKJ/Beta, which accepts a non-positive concentration and then samples
-    # garbage from it. `is not None` rather than truthiness throughout, so
-    # `eta = 0` reaches the check that rejects it instead of reading as "off".
+    # The joint engine requires all three correlated blocks. The bivariate
+    # engine also checks its resolved plan before graph construction.
     correlation_eta = getattr(definition, "subject_re_correlation_eta", None)
     if correlation_eta is not None and (
         not isinstance(correlation_eta, (int, float))

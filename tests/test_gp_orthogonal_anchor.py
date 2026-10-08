@@ -1,23 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Guard the orthogonal-GP anchor (integration; see also the data-free
-``test_gp_anchor_orthogonalisation`` unit tests that run in CI).
+"""Check the anchored VG11 graph without posterior sampling.
 
-When a model anchors its HSGP deviation (``anchor_g*_at_ref``), the deviation is
-orthogonalised against its mean's basis (``[1, z]`` for the logit-linear trend)
-using coefficients fitted on the *observed* rows only, so it carries no linear
-component there and cannot alias with ``slope`` — and it is then pinned to zero
-at the reference-age anchor row, which restores a constant component and fixes
-the level by the anchor rather than by orthogonality to ``[1]`` (#240; see
-``_orthogonalise_and_anchor``). (The previous single-point anchor
-``g_unit - g_unit[idx]`` removed only the level trade-off, leaving a trend-vs-GP
-R-hat ridge that heavier tuning did not fix; an intermediate whole-grid
-orthogonalisation additionally let the plot/query grid leak into inference.)
-
-This builds the real anchored VG11 model (no sampling) and checks that prior
-draws of ``g`` pass through zero at the anchor and carry no linear component
-over the observed rows; it skips cleanly when the prepared DuckDB is not present.
+Prior draws must pass through zero at the reference anchor and have near-zero
+centred linear slope over observed rows. The test requires prepared data;
+data-free helper checks are in test_gp_anchor_orthogonalisation.
 """
 
 import os
@@ -64,8 +52,7 @@ def test_anchored_gp_is_orthogonal_to_linear_trend(vg11_model):
         g = pm.draw(vg11_model["g"], draws=48, random_seed=0)
     # Point anchor: some grid row is pinned to zero on every draw (the reference age).
     assert np.abs(g).max(axis=0).min() < 1e-6
-    # Over the observed rows, each draw is orthogonal to [1, z] (constant-invariant,
-    # so unaffected by the anchor shift): no linear component to alias with `slope`.
+    # Centred slopes stay near zero after the point anchor adds a constant shift.
     g_obs = g[:, :n_obs]
     zc = z[:n_obs] - z[:n_obs].mean()
     gc = g_obs - g_obs.mean(axis=1, keepdims=True)

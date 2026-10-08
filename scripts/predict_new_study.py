@@ -357,9 +357,8 @@ def study_offset(post, x_plot, frame, draws, n_trials, definition, n_nodes=25):
     single Gaussian at its marginal scale for the frame's median age; for a
     slope or factor model that scale is age-varying, so this is inexact for
     them. And every row is integrated independently, so two visits of one child
-    are treated as two children: the point estimate is unaffected, but the
-    profile interval is narrower than the sampling error of the estimate on a
-    frame with repeat visits. The reference for that sampling error is the
+    are treated as two children. That independence approximation can change the
+    point estimate and understate its uncertainty on a frame with repeat visits. The reference for that sampling error is the
     simulation in ``predict_new_study_checks.py null``, which carries the
     frame's own visit structure, not the interval reported here.
     """

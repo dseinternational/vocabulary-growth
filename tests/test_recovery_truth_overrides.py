@@ -1,13 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Setting a parameter in a recovery truth draw.
+"""Check explicit parameter settings in recovery truth draws.
 
-Two of the three cells #297 check 4 asks for are parameter *settings* rather
-than draws, and the same is true of #242 item 6 for VG16. What has to hold is
-narrow and testable: the setting reaches the truth, everything downstream of it
-is recomputed under it, a setting that cannot mean what it says is refused, and
-a set truth can never be mistaken for -- or overwrite -- an unset one.
+Settings must reach free variables, recompute downstream quantities and form
+part of run identity. Reject unsupported or non-finite settings.
 """
 
 from __future__ import annotations
@@ -86,13 +83,7 @@ def test_the_tag_spells_out_the_characters_a_config_name_uses():
 
 
 def test_a_set_truth_cannot_land_in_or_be_scored_as_an_unset_one(tmp_path):
-    """The `-under-` precedent (#226), for the same failure.
-
-    Two cells of gate 4 differ only in what their truth was set to. If the
-    setting did not reach the name, the second would simulate over the first's
-    directory and be scored into the first's matrix -- one record where there
-    are two.
-    """
+    """Include truth settings in both simulation and scoring directory identities."""
     definition = MODEL_REGISTRY["vg25"]
     overrides = (parse_truth_override("beta_sign_lag=0"),)
 
@@ -148,7 +139,7 @@ def test_a_value_that_is_not_a_packed_triangle_is_refused():
 
 
 def test_every_registered_transform_is_reachable_from_the_command_line():
-    """A transform nobody can type is a transform that does not exist."""
+    """Expose every registered truth transform through the command line."""
     for name in STRUCTURAL_TRANSFORMS:
         assert parse_truth_override(f"subject_re={name}").transform == name
 
@@ -231,15 +222,7 @@ def test_the_coefficient_is_set_to_what_was_asked_for(vg25_graph):
 def test_independent_zeroes_vg25s_three_correlations_and_keeps_its_three_scales(
     vg25_graph,
 ):
-    """The `(beta != 0, rho = 0)` cell, end to end on the model it is for.
-
-    `rho_sign_q` is what VG25 has to be told apart from, and the model does not
-    sample it -- it samples the packed Cholesky factor `subject_re` and reads
-    all three correlations and all three scales off it. So the check is that the
-    correlations come back exactly zero *and* the scales come back unchanged:
-    a transform that moved the scales would be a differently-scaled model rather
-    than the same model with the correlation switched off.
-    """
+    """Zero correlations through VG25's packed Cholesky factor while retaining scales."""
     model, posterior = vg25_graph
     names = (
         "tau_subj_u",
@@ -266,13 +249,7 @@ def test_independent_zeroes_vg25s_three_correlations_and_keeps_its_three_scales(
 
 
 def test_setting_a_deterministic_says_what_to_set_instead(vg25_graph):
-    """The trap the whole design turns on.
-
-    `rho_sign_q` is the name a reader of #297 has in mind, and setting it would
-    be silently undone when the truth's deterministics are recomputed from the
-    graph. Refusing it is only half the job; the message has to name the free
-    variable that does carry it.
-    """
+    """Name the free variable that controls a requested deterministic quantity."""
     model, posterior = vg25_graph
     with pytest.raises(ValueError, match="deterministic") as raised:
         apply_truth_overrides(
@@ -311,13 +288,7 @@ def test_nothing_is_touched_when_there_are_no_settings(vg25_graph):
 
 
 def test_a_setting_that_makes_a_reported_quantity_non_finite_is_refused():
-    """Where a boundary setting shows up first, and what it must not do.
-
-    A scale set to zero reaches a report through a division or a logarithm long
-    before it reaches the sampler. Scoring against a truth holding a NaN is the
-    failure this stops -- it would read as a coverage miss rather than as a bad
-    setting.
-    """
+    """Reject a truth setting that makes a derived reporting quantity non-finite."""
     posterior = xr.Dataset(
         {
             "fine": ("draw", np.array([1.0])),

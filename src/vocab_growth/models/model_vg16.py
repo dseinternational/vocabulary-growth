@@ -1,19 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""
-Model VG16: VG09 + a prior-understood cross-lag (issue #113).
+"""VG16 adds an earlier-comprehension predictor to a joint vocabulary model.
 
-Extends the bivariate + subject-random-intercept foundation with one lead-lag
-coefficient: a child's prior-wave understood residual predicts their current
-production ratio q, i.e. earlier receptive vocabulary -> later expressive
-vocabulary. The lag source is assigned per complete (subject, age)
-administration wave (issue #242). The model definition chooses whether that
-residual is population-relative or within-child; the headline VG16 definition
-uses the population-relative baseline, whose coefficient reads as a
-history-dependent mixture of between- and within-child association. See
-notes/202607031200-vg16-within-child-scoping.md and
-notes/202608231714-vg16-statistical-model-review.md.
+It uses child intercepts and the GP anchors used by VG10. The lag source is
+assigned per complete child-age wave. The definition selects
+a population or within-child baseline. The registered default uses a
+population baseline, so its coefficient mixes persistent differences between
+children with change within a child. It describes an association and does not
+establish that earlier comprehension causes later speech.
+
+See ``docs/models/README.md`` for the limits on reporting this model.
 """
 
 from vocab_growth.models.common_bivariate_re import (

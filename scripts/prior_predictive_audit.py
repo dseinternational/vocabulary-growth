@@ -1,27 +1,14 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Regenerate prior-predictive checks for the §6 prior-predictive audit (issue #89).
+"""Regenerate prior-predictive figures without posterior sampling.
 
-Builds each model and runs its ``prior_predictive_checks`` stage **only** — i.e.
-``sample_prior_predictive`` with no posterior sampling — so the prior-predictive
-plots (``prior_samples_*.png``, ``prior_predictive_checks.png``,
-``prior_predictions.png`` and the analytic prior-distribution PNGs) are
-regenerated cheaply into each model's output dir for review.
+Resolve the engine and its calling convention through the model catalogue.
+The default selects one model per engine and per distinct child-effect structure.
+Other registered models may be requested explicitly.
 
-The engine and the calling convention come from
-:mod:`vocab_growth.models.catalogue`, not from a table maintained here. Until
-issue #273 they were maintained here, and the table had gone stale: VG16 and
-VG19-VG23 all fit on ``common_bivariate_re`` while a hard-coded set routed them
-through the plain ``common_bivariate``, so an audit of those six models built a
-graph without the cross-lag, child-slope, correlated-effect or factor structure
-that distinguishes them — and still produced plots, which is how a mismatch
-comes to be mistaken for a valid prior check. The same table dropped the
-definition argument for every random-effect model, discarding
-:mod:`vocab_growth.models.prior_child_checks`'s unseen-child figures, which are
-the ones a child-effect model's prior audit exists to look at (issue #233).
+Usage::
 
-Usage:
-    python scripts/prior_predictive_audit.py [models...]   # default: see _default_models
+    python scripts/prior_predictive_audit.py [models...]
 """
 
 import argparse
@@ -42,23 +29,11 @@ from vocab_growth.reporting import console, heading
 
 
 def _default_models() -> list[str]:
-    """The §6 regeneration set, DERIVED rather than listed.
+    """Select engine and child-effect coverage in stable registry order.
 
-    Two coverage obligations, both of which a hand-written list had already failed.
-    One model per **engine**, so every graph builder is exercised. And one model per
-    distinct **child-effect structure**, because that is what issue #233 extended
-    this audit for: the unseen-child figures are the ones a child-effect model's
-    prior audit exists to look at, and they only appear for a model whose engine
-    passes the definition through.
-
-    The list this replaced was ``[vg10, vg11, vg12, vg13, vg14, vg15]``. It omitted
-    VG20 — the Down syndrome model of record — along with VG19, VG21, VG22 and VG23,
-    and of its six entries only VG10 and VG13 reached ``prior_child_checks`` at all
-    (VG11 and VG12 are ``outcome``-convention), both with a constant offset. So the
-    correlated, child-slope and low-rank-factor branches were never exercised by the
-    documented default invocation.
-
-    Registry order throughout, so the output is stable and reviewable.
+    One example per engine exercises each graph builder. Distinct child structures
+    also need examples so the default reaches their unseen-child prior checks.
+    This is structural coverage, not an audit of every registered definition.
     """
     chosen: list[str] = []
     seen_engines: set[str] = set()

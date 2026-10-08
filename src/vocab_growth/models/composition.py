@@ -95,10 +95,11 @@ def build_composition_likelihood(
     signed_ratio: TensorVariable,
     spoken_ratio: TensorVariable,
 ) -> None:
-    """Observe four cells within understood, or three conditional on produced.
+    """Observe four cells within understood or three conditional on produced.
 
-    Ratios include population and study terms, plus the configured lag term for
-    speech. They exclude direct child offsets, as the joint model specifies.
+    The caller supplies signed and spoken ratios. The joint engine includes age,
+    study and sex terms, with an optional speech lag, but excludes direct child
+    offsets from these cell probabilities.
     """
     r_c = pm.math.clip(signed_ratio[observations.idx_cells], EPSILON, 1 - EPSILON)
     q_c = pm.math.clip(spoken_ratio[observations.idx_cells], EPSILON, 1 - EPSILON)

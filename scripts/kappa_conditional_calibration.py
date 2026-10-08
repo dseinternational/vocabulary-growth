@@ -10,8 +10,8 @@ structure (VG01, VG03), and it is what
 
 It is the wrong target for a model that carries study and subject random
 intercepts. Those effects absorb between-child spread before the likelihood sees
-it, so the model's `kappa` governs a much smaller residual and the marginal
-estimate is a lower bound -- by a factor of ten on VG11. This module puts the
+it, so conditional `kappa` describes residual variation. A marginal calibration
+can give a smaller concentration, but it is not a guaranteed lower bound. This module puts the
 random effects into the calibration instead:
 
     logit p_ij = m_c(ij) + s_k(i) + b_i,     b_i ~ N(0, tau^2)
@@ -217,10 +217,9 @@ def make_objective(design, anchor_ages, *, n_nodes=DEFAULT_NODES, tau_fixed=None
     With ``loading`` the subject effect keeps one scalar per child but its
     loading varies with age -- ``logit p = m_c + s_k + lambda(a) b``, `b ~ N(0, 1)`,
     `lambda` interpolated between the same two anchors as `kappa`. This is a
-    *diagnostic* rather than a calibration path: the registered models all carry
-    a constant `tau_subject`, so a pool where the loading buys a large likelihood
-    gap is one whose `kappa` is absorbing subject-scale drift the model cannot
-    represent, and whose `kappa` should not be read as dispersion. See section 21
+    diagnostic rather than the default calibration path. A likelihood gain
+    indicates sensitivity to the subject-scale specification; it does not by
+    itself identify which component explains the variation. See section 21
     of ``notes/202608020829-kappa-and-eta-q-prior-recalibration.md``.
     """
     _require_float64()
@@ -438,8 +437,7 @@ def simulate(design, *, tau, kappa_min, excess_young, excess_old, anchor_ages, s
 
     ``lam_old`` makes the subject loading age-varying: `tau` is then its value at
     the young anchor and `lam_old` its value at the old one, interpolated the
-    same way `kappa` is. Left as ``None`` the loading is constant at `tau`, which
-    is the specification every registered model has.
+    same way `kappa` is. Left as ``None``, the loading stays constant at `tau`.
     """
     rng = np.random.default_rng(seed)
     prop = np.bincount(design.cell_idx, weights=design.y / design.n_trials)
@@ -569,15 +567,13 @@ def bivariate_frames(definition, **basis):
 
 @dataclass(frozen=True)
 class Pool:
-    """One (model, outcome) pair, with the anchors the calibration reports at.
+    """One (model, outcome) pair and its calibration anchors.
 
-    ``study_effects`` and ``subject_effects`` record what the *model* carries,
-    and the estimator mirrors them. That is the whole lesson of the VG11 failure:
-    a dispersion prior is a prior about the residual left after the model's
-    grouping structure, so a calibration that includes more effects than the
-    model does will understate `kappa`, and one that includes fewer will
-    overstate it. VG01-VG04 carry neither, so for them the fit here reduces to
-    the marginal per-age estimate and the two columns coincide.
+    Match the model's study and subject effects before interpreting kappa as residual
+    concentration. Omitting effects can leave their variation in the count layer and
+    reduce the estimated concentration; adding effects can do the reverse. These are
+    expected tendencies, not bounds on separately estimated calibrations. For models
+    without either effect, the conditional and marginal specifications coincide.
     """
 
     label: str
@@ -702,16 +698,11 @@ def run_recovery(key, *, nodes=DEFAULT_NODES, basis=None):
 
 
 def run_loading(key, *, nodes=DEFAULT_NODES, basis=None):
-    """Is this pool's `kappa` carrying subject-scale drift the model cannot?
+    """Compare constant and age-varying subject loadings in this calibration model.
 
-    Every registered model gives a child one intercept with a scale constant in
-    age. Where the true between-child scale is *not* constant, `kappa(age)` is
-    the only age-varying spread parameter left and absorbs the difference, which
-    is what produced the 16-18 month typically-developing understood spike
-    (section 21 of the note). A large gap here does not invalidate the pool's
-    calibration -- the estimator is meant to mirror the model, drift and all --
-    but it does mean the resulting `kappa` is a compound quantity and should not
-    be reported as dispersion.
+    This diagnostic asks whether a changing subject scale improves fit beyond the
+    constant-intercept calibration. Some registered models already use slopes or
+    age-varying effects; the diagnostic does not reproduce all their structures.
     """
     pool = POOLS[key]
     if not pool.subject_effects:

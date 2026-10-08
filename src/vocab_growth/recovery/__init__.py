@@ -1,21 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Parameter-recovery tooling for the statistical-validity review (issue #163).
+"""Parameter-recovery tools for simulated data with known parameter values.
 
-A recovery check regenerates a dataset from a model at a known parameter draw,
-refits the model to it, and asks whether the truth is found again. It is the
-counterpart to the posterior-predictive calibration every fit already writes:
-calibration asks whether the model describes the observed data, recovery asks
-whether the sampler can identify the model's own parameters from data of this
-size, shape and missingness.
+``spec`` declares engine likelihoods and simulation order. ``simulate`` draws
+outcomes from those likelihoods. ``refit`` substitutes the synthetic frame into
+the engine's pipeline. ``compare`` scores posterior estimates against truth.
 
-`spec` declares what each engine needs in order to be simulated; `simulate`
-forward-simulates a dataset from the model's own likelihood nodes at a fixed
-draw; `refit` reruns the engine's pipeline against that dataset with only the
-data-preparation stage substituted; `compare` scores the recovered posterior
-against the truth.
-
-See `docs/runbooks/parameter-recovery.md` for how to run a study and how to read
-the result — in particular, what a handful of replicates can and cannot show.
+Recovery tests the fitted procedure at the selected truths and study design.
+It does not establish identification generally or adequacy for real observations.
+See ``docs/runbooks/parameter-recovery.md`` for use and interpretation.
 """

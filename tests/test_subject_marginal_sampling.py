@@ -1,17 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The marginalised engine survives an end-to-end sampler run.
+"""Run singleton marginalisation through sampling and posterior prediction.
 
-Split out of ``test_subject_marginal.py``, which holds every other claim about
-the singleton marginalisation. This one test is by some way the longest in the
-suite -- eight draws, but the cost is nutpie compiling the quadrature graph and
-a posterior-predictive pass that numba runs in object mode -- so it lives in a
-module of its own, where ``--dist loadfile`` can give it a worker to itself
-instead of gluing it to the twenty fast tests that share its fixture.
-
-The fixture it needs (``subject_marginal_context``) is in ``tests/conftest.py``
-for exactly that reason; rebuilding it here costs about two seconds.
+Keep this compilation-heavy test separate so loadfile scheduling can give it
+a worker. The shared graph fixture lives in conftest.py.
 """
 
 import numpy as np

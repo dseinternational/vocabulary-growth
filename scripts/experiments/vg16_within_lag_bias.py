@@ -1,59 +1,25 @@
 #!/usr/bin/env python
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Does VG16's within-child cross-lag baseline carry a short-T bias? Simulate and see.
+"""Compare two-step VG16 lag estimators on simulated repeated-visit data.
 
-VG16 reports the **population-relative** cross-lag baseline. Its **within-child**
-(RI-CLPM) alternative — which additionally subtracts the child's *own* estimated
-understood intercept — came out strongly negative when fitted as a diagnostic
-(`beta` ~ -0.60, 89% [-0.85, -0.35] at `dev`), and the report attributes that to a
-short-T (Nickell-type) / errors-in-variables artefact. **That attribution has
-only ever been reasoned, never demonstrated**, and the remedy for the bias
-depends on which mechanism is real.
+Use a stored posterior truth and the observed wave design, with stated
+``beta_lag`` values. Estimate the coefficient after either a population baseline,
+a fitted child comprehension baseline or an oracle child baseline is subtracted.
+The child-effect integration uses numerical quadrature; other nuisance quantities
+are fixed. This is not recovery of the full Bayesian joint fit.
 
-This is Stage 1 of `notes/202608151500-within-child-crosslag-feasibility.md`: it
-simulates outcomes from VG16's own posterior on the **real observed wave
-structure** at a *known* `beta_lag` — including `beta_lag = 0` — and then applies
-both baselines to the same simulated data. That last point is what makes the
-result interpretable: the two estimators differ only in whether the child's own
-intercept is subtracted, so any divergence between them is the mechanism under
-test and not a simulation artefact.
+The bespoke simulator walks waves in age order. The recovery harness supports
+VG16 by drawing all understood outcomes first, then deriving speech predictors
+from those simulated counts. Both must simulate a source before its consuming
+outcome; VG16 does not require a wave loop in the recovery harness.
 
-Why a bespoke simulator rather than `scripts/fit_recovery.py`: VG16 is
-deliberately excluded from that harness because its cross-lag predictor is a
-function of the outcome. Simulation therefore has to walk each child's waves in
-age order, deriving `x_lag` at wave t from the *already simulated* understood
-count at wave t-1. That sequential dependence is the whole point here, so it is
-built explicitly below. The wave walk and the lag indexing are the engine's own
-(`iter_subject_age_waves` / `prev_wave_lag`), imported rather than
-copied: an earlier copy of the engine's row-by-row walk reproduced its
-row-order-dependent lag-assignment defect here (issue #242).
+Comparing fitted and oracle baselines assesses sensitivity to plug-in intercept
+estimation in this design. Agreement at selected truths does not rule out that
+mechanism elsewhere, and discrepancies do not identify a unique cause.
 
-**What this does and does not establish.** The estimators are marginal
-likelihood, with the child effects integrated out by Gauss-Hermite quadrature
-and the population trajectory, study effects and dispersion held at their fitted
-values. They reproduce the *structure* that generates the bias — a child
-intercept estimated from the same waves that supply the lag — and so speak to
-its sign, its rough size and its dependence on wave count. They are not the full
-Bayesian joint fit VG16 runs, so a magnitude here should not be quoted as if it
-were VG16's own.
-
-**A first attempt used the obvious shortcut and got the sign wrong.** Regressing
-`logit(y_s / y_u)` on the lag returned a *positive* bias under every truth,
-including zero. The cause is that 159 of 973 conditional rows (16%) have zero
-spoken words, and `logit(0)` clips to -9.21 — a large negative outlier arising
-for exactly the small-vocabulary children who also have a low lag value, which
-manufactures positive correlation. Anything that reduces the outcome to a ratio
-inherits this. The beta-binomial likelihood below handles a zero count as a
-zero count, which is why it is used.
-
-The stored VG16 fit is validated for ``render`` (the same check
-``scripts/regenerate_plots.py`` applies) before its trace is opened: a fit whose
-recorded model definition, sampling configuration or raw-data fingerprint no
-longer matches the current registration is refused rather than read. That
-refusal is intended — simulating from a trace fitted before the wave-grouped
-lag correction (issue #242) would put a superseded posterior under the
-corrected wave walk; refit the model of record first.
+Validate the stored truth fit before reading it. Use a compatible fit after any
+lag-definition or prepared-data change.
 
 Usage::
 
@@ -332,9 +298,7 @@ def estimate(truth, design, sim, baseline):
     if baseline == "within":
         d_u_hat = _posterior_mean_d_u(truth, design, sim)
     elif baseline == "within-oracle":
-        # The child's TRUE intercept. If the plug-in and oracle variants agree,
-        # estimation error in that intercept — the errors-in-variables half of
-        # the attributed mechanism — is not producing the bias.
+        # Use the simulated intercept to assess sensitivity to plug-in estimation.
         d_u_hat = sim["d_u"]
     else:
         d_u_hat = None

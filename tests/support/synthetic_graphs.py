@@ -3,23 +3,14 @@
 
 """Build any registered model's real graph on one small fixed synthetic frame.
 
-Refactoring the builders needs a check that the graph did not move, and that
-check has to be a function of the **code alone**. Building against the prepared
-DuckDB would tie every recorded fingerprint to the data as well, so a legitimate
-data change would present as a refactor failure and a real refactor failure
-could hide inside one. Data changes are already guarded, exactly, by
+The fixed frame keeps graph checks independent of changes to the prepared
+DuckDB. Fit manifests check prepared data separately with
 ``data.analysis_frame_hash``.
 
-So the frame here is synthetic, deterministic and deliberately small: 48 rows,
-24 children with two administrations each, four studies, ages spread across
-whichever GP domain the definition declares. It is not a plausible dataset and
-is not meant to be -- nothing is fitted to it. It exists so that
-``build(context, definition)`` runs every branch the real definition selects and
-produces the same graph structure and the same log-probability expression it
-would on real data.
-
-Every registered model builds on it, all six engines included, at roughly a
-second each.
+The default frame has 48 rows, 24 children with two administrations each and
+four studies. Ages span the definition's GP domain. The frame supports each
+registered builder, but does not represent a plausible study or cover every
+missing-data branch. Nothing is fitted to it.
 """
 
 from __future__ import annotations
@@ -36,9 +27,7 @@ import pandas as pd
 from vocab_growth.models.catalogue import EngineAdapter, get
 from vocab_growth.models.common import ModelFitContext
 
-#: Rows in the synthetic frame, and administrations per child. Small enough to
-#: build quickly, large enough that every study and both administrations of a
-#: child are present -- the subject and study random-effect blocks need both.
+#: Default row count; each child has two administrations.
 N_ROWS = 48
 STUDIES = ("uk_01", "uk_02", "us_01", "nz_01")
 
@@ -81,10 +70,7 @@ def synthetic_frame(definition, n_rows: int = N_ROWS) -> pd.DataFrame:
         }
     )
 
-    # The joint engine's four-cell partition of `understood`, reconciled with
-    # the recorded margins exactly as its loaders require: signed ==
-    # signed_only + signed_spoken, spoken == spoken_only + signed_spoken, and
-    # the four cells summing to the comprehension total.
+    # Reconcile the four cells with the signed, spoken and understood margins.
     frame["signed_spoken"] = np.round(frame["signed"] * 0.4)
     frame["signed_only"] = frame["signed"] - frame["signed_spoken"]
     frame["spoken_only"] = frame["spoken"] - frame["signed_spoken"]
@@ -107,18 +93,12 @@ def synthetic_frame(definition, n_rows: int = N_ROWS) -> pd.DataFrame:
         + frame["spoken_only"]
         + frame["signed_spoken"]
     )
-    # The form ceiling every Down syndrome frame carries. Constant across the
-    # frame on purpose: `lag_same_form_only` drops a lag whose two waves sit on
-    # different forms, and this frame's children span two studies by
-    # construction (`study_code` cycles while `subject_code` repeats in pairs),
-    # so a per-study ceiling would drop *every* lag and take `beta_lag` out of
-    # the graph -- the one direction a synthetic stand-in must never move in.
+    # Each child's two rows have different study codes. A constant form ceiling
+    # prevents `lag_same_form_only` from discarding every lag and removing
+    # `beta_lag` from the graph.
     frame["survey_vocab_max"] = float(definition.n_trials)
 
-    # Sex, recorded per child and cycling girl / boy / unrecorded, so a model
-    # carrying the covariate builds every branch of its contrast (#324). Read
-    # only by a definition that sets `sex_effect_sigma`; every other graph is
-    # unaffected by the column.
+    # Exercise female, male and unrecorded sex codes, constant within each child.
     frame["sex"] = [("F", "M", None)[child % 3] for child in frame["subject_code"]]
 
     frame["holdout"] = False
@@ -135,10 +115,8 @@ def build_synthetic_model(
 ):
     """Run ``priors`` then ``build`` for ``definition`` and return the context.
 
-    The data-preparation stage is deliberately **not** run: it reads the
-    prepared DuckDB, prints tables and writes descriptive CSVs into a fit's
-    output directory. Its output for these purposes is a frame and a
-    ``BinomialModelData``, which :func:`synthetic_frame` supplies directly.
+    Supply the frame and ``BinomialModelData`` directly to avoid reading the
+    prepared DuckDB or producing descriptive reports.
     """
     if monkeypatch is not None:
         monkeypatch.setattr(
@@ -187,12 +165,10 @@ def build_registered_model(model_key: str, *, output_dir: str, monkeypatch=None)
 
 
 def graph_fingerprint(model) -> dict:
-    """What a refactor must not change about a built graph.
+    """Record variable names, dimensions and coordinate sizes for regression checks.
 
-    Names **in creation order**, not as sets: the order fixes the sampler's RNG
-    stream, so a reordering changes the draws of an otherwise identical model.
-    Dims and coords travel with them because a variable that keeps its name and
-    loses its dims silently changes what every consumer reads back.
+    Preserve creation order because variable order can affect random sampling.
+    Dimensions also form part of the trace interface used by downstream code.
     """
     dims_of = getattr(model, "named_vars_to_dims", {})
 
@@ -224,8 +200,8 @@ def fixed_point(model) -> dict:
     This starts from the model's initial values, so changing a prior can change
     the point. Regression comparisons must reuse saved values from the old
     model rather than call this function independently for both models.
-    Offsets keep the point away from symmetric prior centres; all coordinates
-    are transformed, so the offsets cannot leave the parameter support.
+    Offsets keep the point away from symmetric prior centres. Transformed
+    coordinates allow offsets without directly crossing constrained bounds.
     """
     point = {}
     for index, (name, value) in enumerate(sorted(model.initial_point().items())):

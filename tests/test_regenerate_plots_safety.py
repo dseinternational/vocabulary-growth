@@ -1,27 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for what ``regenerate_plots.py`` may and may not change in a fit.
+"""Check that redraws promote reporting outputs only after every stage succeeds.
 
-The script's contract is that a redraw changes figures and their companion
-CSVs and nothing else, and only after the whole redraw has succeeded. Two
-defects found on 2026-09-27, while figures were redrawn for the
-dse-research-utils 0.16.0 upgrade, broke it:
-
-* **Staging bypass.** The rebuilt context wrote into the promoted fit
-  directory until the plot stage, so the prior-density figures and the model
-  graph from ``priors`` and ``build`` replaced the fit's copies before staging
-  applied. An aborted VG24 redraw left them replaced.
-* **Cross-stack draws.** Engines without a samples extractor re-run the
-  posterior predictive from the sampling seed, which reproduces the stored
-  draws only on the fit's own numerical stack. VG13 came back from a newer
-  numpy and PyTensor with 17 companion CSVs moved by Monte Carlo noise.
-
-The engine here is a stub whose stages write into whatever reporting directory
-they are given, so any write that escapes staging lands in the fit directory
-where a test can see it. The fit directory holds a real ``trace.nc``, because
-the reproduction check reads the stored draws from it lazily, one chain at a
-time.
+Stub stages expose writes outside staging. A real stored trace lets tests
+compare regenerated predictive draws before accepting companion CSV changes.
 """
 
 import gc
@@ -190,11 +173,7 @@ def _regenerate(dry_run=False):
 
 @pytest.mark.parametrize("stage", ["build", "posterior_predictive", "plots"])
 def test_a_failed_redraw_leaves_the_fit_exactly_as_it_was(fit, stage):
-    """The defect: ``priors`` and ``build`` wrote into the fit before staging.
-
-    A failure in the build is the VG24 case. Later failures show that no
-    earlier stage's writes survive either.
-    """
+    """Discard every staged write when any redraw stage fails."""
     fit.use(_StubEngine(fail_in=stage))
 
     assert _regenerate() is False
@@ -224,7 +203,7 @@ def test_a_redraw_replaces_every_staged_figure_and_table_and_nothing_else(fit):
 
 
 def test_the_staging_root_is_keyed_by_model_id_not_label(fit, monkeypatch):
-    """The label is already in the staged path, and ``dot`` obeys MAX_PATH."""
+    """Use the shorter model ID in the staging root to limit nested path length."""
     seen = []
     engine = _StubEngine()
     plots = engine.stages["plots"]

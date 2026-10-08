@@ -328,9 +328,7 @@ _LEGACY_S = {
 
 
 def test_a_joint_model_may_anchor_one_outcome_and_not_the_other():
-    """VG13 anchors both and the DS joint models anchor neither, but nothing in
-    the configuration ties the two outcomes together — so the mixed case has to
-    work rather than merely not be exercised."""
+    """Allow different concentration parameterisations for the two outcomes."""
     config = _bivariate_config(kappa_anchored_u=_ANCHORED, **_LEGACY_S)
 
     with pm.Model() as model:
@@ -398,14 +396,9 @@ def test_derived_rows_are_labelled_per_outcome():
 
 
 def test_every_joint_model_with_subject_effects_on_both_outcomes_is_anchored():
-    """The calibration target is the *specification*, not the model.
+    """Use anchored priors for the selected two-child-effect models.
 
-    VG09, VG10, VG15 and VG16 carry subject intercepts on both understood and
-    `q` and share one frame, so one pair of blocks serves all four. VG13 is the
-    typically-developing counterpart. VG08 is the near miss the split has to get
-    right: it has a subject effect on understood but not on `q`, so the
-    conditional numbers are the wrong quantity for half of it and it stays whole
-    on the legacy form.
+    VG08 has no child effect on the speech rate and retains the legacy form.
     """
     for definition in (VG13, VG09, VG10, VG15, VG16):
         assert isinstance(definition.kappa_u, KappaAnchorPriorParams), definition.model_id
@@ -417,12 +410,7 @@ def test_every_joint_model_with_subject_effects_on_both_outcomes_is_anchored():
 
 
 def test_vg15_anchors_speech_but_not_signing():
-    """The mixed case, which only VG15 exercises.
-
-    Its understood and spoken outcomes share the calibrated Down syndrome joint
-    frame; the signed ratio has no calibration at all, so the two forms coexist
-    in one model and the engine has to keep them apart.
-    """
+    """Keep VG15 understood and speech priors anchored, with legacy signing priors."""
     assert isinstance(VG15.kappa_u, KappaAnchorPriorParams)
     assert isinstance(VG15.kappa_s, KappaAnchorPriorParams)
     assert isinstance(VG15.kappa_sign, KappaPriorParams)

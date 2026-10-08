@@ -233,10 +233,8 @@ def ds_td_spoken_vs_understood_vg20() -> None:
     ax.plot(ds["words_understood"], ds["s_q_median"], color=DS_COLOUR, lw=2.5,
             label="DS (VG20) median")
 
-    # The 1:1 line is the ceiling: a child cannot say more words than they
-    # understand, so every curve must lie on or below it. Drawing it stops the
-    # eye reading the gap between the two curves as larger than the space
-    # available for it.
+    # The model enforces spoken probability <= understood probability. This is
+    # a model constraint, not a claim that every reported checklist obeys it.
     upper = max(td["words_understood"].max(), ds["words_understood"].max())
     ax.plot([0, upper], [0, upper], color=plot_styles.MUTED_TEXT_COLOUR, lw=0.8,
             linestyle=":", label="says everything understood (1:1)")

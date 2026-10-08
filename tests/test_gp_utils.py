@@ -1,18 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Unit tests for the shared HSGP/trend build helpers.
+"""Check shared trend, GP, concentration and child-factor builders.
 
-Covers the kappa dispersion-closure factory (``make_kappa_of_z`` — pinning the
-closed form ``z -> kappa_min + exp(a_kappa + b_kappa * z)``), the two-anchor
-builder over the same curve (``build_kappa_of_z_anchored``), the trend + HSGP
-graph builders (``trend_and_gp`` / ``tent_and_gp`` — checking which RVs and
-deterministics they emit), ``get_hsgp_hyperparams`` (the boundary/basis
-sizing), and VG22's child-factor builder (``build_child_factor`` — pinning which
-raw loading entries exist, which are positive, and that the gauge is anchored on
-effects with between-child variance). Evaluating with constant inputs is
-sufficient (and matches the per-engine usage, where the same expression is built
-from random variables the caller has already created).
+Tests cover formulas, named graph variables, smooth clamp behaviour,
+child-factor identification and fixed HSGP geometry.
 """
 
 import numpy as np
@@ -201,12 +193,8 @@ def test_trend_and_gp_anchor_adds_no_free_rv():
 
 # --- clamp_above_hi ----------------------------------------------------------
 #
-# The mean levels off above the high anchor instead of extrapolating the line. The
-# transition is a soft minimum, so the mean stays differentiable and the fitted
-# curve inherits no elbow -- a hard min(z, sb_z) is continuous but kinks at the
-# anchor, which made VG10's spoken trajectory briefly non-monotone. Each test
-# draws the mean and the model's own intercept/slope jointly from one seeded draw,
-# so identities are checked against the same realisation.
+# The soft minimum levels the mean off with a differentiable transition. Each
+# test draws the mean, intercept and slope jointly to use the same realisation.
 
 _SOFT_BETA = CLAMP_SOFTNESS / (_GRID.sb_z - _GRID.sa_z)
 #: Largest departure of the soft form from a hard clamp, in z units, at the anchor.
@@ -254,7 +242,7 @@ def test_clamp_above_hi_leaves_the_mean_linear_well_below_the_high_anchor():
 
 
 def test_clamp_above_hi_still_extrapolates_below_the_low_anchor():
-    # One-sided by design: young-age extrapolation is accurate and must remain.
+    # The clamp acts at the high anchor and retains the lower-age linear trend.
     z = np.array([-3.0, -2.0, -1.0])
     f, icpt, slope = _draw_mean(True, z)
     assert np.allclose(f, icpt + slope * z, atol=1e-4)
@@ -270,7 +258,7 @@ def test_clamp_above_hi_costs_a_bounded_offset_at_the_anchor_itself():
 
 
 def test_clamp_above_hi_keeps_the_mean_monotone_through_the_anchor():
-    """The property a hard min(z, sb_z) fails, and the reason for the soft form."""
+    """Keep the selected mean increasing through the smooth clamp transition."""
     z = np.linspace(_GRID.sb_z - 1.0, _GRID.sb_z + 1.0, 400)
     f, _, _ = _draw_mean(True, z)
     assert np.all(np.diff(f) > 0)  # monotone: no dip at the anchor
@@ -496,13 +484,8 @@ def test_child_factor_anchor_order_is_levels_then_q_rate_then_u_rate():
     assert [_EFFECTS[i] for i in CHILD_FACTOR_ANCHOR_ORDER] == ["b0u", "b0q", "b1q", "b1u"]
 
 
-# Since issue #266 finding 5 the two leading anchor rows are no longer sampled
-# as raw entries: b0u's direction is the constant e_0, and b0q's is set by the
-# designed `rho_uq`. Both changes remove a magnitude that cancelled before
-# reaching Sigma. The rows that remain keep the normalise-a-Normal construction,
-# because the alternative -- a chart on the sphere -- wraps at its azimuth and
-# was measured losing up to 17x the effective sample size and reaching R-hat
-# 1.053, which this project's gate fails.
+# b0u uses the constant e_0 direction; b0q uses `rho_uq`. The remaining rows
+# normalise raw Normal entries to remove their unidentified magnitudes.
 @pytest.mark.parametrize(
     "rank, expected_entries, expected_positive",
     [
@@ -521,20 +504,16 @@ def test_child_factor_anchors_on_live_effects(rank, expected_entries, expected_p
     positive = {key for key, dist in entries.items() if dist == "halfnormal"}
     assert positive == expected_positive
     assert all(dist in {"halfnormal", "normal"} for dist in entries.values())
-    # The comprehension rate (row 1) never carries a diagonal at any registered
-    # rank: it is the one effect every fit of the family puts at ~0.
+    # The comprehension slope (row 1) does not anchor a factor direction.
     assert all(row != 1 for row, _col in positive)
 
 
 @pytest.mark.parametrize("rank, expected", [(1, 4), (2, 7), (3, 9)])
 def test_child_factor_free_covariance_parameter_count(rank, expected):
-    """Gate 1's rank table (4, 7, 9) is unchanged by the reparameterisation.
+    """Keep the identified covariance-direction counts at 4, 7 and 9.
 
-    This is the check that the design did not change what Gate 1 analysed: the
-    identified count is the same, only the number of parameters spent reaching
-    it has fallen. `rho_uq_raw` is one identified direction parameter; the raw
-    entries contribute one fewer than they number, per row, to the unit-row
-    normalisation.
+    Each normalised raw row loses one magnitude direction. ``rho_uq_raw``
+    contributes one identified direction.
     """
     m = _build_child_factor(rank)
     names = {rv.name for rv in m.free_RVs}

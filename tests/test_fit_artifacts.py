@@ -191,12 +191,7 @@ def test_publication_requires_positive_hard_convergence_evidence(tmp_path, purpo
 
 
 def test_a_changed_prepared_frame_invalidates_a_fit(tmp_path):
-    """The defect issue #266 finding 1 names: loader-rule drift went unseen.
-
-    The raw-CSV fingerprint cannot see it, because the masking and exclusion
-    rules run in Python *after* the CSVs are read — so a rule change leaves the
-    raw hash equal while the frame the model was fitted to no longer exists.
-    """
+    """Detect changed preparation rules even when the raw-data hash is unchanged."""
     output_dir = tmp_path / "fit"
     _write_complete_output(output_dir)
 
@@ -218,14 +213,10 @@ def test_a_changed_prepared_frame_invalidates_a_fit(tmp_path):
 
 
 def test_a_matching_frame_hash_excuses_a_raw_data_mismatch(tmp_path):
-    """New data a model never reads must not stale its fit.
+    """Allow changed raw inputs when the model's exact prepared frame is unchanged.
 
-    The raw fingerprint hashes every CSV in ``data/``, so a new Down syndrome
-    study CSV changes it for every model — including the typically-developing
-    models, whose prepared frames contain no Down syndrome rows. The model
-    consumes the raw data only through its prepared frame, so a matching exact
-    frame hash vouches for the fit and the fingerprint mismatch alone is not a
-    reason to refit.
+    This tests data compatibility only. Definition, executable identity and
+    fit-quality checks remain separate requirements.
     """
     output_dir = tmp_path / "fit"
     _write_complete_output(output_dir)
@@ -558,12 +549,7 @@ def test_successful_pipeline_atomically_promotes_complete_fit(tmp_path, monkeypa
 
 
 def test_an_unclassified_sampling_tier_is_refused_before_the_banner(tmp_path, monkeypatch):
-    """`--config` has no argparse `choices`, so this is the only thing stopping an
-    unknown tier from reaching the sampler and producing output with no
-    convergence-gate classification. It used to be a bare
-    `is_reporting_quality_config(config)` expression statement with its return value
-    discarded -- one deletion from gone, with nothing pinning it at this call site.
-    """
+    """Reject unknown sampling tiers before stages or output banners run."""
     env.set_output_root(str(tmp_path))
     banner_calls = []
     monkeypatch.setattr(
@@ -587,14 +573,7 @@ def test_an_unclassified_sampling_tier_is_refused_before_the_banner(tmp_path, mo
 def test_a_pipeline_whose_first_stage_is_not_data_preparation_is_refused(
     tmp_path, monkeypatch
 ):
-    """The manifest is written after stage 0 and needs the prepared frame.
-
-    Before this was asserted, an engine author who put the priors stage first --
-    plausible, since priors depend on no data in any engine -- got "the fit
-    context for VGnn-dev has no analysis DataFrame set" from a manifest writer
-    they never invoked, with nothing in `run_fit_pipeline` to explain why ordering
-    mattered.
-    """
+    """Require a prepared frame before writing the stage-zero fit manifest."""
     env.set_output_root(str(tmp_path))
     monkeypatch.setattr(
         "vocab_growth.models.common.env_info.report_environment_info", lambda: None
@@ -617,14 +596,9 @@ def test_a_pipeline_whose_first_stage_is_not_data_preparation_is_refused(
 def test_a_substituted_first_stage_that_loads_the_data_is_accepted(
     tmp_path, monkeypatch
 ):
-    """The recovery harness renames stage 0, and that must stay allowed.
+    """Allow a simulation loader to replace the first preparation stage.
 
-    `recovery/refit.py` and `scripts/experiments/vg10_under_vg20_truth.py` replace
-    the engine's own "Prepare data" with a loader for a simulated frame, under a
-    name that says so. An earlier version of the guard above compared stage 0's
-    *name*, which rejected both -- every `scripts/fit_recovery.py` fit died after
-    its loader stage had already run. The precondition the manifest writer actually
-    has is that the data is loaded, whatever the stage was called.
+    The manifest needs loaded data, regardless of the stage's display name.
     """
     env.set_output_root(str(tmp_path))
     monkeypatch.setattr(
@@ -692,13 +666,10 @@ def test_every_stage_factory_names_its_first_stage_the_way_the_pipeline_requires
 
 
 def test_the_staging_root_does_not_repeat_the_model_label(tmp_path):
-    """A short tag, because `dot` obeys MAX_PATH whatever Windows is set to.
+    """Keep staging paths short by avoiding a repeated configuration label.
 
-    The staging root contains a ``models/<label>/`` directory, so carrying the
-    label in the root's own name too spent 60-79 characters saying it twice.
-    On 2026-09-06 that pushed the VG10 ``us01-masked-production-reinstated``
-    arm's ``gp_model_graph.svg`` to 262 characters and graphviz silently
-    dropped it, while Python wrote a 273-character sibling beside it.
+    The inner models directory already carries the full label. Shorter paths
+    reduce the risk of platform or external-tool path limits.
     """
     from vocab_growth.fit_artifacts import create_staging_root
     from vocab_growth.models.definitions import MODEL_REGISTRY
@@ -767,12 +738,10 @@ def test_write_json_atomic_keeps_the_stored_format_and_creates_parents(tmp_path)
 
 
 def test_write_json_atomic_keeps_the_historical_file_mode(tmp_path):
-    """The shared temporary file is 0600; these artefacts are not.
+    """Apply the normal output-file permissions after atomic replacement.
 
-    Fit output is read back by other accounts on a shared host and by the
-    uploader, and every file this repository has written carried
-    ``0o666 & ~umask``. Restoring that explicitly is the migration's decision,
-    so it is checked rather than left to whichever mode the helper uses.
+    The expected mode is ``0o666 & ~umask``, rather than the temporary file's
+    private permissions.
     """
     import os
     import stat

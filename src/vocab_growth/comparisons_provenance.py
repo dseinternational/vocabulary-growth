@@ -1,48 +1,18 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Provenance manifests for cross-model comparison outputs (issue #266).
+"""Record and validate provenance for comparison figures and tables.
 
-Comparison figures and tables are derived from per-model fitted output, but
-until issue #266 they carried no record of *which* fits they were derived
-from: ``sync_report_figures.py`` validated every model directory it copied and
-then copied ``output/comparisons/`` wholesale, so a comparison generated from
-a since-replaced fit was indistinguishable from a current one.
+Each generator writes a manifest entry with its output hashes, contributing-fit
+manifest hashes, direct source files or pool-data hash, and generating code and
+checkout state. A changed fit manifest or input requires regeneration of its
+comparison. Strict sync and publication also require matching code signatures
+and a clean generating checkout.
 
-A comparison script records its provenance with :func:`write_comparison_manifest`
-— one entry per script, merged into a single ``comparison_manifest.json`` in
-the comparisons directory, naming its output files and fingerprinting every
-contributing fit's ``fit_manifest.json``. The sync validates the manifest with
-:func:`validate_comparison_manifest`: a fingerprint mismatch means a
-contributing model was refitted after the comparison was generated, and the
-comparison must be regenerated before it can be published.
-
-Coverage was ratcheted rather than assumed: files in the comparisons directory
-that no manifest entry claims are reported as warnings, so comparison scripts
-that did not yet record provenance stayed visible without blocking the ones
-that did. Every script that writes into the comparisons root records an entry
-as of 2026-09-07, and the three that touch the directory without generating
-anything carry their reason in :data:`MANIFEST_EXEMPT_SCRIPTS`, which
-``tests/test_comparison_manifest_coverage.py`` pins -- so an unclaimed file now
-means a comparison that has not been regenerated rather than a script nobody
-has wired up. The nested ``recovery/`` and ``sensitivity/`` sub-directories are
-produced by their own validated pipelines and are outside this manifest's
-scope.
-
-A script that reads no fitted output -- ``compare_matched_designs.py`` reads
-one source CSV -- records its inputs as ``source_files`` instead (#289 task
-4.9), hashed the same way, so a comparison that outlives a change to its
-source is caught the way one that outlives a refit is.
-
-Each entry also records the checkout that generated it -- the Git commit and
-dirty flag, beside the code signature -- because a refit cycle no longer
-freezes the repository (issue #362). The cycle runs from a worktree pinned at
-its tag while development continues in another checkout, and both write into
-the one shared output root. A comparison regenerated from the development
-checkout, with an edited generator or uncommitted changes, would otherwise pass
-the sync as though it belonged to the pinned fits. Strict sync and publication
-therefore apply the rule the fits follow: a clean entry whose signature matches
-the validating checkout's.
+The manifest covers files directly in the comparisons root. Recovery and
+sensitivity subdirectories use their own validation. Unclaimed files produce
+warnings during ordinary validation and errors during publication.
+``MANIFEST_EXEMPT_SCRIPTS`` documents writers or consumers outside this scope.
 """
 
 from __future__ import annotations
@@ -64,10 +34,7 @@ from vocab_growth.fit_artifacts import (
 
 COMPARISON_MANIFEST_FILENAME = "comparison_manifest.json"
 
-#: Scripts that touch the comparisons directory and deliberately record no
-#: manifest entry, with the reason. Recorded rather than left as an absence, so
-#: the coverage test can tell "exempt" from "not wired up yet" -- which is the
-#: distinction that let eleven scripts sit unrecorded for a month.
+#: Scripts outside the manifest's producer scope, with reasons for coverage tests.
 MANIFEST_EXEMPT_SCRIPTS: dict[str, str] = {
     "compare_sensitivity.py": (
         "writes only into the nested ``sensitivity/`` sub-directory, which is "
@@ -173,7 +140,7 @@ def comparison_code_signature(script: str) -> dict:
 def fit_manifest_fingerprint(model_output_dir: str) -> dict:
     """An identifying fingerprint of one contributing fit's manifest.
 
-    The whole-file hash is the identity check — any refit rewrites the
+    The whole-file hash is the identity check. A refit rewrites the
     manifest (new ``created_at_utc`` at minimum). The frame and raw-data
     hashes are carried alongside so a mismatch report can say *what* moved.
     """
@@ -197,17 +164,10 @@ def _source_relative_path(path: str, source_root: str) -> str:
 class ComparisonOutputs:
     """The files a comparison run actually wrote into the comparisons root.
 
-    Hand-maintained output lists are the obvious way to fill ``outputs``, and
-    ``compare_models.py`` has one -- but they go stale silently in the direction
-    that matters: a script that gains a figure keeps claiming the old set, and
-    the new file shows up as unclaimed provenance in the sync. Snapshotting the
-    directory instead means the claim is derived from the run.
-
     Detection is by ``(size, mtime_ns)``, so a rewrite producing a
     byte-identical file at an unchanged nanosecond timestamp would be missed.
-    Nothing in this repository writes that way -- every producer here goes
-    through ``to_csv`` or a Matplotlib save -- and the failure mode is a file
-    reported as unclaimed rather than one wrongly vouched for.
+    Normal CSV and Matplotlib writes change the timestamp. A missed file is
+    unclaimed by this run rather than assigned its provenance.
 
     Only the top level is watched: the nested ``recovery/`` and ``sensitivity/``
     directories are produced by their own validated pipelines and are outside
@@ -262,13 +222,12 @@ def write_comparison_manifest(
     its hash, and :func:`validate_comparison_manifest` checks both.
 
     ``source_data_hash`` is for a comparison derived from the pool rather than
-    from any fit -- ``pool_descriptives.py`` describes the data itself, and
+    from any fit. ``pool_descriptives.py`` describes the data itself, and
     ``kfold_loso.py`` fits its own folds rather than reading a model of record.
-    Neither has a contributing fit to fingerprint, and recording nothing would
-    make them indistinguishable from a script that simply has not been wired up.
+    Neither has a contributing fit to fingerprint.
 
     ``arguments`` records the invocation. A script whose outputs depend on its
-    arguments -- ``compare_ds_td_re.py`` takes outcome tokens -- writes only what
+    arguments, such as ``compare_ds_td_re.py``'s outcome tokens, writes only what
     that run produced, so an entry claiming three files where the directory holds
     nine is a *correct* record of a partial run rather than a defect, and the
     argument list is what makes that legible.

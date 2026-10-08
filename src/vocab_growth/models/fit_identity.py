@@ -1,44 +1,19 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""What makes a fit the same fit: a versioned, classified definition payload.
+"""Compare stored and expected statistical definitions without hiding differences.
 
-A fit is validated by comparing the definition recorded in its manifest against
-the one registered today. That comparison was raw dictionary equality over
-``dataclasses.asdict``, which has one consequence that has shaped the model API
-more than any statistical consideration: **adding a field with a default
-invalidates every historical fit of that dataclass**, even when the default
-reproduces exactly what those fits did.
+FIELD_ROLES labels fields as graph, data, reporting or identity. Every difference
+fails validation regardless of its role. An unclassified field counts as graph
+affecting, and the completeness test requires an explicit classification.
 
-That is why VG19's child slope and Proposal A1's age-varying scale arrive
-through a scalar field that holds an object, why VG20's correlation and VG22's
-factor live on sibling subclasses rather than on the shared base, and why
-``CLAMP_Q_ONLY`` rides on ``clamp_mean_above_hi_anchor``. Each is a good local
-decision forced by a comparison that cannot tell "this model has a new option,
-set to the value that means what it always meant" from "this model changed".
+BACKFILL_DEFAULTS permits an absent historical field only when its recorded
+absence means exactly the expected value. Each entry needs evidence about the
+pre-field behaviour. A default on a dataclass alone does not establish that
+equivalence.
 
-This module makes it able to tell, without loosening anything:
-
-* :data:`FIELD_ROLES` classifies every field of every registered definition
-  class as graph-affecting, data-affecting, reporting or identity. The
-  classification is **complete** -- ``tests/test_fit_identity.py`` checks that
-  against the registry -- and it **fails closed**: a field with no entry is
-  treated as graph-affecting, the strictest reading, so forgetting to classify a
-  new field cannot make a fit validate that should not.
-
-* :data:`BACKFILL_DEFAULTS` names the fields whose *absence* from an older
-  manifest is equivalent to a stated value. An entry is a claim that every fit
-  made before the field existed behaved exactly as a fit with the field set to
-  that value, and it is the only thing that excuses a difference. Adding a field
-  without an entry still invalidates history, which is the correct default.
-
-**Every difference remains fatal, including reporting and identity ones.** The
-classification's job here is to say *what kind* of thing moved, so a reader of
-the failure can tell a changed prior from a changed query grid. Whether a
-reporting-only difference should stop a fit being published is a separate
-decision, with a real consequence -- a changed ``ages_query`` leaves the stored
-query outputs describing ages the report no longer asks for -- and it is not
-made here.
+This definition check is separate from prepared-frame hashes, executable
+signatures and sampling-quality checks.
 """
 
 from __future__ import annotations

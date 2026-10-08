@@ -19,7 +19,7 @@
 #   P  comparisons, figure sync (--allow-caveats) and the report-book render.
 #      Uploads and publishes nothing; publication is the study owner's call.
 #
-# Every step runs at most once: success leaves <step>.ok under the campaign state
+# Successful steps are skipped on rerun: success leaves <step>.ok under the state
 # directory and a rerun skips it, so `run` after an interruption resumes. A
 # failed step leaves <step>.failed and its log; delete nothing to retry, just
 # rerun. Steps are keyed to the tag, so a new tag starts a new campaign.
@@ -309,9 +309,9 @@ case $command in
         ;;
     launch)
         (( $# )) || usage
-        # Own scope, so a kernel OOM elsewhere cannot take the campaign with it,
-        # and setsid, so it outlives the shell that started it. The runbook's
-        # OOM record explains both.
+        # Separate the campaign from the login session and sibling process groups.
+        # This limits some OOM failure effects but cannot prevent the kernel
+        # from selecting a process in this campaign when memory runs out.
         unit="vg-campaign-$(date -u +%Y%m%dT%H%M%S)"
         setsid nohup systemd-run --user --scope --collect --unit="$unit" -p OOMPolicy=continue \
             -- "${BASH_SOURCE[0]}" run "$@" >"$STATE/launch-$unit.out" 2>&1 </dev/null &

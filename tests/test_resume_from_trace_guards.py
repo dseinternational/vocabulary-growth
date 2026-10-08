@@ -1,25 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for the fail-closed guards in ``scripts/resume_from_trace.py``.
+"""Check data and definition guards when reusing a retained posterior.
 
-``resume_from_trace.py`` writes a current manifest around an old posterior, so
-its guards are the only thing standing between a retained trace and summaries
-that describe data it was never fitted to. Until 2026-09-06 the data guard was
-the **raw-CSV fingerprint alone** -- the defect
-[#266](https://github.com/dseinternational/vocabulary-growth/issues/266)
-finding 1 named for this script -- which is wrong in both directions:
-
-* it cannot see a loader-rule change, because the masking and exclusion rules
-  run in Python *after* the CSVs are read, so a rule change leaves the raw hash
-  equal while the prepared frame drifts; and
-* it fires on raw churn the model never reads, so a new Down syndrome study CSV
-  would refuse a resume of a typically-developing fit whose frame is untouched.
-
-The exact prepared-frame hash fixes both, combined with the fingerprint exactly
-as ``fit_artifacts.validate_fit_output`` combines them. These tests pin that
-combination, including the case a plain equality check gets wrong: a manifest
-recording **no** frame hash must be refused rather than waved through.
+Raw fingerprints cannot detect loader-rule changes and can change for sources
+a model does not use. Prepared-frame hashes check the actual fitting rows.
+These data checks complement definition and executable-implementation checks.
 """
 
 import importlib.util
@@ -110,12 +96,10 @@ def test_a_drifted_frame_is_refused_although_the_raw_data_is_unchanged(
 
 
 def test_a_matching_frame_excuses_a_changed_fingerprint(written_manifest, definition):
-    """Raw churn in CSVs this model never reads must not refuse the resume.
+    """Accept raw-source changes when the model's prepared frame still matches.
 
-    The same excuse ``validate_fit_output`` applies, and the reason it is safe is
-    the same: the fingerprint covers every CSV in ``data/`` while a model reads
-    the raw data only through its own prepared frame, so a frame that still
-    rebuilds identically vouches for the fit.
+    This establishes data compatibility only; other guards check the definition
+    and executable implementation.
     """
     manifest = _verify(written_manifest(raw="sha256:a-new-study-csv-arrived"), definition)
     assert manifest["data"]["source_data_hash"] == "sha256:a-new-study-csv-arrived"
@@ -131,13 +115,7 @@ def test_both_hashes_moving_is_refused(written_manifest, definition):
 
 
 def test_a_manifest_with_no_frame_hash_is_refused(written_manifest, definition):
-    """A fit predating the frame hash is unverifiable, not assumed current.
-
-    This is the case an equality check alone gets wrong in the dangerous
-    direction: ``None != CURRENT_FRAME`` happens to refuse here, but the message
-    has to say *why* -- there is nothing to compare -- because "refit" is the
-    only remedy, where a drifted frame might instead be a rule change to revert.
-    """
+    """Reject a missing prepared-frame hash because data compatibility cannot be verified."""
     with pytest.raises(ValueError, match="records no prepared-frame hash"):
         _verify(written_manifest(frame=None), definition)
 

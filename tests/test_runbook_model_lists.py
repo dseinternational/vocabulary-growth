@@ -1,26 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The refit runbook's parallel-pass model lists must cover the registry.
+"""Check hand-written parallel runbook lists against the model registry.
 
-`run_replication.ps1` derives its model list from `MODEL_REGISTRY` when
-`-Models` is omitted, so the default sequential path cannot go stale. The
-runbook's *parallel* recipe does not use that path: it splits the registry by
-hand into a Down syndrome pool and a serial typically-developing pass, and
-passes each as an explicit `-Models` list. A model missing from both is never
-queued, and nothing downstream notices — `validate_models` checks only the
-models the run was given, so the run ends `SUCCESS` having fitted a subset.
-
-That is exactly what happened between VG21/VG22/VG23 being registered and the
-2026-08 refit: all three were absent from both lists. The same class of defect
-had already been found twice — the three agent-instruction files listing the
-old model set, and the sensitivity suite's hand-maintained base-model map that
-failed as a bare `KeyError: 'vg16'` — so this is the third time a hand-copied
-model list has drifted from the registry, and the first time it is checked.
-
-The lists are parsed out of the runbook rather than restated here. Restating
-them would give two copies to keep in sync and a test that passes while the
-document a human actually reads is wrong.
+Explicit model lists bypass the replication driver's default registry lookup.
+Parse the published commands and prose so an omitted model or stale scope
+count produces a failing check.
 """
 
 import re
@@ -127,18 +112,7 @@ def _scope_table_counts() -> dict[str, int]:
 
 
 def test_the_scope_table_counts_match_the_catalogue():
-    """The `-Scope` table's "N today" figures are derived, so they go stale silently.
-
-    They are prose, not a list, so the checks above cannot see them: registering
-    VG24 on 2026-09-06 moved `publication` from 13 to 14 and `all` from 20 to 21
-    and left the table reading the old pair, which is the same drift this file
-    was written for -- a hand-copied figure that no longer describes the
-    registry. A reader sizing a run from the table would under-count by one
-    model in each column.
-
-    `publication` is *models of record + TD references + unclassified* because
-    unclassified fails closed; `all` is the whole registry.
-    """
+    """Compare documented scope counts with the catalogue's publication and full sets."""
     from vocab_growth.models.catalogue import CATALOGUE
 
     roles = {

@@ -1,23 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for the parameter-recovery simulation invariants (issue #163).
+"""Check simulation coherence, file round trips and row placement.
 
-Data-free and sampling-free, so these run in CI. They cover the three places the
-simulator can be quietly wrong:
-
-1. **Nested-likelihood coherence.** The synthetic data must be fitted under the
-   same decomposition that generated it. The simulator draws a child count
-   against the simulated parent, so every observed child row whose parent is a
-   valid total must come back classified as nested — including the rows that were
-   *marginal* in the real data because the recorded child count exceeded its
-   parent. If that stopped holding, the refit would fit a different likelihood
-   from the one that produced the data.
-2. **The frame round trip.** The synthetic frame is handed to the refit through a
-   file. A lossy write would surface as an unexplained difference in the refit
-   rather than as an error here.
-3. **Write-back placement.** Simulated values must land on exactly the rows the
-   likelihood covers, leaving the real missingness pattern untouched.
+Synthetic nested counts must use their simulated parent totals. Stored frames
+must preserve values, supported dtypes and missingness. Write simulated values
+only into rows covered by the likelihood.
 """
 
 import numpy as np
@@ -239,12 +227,7 @@ def test_write_column_rejects_an_unknown_column():
 
 
 def test_frame_round_trip_preserves_values_dtypes_and_missingness(tmp_path):
-    """The frame reaches the refit through a file, so it must survive exactly.
-
-    Parquet via DuckDB keeps dtypes as well as values, so this asserts dtype
-    identity — the property a text round trip could not offer, and the reason a
-    numeric-looking ``subject_id`` cannot silently become an integer.
-    """
+    """Preserve frame values, supported dtypes and missingness through storage."""
     frame = _bivariate_frame()
     frame["subject_key"] = ["a::1", "a::2", "b::3", "b::4", "b::5"]
     # All-numeric-looking string ids: the case a CSV round trip would coerce.
@@ -279,11 +262,7 @@ def test_frame_round_trip_reports_a_lossy_write(tmp_path, monkeypatch):
 
 
 def test_frame_round_trip_catches_a_dtype_change(tmp_path, monkeypatch):
-    """Values surviving is not enough — a dtype change must also abort.
-
-    An integer study code arriving back as a float would still compare equal
-    numerically, but the engines index with it.
-    """
+    """Reject dtype changes even when numeric values compare equal."""
     frame = _bivariate_frame()
     path = tmp_path / "synthetic.parquet"
 
@@ -305,11 +284,10 @@ def test_reading_a_missing_frame_says_so(tmp_path):
 
 
 def test_truth_draws_are_spread_and_distinct_within_a_chain():
-    """Replicates must land on well-separated draws, not adjacent ones.
+    """Spread truth draws across a chain without moving earlier replicate positions.
 
-    Adjacent draws in a Markov chain are autocorrelated, so they would be
-    near-duplicate truths. The positions must also be stable: adding a fourth
-    replicate must not move the draws the first three already used.
+    Spacing reduces reliance on nearby, potentially correlated draws; it does not
+    establish independence between selected truths.
     """
     from vocab_growth.recovery.simulate import _spread_index
 
@@ -374,13 +352,7 @@ def test_coherence_check_rejects_a_total_that_drifts_from_its_parent():
 
 
 def test_frame_round_trip_accepts_an_object_dtype_string_column(tmp_path):
-    """An `object` column of strings comes back as pandas 3's `str` dtype.
-
-    The values are unchanged, so this is a faithful round trip and must not
-    abort. It reached VG15 and not the tests because a DataFrame built from
-    string literals is already `str` under pandas 3 — only a column constructed
-    explicitly as `object`, as the real analysis frames carry, shows the pair.
-    """
+    """Accept object-to-string dtype conversion when string values are unchanged."""
     frame = _bivariate_frame()
     frame["subject_id"] = pd.Series(
         ["0012", "34", "56", "78", "90"], dtype=object, index=frame.index
@@ -464,7 +436,7 @@ def test_load_simulation_rejects_a_definition_that_has_moved(tmp_path):
 
 
 def test_load_simulation_names_the_fields_that_differ(tmp_path):
-    """The error has to be actionable — "it changed" is not a diagnosis."""
+    """Identify changed definition fields in the provenance error."""
     from dataclasses import replace
 
     from vocab_growth.models.definitions import MODEL_REGISTRY

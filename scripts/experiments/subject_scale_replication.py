@@ -2,86 +2,29 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Is the between-child scale underestimated because replication is thin?
+"""Explore recovery of a between-child scale under different visit designs.
 
-The question
-------------
-Parameter recovery underestimates the between-child scale in 9 of 9 replicates
-across VG10, VG12 and VG20, by roughly 3-6%. It is not the sampling tier (VG20
-at ``rep`` moves the estimate by 0.19% of the truth), not the prior's location
-(``HalfNormal(1.5)`` has mean 1.197, above the truths of 0.78-0.81, so shrinkage
-pulls *up*), not ``subject_variance_partition`` (present at the same size
-without it), and not posterior skew (mean equals median to four decimals and the
-median sits at 0.484-0.491 of its own interval).
+Simulate Beta-Binomial counts with a child effect. Compare singleton, mixed and
+triplicate visits, then add age-varying means, study effects, changing dispersion,
+clustered visit ages, small trial counts and means near the boundaries. Later
+conditions use first-visit ages from the observed Down syndrome pool.
 
-What is left is the design. In the Down syndrome pool 432 of 767 children appear
-once; in the typically-developing pools it is worse. Separating a persistent
-child effect from Beta-Binomial dispersion when most clusters hold one
-observation is the textbook hard case, and [#229] is a list of options for
-reparameterising around it -- written on the premise that the partition is the
-cause, which is now ruled out.
+These reduced models test possible sources of the recovery discrepancies in
+issue #229. A discrepancy in one condition supports investigation of that
+condition; its absence in a few replicates does not rule out the mechanism in
+the full model. The location of a prior mean relative to the truth does not by
+itself determine the direction of posterior bias.
 
-This script tests the design directly, on a model stripped of everything the
-fitted models add. No GP, no anchors, no study effects, no age, no second
-outcome: one mean, one child scale, one dispersion. If the bias appears here, it
-is intrinsic to estimating a between-child scale from thin replication and no
-reparameterisation in #229 removes it -- which promotes option 4 (report total
-scatter) from fallback to the only option that survives. If it does not appear,
-something in the full models is responsible and is worth hunting.
-
-The design
-----------
-Truth is fixed across conditions; only the replication structure moves.
-
-    all-singleton   N children, 1 observation each
-    observed-mix    the DS pool's actual structure: 56% seen once, the rest 2-3
-    all-triplicate  N children, 3 observations each
-    age-varying     observed-mix, plus an age-varying mean that the model must
-                    estimate with a flexible basis rather than being told
-    with-study      observed-mix, plus children nested in studies with a study
-                    random intercept the model must also estimate
-    age-varying-kappa   observed-mix, with the dispersion itself varying in age
-    clustered-ages  age-varying, but a child's repeat visits sit a few months
-                    apart as they do in the real pools, instead of being spread
-                    independently across the whole age range
-    floor-p0        observed-mix at p = 0.05 instead of 0.30
-    ceiling-p0      observed-mix at p = 0.90
-    floor-small-n   observed-mix at p = 0.05 with the real pools' small
-                    denominators, so exact zeros actually occur
-
-First pass (6 replicates, 2026-08-19): all seven of the original conditions
-returned within +-1.4% of the realised spread, none of them the -3 to -6% the
-fitted models show. Three -- `age-varying` (1.066), `with-study` (1.019) and
-`clustered-ages` (1.117) -- missed the project's R-hat 1.01 gate, so they are
-not evidence either way and are re-run here at a longer tune.
-
-The last three conditions exist because the first seven shared a blind spot:
-every one held the mean proportion at 0.30, the most informative part of the
-logit curve, while the fitted models estimate the comprehension scale where the
-median proportion is 0.046 and the conditional spoken share is 0.000 outright.
-The recovery matrices point the same way -- the bias is on the comprehension
-scale and on `kappa_young`, not on `tau_subj_q` -- so the boundary is the first
-thing to test, not the eighth.
-
-The fourth condition is the one that matters once the first three come back
-clean. Every fitted model in this project puts a linear trend plus a
-Hilbert-space GP on the mean, and children sit at different ages; a mean flexible
-enough to follow the trajectory can also follow some of the between-child
-variation, which would bias the child scale low. That is invisible in a
-constant-mean simulation, which is why the first three conditions cannot rule it
-out -- they can only rule out replication as the explanation.
-
-``observed-mix`` is the anchor: it should reproduce the fitted models' bias if
-this stripped model is a fair proxy for them. ``all-triplicate`` holds the child
-count fixed and adds replication, so a bias that shrinks there is about
-information per child rather than about the number of children.
+Score the fitted scale against both the nominal generating scale and the
+realised spread of the simulated effects. The realised spread varies between
+replicates even when the generating scale is fixed. Check convergence before
+interpreting a condition's estimates.
 
 Usage::
 
     python scripts/experiments/subject_scale_replication.py
     python scripts/experiments/subject_scale_replication.py --replicates 5 --children 767
-    python scripts/experiments/subject_scale_replication.py \
-        --conditions floor-p0,ceiling-p0,floor-small-n --replicates 6 --suffix _p0
+    python scripts/experiments/subject_scale_replication.py --conditions floor-p0,ceiling-p0,floor-small-n --replicates 6 --suffix _p0
 """
 
 from __future__ import annotations
@@ -98,10 +41,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
 from vocab_growth import environment as env  # noqa: E402
 
-#: Truth. `tau` and `kappa` are the fitted models' own scale: tau_subj_u sits at
-#: 0.78-0.81 across the recovery truths, and kappa_old_u at about 25. `p0` puts
-#: the mean proportion mid-range, away from both boundaries, so nothing here is
-#: a ceiling or floor effect.
+#: Fixed generating values for the reduced model, with P0 away from boundaries.
 TAU_TRUE = 0.79
 KAPPA_TRUE = 25.0
 P0 = 0.30
@@ -118,11 +58,7 @@ N_SINGLETON = 432
 AGE_LO, AGE_HI = 8.0, 115.0
 N_BASIS = 8
 
-#: The real pools' repeat structure: a child's second visit is a median 6 months
-#: after their first (IQR 5-7.2, from notes/202608141600 §6). `age-varying`
-#: spread repeats independently over the whole range, which is the one thing that
-#: makes a flexible mean *unable* to follow a single child -- their observations
-#: are nowhere near each other. This condition puts them where they really sit.
+#: Fixed visit gap, based on the dated pool summary in notes/202608141600.
 REPEAT_GAP_MONTHS = 6.0
 
 #: A second grouping level, present in every model that shows the bias and
@@ -136,61 +72,29 @@ TAU_STUDY = 0.37
 #: between-child variation age-selectively, which a constant kappa cannot.
 KAPPA_YOUNG, KAPPA_OLD = 60.0, 25.0
 
-#: Every condition above holds the mean proportion at `P0` = 0.30 -- the most
-#: informative part of the logit curve, and nowhere near where the real pools
-#: sit. Measured on the Down syndrome analysis frame: median p_U is 0.046 at
-#: 8-18 months with 53% of administrations below 0.05, and the conditional
-#: spoken share `q` has a median of 0.000 there with 71% below 0.05. At the
-#: other end 9% of comprehension administrations are above 0.95 after 48
-#: months. A scale estimated where the link is flat is a different estimation
-#: problem from one estimated at p = 0.3, and it is the problem the fitted
-#: models actually face.
+#: Compare smaller and larger mean proportions with the mid-range baseline.
 P0_FLOOR = 0.05
 P0_CEILING = 0.90
 
-#: The floor in the real data is not low `p` alone -- it is low `p` on few
-#: trials. `q` is conditioned on the child's comprehension count, so at young
-#: ages its denominator is a couple of dozen words rather than the form's full
-#: length, and exact zeros follow. 810 trials at p = 0.05 never produces one.
-#: Drawn lognormal about a median of 40 to span roughly 8-200.
+#: Smaller denominators raise zero-count probability at a fixed probability.
+#: Concentration and child variation also affect how many zeros occur.
+#: Trial counts follow a clipped LogNormal with median 40.
 N_TRIALS_SMALL_MEDIAN = 40.0
 N_TRIALS_SMALL_LOG_SD = 0.8
 N_TRIALS_SMALL_LO, N_TRIALS_SMALL_HI = 3, 810
 
-#: The fitted models do not give kappa a value at each anchor directly. They
-#: give it an asymptote plus an exponential age term whose two *excesses* carry
-#: the priors: kappa(z) = kappa_min + exp(a + b z), with a and b solved so the
-#: totals hit kappa_min + excess at each anchor. `age-varying-kappa` used a
-#: linear interpolation between two freely-estimated anchor values, which is a
-#: two-parameter identified form. The real one is three parameters, and the
-#: recovery matrices show the third behaving as a prior rather than an estimate:
-#: kappa_min's posterior median lands at 3.8, 4.1 and 4.2 against truths of
-#: 2.84, 10.37 and 1.09 -- the LogNormal(log 3, 0.8) prior's own mean is 4.13.
-#: Where the truth sits above that, kappa_young inherits the shortfall, which is
-#: the only identified explanation so far for kappa_young being low in 9 of 9.
-#:
-#: Values from `_DS_SPOKEN_KAPPA` in models/definitions.py.
+#: Floor-plus-exponential dispersion with two excess anchors. This is a
+#: three-parameter alternative to the earlier interpolation condition.
+#: The fixed prior values are copied from the dated experiment's model setup.
 KAPPA_ANCHOR_AGES = (18.0, 36.0)
 KAPPA_MIN_PRIOR_MU, KAPPA_MIN_PRIOR_SIGMA = np.log(3.0), 0.8
 EXCESS_YOUNG_PRIOR_MU, EXCESS_YOUNG_PRIOR_SIGMA = np.log(45.0), 0.7
 EXCESS_OLD_PRIOR_MU, EXCESS_OLD_PRIOR_SIGMA = np.log(4.0), 0.7
 
-#: Two truths for the asymptote: one at the prior's centre, one above it, as in
-#: VG10 r01's truth draw. If the subject scale is biased only in the second, the
-#: mechanism is the unidentified asymptote dragging the dispersion level and the
-#: child scale absorbing the difference.
+#: Compare two generating floors to assess prior and recovery sensitivity.
 KAPPA_MIN_TRUE, KAPPA_MIN_TRUE_HIGH = 3.0, 10.0
 
-#: Every condition to here drew ages uniformly over 8-115 months. The real pool
-#: is nothing like uniform: 570 of 987 administrations fall between 18 and 48
-#: months and only 13 sit above 84, so the old tail that would pin a decaying
-#: dispersion curve, or hold a flexible mean still, barely exists. That is the
-#: leading explanation for why `anchored-kappa` came back null -- under uniform
-#: ages the asymptote recovers cleanly (truth 3.0 -> medians 2.29-3.79, truth
-#: 10.0 -> 8.31-12.91), which is exactly what it fails to do on the real frame.
-#: Drawing the first visit from the empirical distribution is the one structural
-#: difference left between this simulation and the fitted models that is cheap
-#: to remove.
+#: Contrast uniform visit ages with draws from observed first-visit ages.
 _EMPIRICAL_AGES: np.ndarray | None = None
 
 
@@ -212,11 +116,7 @@ def empirical_first_visit_ages(n: int, rng) -> np.ndarray:
     pool = _EMPIRICAL_AGES[_EMPIRICAL_AGES <= AGE_HI - REPEAT_GAP_MONTHS * 2]
     return rng.choice(pool, size=n, replace=True)
 
-#: Conditions in the order they were added. The last three came after the first
-#: seven all returned null, when re-reading the recovery matrices showed the
-#: bias is selective -- it hits the comprehension child scale and VG12's
-#: `tau_subject` in 9 of 9 replicates but not `tau_subj_q`, and `kappa_young`
-#: goes with it -- and that every condition to date had been run at p = 0.3.
+#: Named experimental conditions, in their original run order.
 ALL_CONDITIONS = (
     "all-singleton",
     "observed-mix",
@@ -291,12 +191,11 @@ def small_trial_counts(n_rows: int, rng) -> np.ndarray:
 def simulate(
     counts: np.ndarray, rng, p0: float = P0, small_n: bool = False
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Beta-Binomial counts with a child random effect on the logit.
+    """Draw Beta-Binomial counts with a child effect on the logit scale.
 
-    Returns ``(y, child, z, n_trials)``. ``z`` matters: the spread a refit can
-    recover is ``TAU_TRUE * sd(z)``, and for 767 draws that realised SD carries
-    a 2.55% sampling error, so scoring against the nominal ``TAU_TRUE`` alone
-    would charge the model for the simulation's own noise.
+    Return ``(y, child, z, n_trials)``. The realised effect spread
+    ``TAU_TRUE * sd(z)`` varies between simulations and differs from the generating
+    population scale. Both are useful comparisons but answer different questions.
     """
     z = rng.standard_normal(counts.size)
     logit_p = np.log(p0 / (1 - p0)) + TAU_TRUE * z
@@ -535,9 +434,9 @@ def fit(
         )
     post = idata.posterior
     draws = np.asarray(post["tau"].values).ravel()
-    # The truth a refit can actually recover is the spread the data contain,
-    # not the nominal tau -- the realised SD of n standard normals carries a
-    # 1/sqrt(2n) sampling error, 2.55% at n = 767.
+    # Keep the population scale and realised sample spread distinct when scoring.
+    # Normal sample SD has approximate relative sampling error 1/sqrt(2n).
+
     import arviz as az
 
     # arviz >= 1.2 returns a DataTree; take the max over the scalar parameters.
@@ -549,11 +448,8 @@ def fit(
     rhat_ds = rhat_tree["posterior"] if "posterior" in rhat_tree else rhat_tree
     per_param = {v: float(np.asarray(rhat_ds[v].values).max()) for v in names}
     rhat = float(max(per_param.values()))
-    # Which parameter fails matters. The stand-in mean basis here is an
-    # intercept, a slope and eight overlapping Gaussian bumps, which is
-    # deliberately over-complete and mixes badly; that is a defect of this
-    # simulation's mean, not evidence about the models, and it should not
-    # disqualify a condition whose `tau` mixed perfectly well.
+    # Record the scale's R-hat separately, but assess all required diagnostics
+    # before interpreting a condition. One well-mixing scalar cannot certify a fit.
     rhat_tau = per_param["tau"]
     return {
         "tau_median": float(np.median(draws)),

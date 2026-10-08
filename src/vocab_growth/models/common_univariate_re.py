@@ -367,11 +367,8 @@ def build_model_graph(
         else None
     )
 
-    # A child seen once contributes its effect to one likelihood term, so that
-    # effect can be integrated out exactly instead of sampled. `partition` is
-    # None unless the definition asks for it, and every branch below reads that
-    # rather than the flag, so the sampled graph is untouched when it is off.
-    # See models.subject_marginal.
+    # For a child seen once, numerical quadrature can integrate their effect
+    # from the likelihood. No sampled graph changes when the option is off.
     marginalisation = (
         getattr(definition, "singleton_marginalisation", None)
         if use_subject_re
@@ -425,13 +422,6 @@ def build_model_graph(
         if definition.gp_anchor_age_months is not None
         else float(np.mean(config.slope_anchors))
     )
-
-    # Range validation happens before the integer cast, above, and in the prepare
-    # stage -- never after it, where the cast has already truncated. Until
-    # 2026-08-31 this engine used the weaker `require_integral_counts` and carried a
-    # post-cast bounds check, so that check WAS load-bearing while the visually
-    # identical ones in the bivariate engines were dead. All six engines now call
-    # the same guard function, `build_utils.require_valid_counts`.
 
     # Standardise ages
     X_obs_mean, X_obs_std, X_obs_z = standardize_ages(X_obs)
@@ -588,11 +578,7 @@ def build_model_graph(
             ),
             store_deterministic=True,
             latent_name="f_all",
-            # getattr: the field lives on the joint definition classes only. The
-            # 2026-08-04 mean-extrapolation fix was applied to the joint models
-            # and never reached the univariate ones, which are exactly the models
-            # where `eta` still presses its prior (VG01, VG03, VG11, VG12). See
-            # notes/202608042030-q-mean-extrapolation.md.
+            # Definitions without a clamp field retain the unclamped mean.
             clamp_above_hi=getattr(definition, "clamp_mean_above_hi_anchor", False),
             anchor_idx=i_anchor if anchor_g else None,
             n_obs=n,
@@ -862,11 +848,9 @@ def sample_posterior_predictive_re(
             kappa=kappa_query,
             dims=("query_id",),
         )
-        # By sex (#324): the same new child, drawn once above, as a girl and as a
-        # boy. `y_query` is that child at contrast zero -- a child of unrecorded
-        # sex, which is how the model treats every such row it was fitted to.
-        # Reusing the one child-effect draw makes the two levels paired draw for
-        # draw, so their difference carries no between-child noise.
+        # Reuse the same child-effect draw for both sex predictions. The
+        # comparison is paired, but its count difference can still vary with
+        # that effect and with observation noise.
         by_sex_names: list[str] = []
         if beta_sex is not None:
             for level, contrast in sex_covariate.SEX_LEVELS:
@@ -1034,11 +1018,9 @@ def fit_univariate_re_model(
     config: str,
     definition: UnivariateModelDefinition,
 ) -> UnivariateREContext:
-    """Fit pipeline for a univariate model with study random intercepts.
+    """Run the shared pipeline with this engine's random-effect stages.
 
-    Mirrors ``fit_single_outcome_model`` from ``common.py`` but swaps in the
-    RE-aware data-prep and model-build steps.  All downstream pipeline stages
-    (prior predictive checks, sampling, diagnostics, posterior summary, plots,
-    report) are reused unchanged from ``common.py``.
+    Data preparation, graph building, predictive sampling and summaries account
+    for the selected study and child effects. Other stages come from common.
     """
     return run_fit_pipeline(config, definition, stages=univariate_re_stages(definition))

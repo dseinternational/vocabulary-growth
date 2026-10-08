@@ -1,8 +1,10 @@
-"""Refit VG12 at rep with eta_sigma reverted to 0.5, keeping centring + partition.
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
-Isolates whether the 2026-08-05 eta widening is responsible for VG12's
-divergences rising from 2 to 29. Writes to a throwaway output root so the model
-of record is untouched.
+"""Refit VG12 with ``eta_sigma=0.5`` in a separate output root.
+
+Compare diagnostics with an otherwise matching fit to assess sensitivity to this
+prior scale. A difference in divergence counts alone does not identify its cause.
 """
 import dataclasses
 import importlib

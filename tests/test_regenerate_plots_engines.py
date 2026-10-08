@@ -1,26 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for ``regenerate_plots.py``'s engine table.
+"""Check plot-regeneration dispatch derived from the model catalogue.
 
-The script drives each fitted model's plot stage by name, from a declarative
-table, so nothing here fails at import time -- a renamed pipeline function or a
-model added without an engine surfaces only when someone tries to redraw that
-model, which is exactly when they are least able to fix it. The script's own
-docstring makes the point about silent skips reading as passes; these tests are
-the standing check behind it.
-
-Since issue #273 the table is derived from
-:mod:`vocab_growth.models.catalogue` rather than restated in the script, so what
-is checked here is that the *derivation* still produces a usable dispatch: the
-names resolve, the calling conventions match the signatures, and every
-registered model is either drivable or carries a recorded reason why not.
-``tests/test_model_catalogue.py`` checks the catalogue's own claims.
-
-``plots_call`` is the part most likely to rot. The plot stages genuinely differ
-in signature -- the single-outcome stage is shared across models plotting
-different outcomes and so takes an ``outcome_label`` keyword -- and passing the
-wrong convention raises only once a redraw is attempted.
+Declared names and calling conventions must match engine functions. Every
+registered model must have a regeneration path or a recorded exemption.
 """
 
 import importlib
@@ -44,12 +28,8 @@ _SPEC.loader.exec_module(_MODULE)
 ENGINES = _MODULE.ENGINES
 ENGINE_BY_MODEL = _MODULE.ENGINE_BY_MODEL
 
-# Models with no regeneration path, derived from the catalogue rather than
-# listed here. VG11 and VG12 are single-outcome models *with* dataset and child
-# random intercepts ("VG03/VG04 + random effects"), so they share neither the
-# plain univariate engine's preparation and build nor the bivariate RE engine's;
-# their engine records that it has no exercised replot path, and that record is
-# what this set reads.
+# Read models without a regeneration path from catalogue exemptions.
+
 EXEMPT = {key for key, model in CATALOGUE.items() if not model.engine.supports_replot}
 
 
@@ -94,13 +74,7 @@ def test_engine_functions_resolve(engine_name):
 
 @pytest.mark.parametrize("engine_name", sorted(ENGINES))
 def test_plots_call_matches_the_plot_stage_signature(engine_name):
-    """The declared calling convention must match what the function accepts.
-
-    This is the check that would have caught routing VG01-VG04 through the
-    ``definition`` convention: ``run_standard_plots`` takes the context plus a
-    keyword-only ``outcome_label``, and would have raised ``TypeError`` on a
-    second positional argument.
-    """
+    """Match the declared convention to positional and keyword-only plot arguments."""
     engine = ENGINES[engine_name]
     params = inspect.signature(engine.resolve("plots")).parameters
     positional = [

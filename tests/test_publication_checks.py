@@ -1,21 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""A published page must resolve, figures included (#289 task 4.10).
+"""Check published pages together with every referenced local asset.
 
-On 2026-09-03 the comparison book was published with ``index.html`` and none
-of its 24 figures, and reported as published because the page returned 200.
-The model-report upload had the same gap. These tests pin the three checks
-that close it: the asset list is derived from the page, an upload that left a
-referenced asset out is named, and every published file is requested back.
-
-Since the shared library's 0.14.0 release the parsing is
-``dse_research_utils.report.assets``, and two of these tests changed with it. A
-reference to a file that is not there is now a failure rather than something
-quietly left off the list; and an ``href`` is URL-decoded once, so linking a
-file literally named ``50%20.csv`` as ``href="50%20.csv"`` asks the browser for
-``50 .csv`` and is a broken link, not a compatibility target. Both forms are
-kept below.
+Derive assets from HTML, reject missing or unsupported references, compare the
+upload inventory, and request each published file through an injected transport.
+A successful entry-page request alone cannot establish that its assets resolve.
 """
 
 from __future__ import annotations
@@ -97,11 +87,7 @@ def test_referenced_assets_are_derived_from_the_page(page):
 
 
 def test_a_reference_no_upload_could_satisfy_is_named_not_dropped(broken_page):
-    """The previous scanner left both of these off the list entirely.
-
-    A page referencing a figure that was never written then published silently,
-    which is the 2026-09-03 failure with the missing file one step earlier.
-    """
+    """Report missing and out-of-directory references instead of omitting them."""
     failures = {failure.path: failure.reason for failure in local_failures(inspect_report(str(broken_page)))}
     assert failures == {"figures/missing.png": "missing", "../outside.txt": "outside_root"}
     # The list a publisher copies from still contains only files that exist.
@@ -168,11 +154,9 @@ def test_constructs_that_change_what_a_browser_loads_are_not_certified(
 
 
 def test_a_literal_percent_in_a_filename_has_to_be_encoded_twice(tmp_path):
-    """``href="50%20.csv"`` asks the browser for ``50 .csv``.
+    """Decode URL attributes once before resolving local filenames.
 
-    The previous scanner matched the raw attribute against the filesystem, so
-    it reported this page as complete while a reader clicking the link got a
-    404. The correctly encoded form is ``50%2520.csv``; both are pinned.
+    A file named 50%20.csv needs the link 50%2520.csv; 50%20.csv requests 50 .csv.
     """
     (tmp_path / "50%20.csv").write_text("a,b\n", encoding="utf-8")
     mismatched = _write_page(
@@ -325,12 +309,7 @@ def test_nested_index_does_not_replace_skipped_root(upload_report):
 
 
 def test_upload_fails_when_a_published_file_does_not_resolve(upload_report):
-    """A 200 on the page says nothing about the files it needs.
-
-    This is the 2026-09-03 failure exactly: `index.html` answered, every figure
-    did not, and the publication was reported complete. Driven through the
-    injected transport, so the check runs without a network.
-    """
+    """Reject publication when the entry page resolves but a required asset does not."""
     from vocab_growth.storage import upload_to_blob_storage
 
     output, _, _, requested, _ = upload_report

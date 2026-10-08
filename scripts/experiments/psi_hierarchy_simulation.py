@@ -180,8 +180,7 @@ def study_information(analysis_df, *, conc, log_psi_truth):
     frame = pd.DataFrame(rows)
     if frame.empty:
         raise RuntimeError("No psi-informing cross-tab rows found.")
-    # A study can inform psi through both a four-cell and a produced table; the
-    # information adds, as the likelihood terms do.
+    # Add information from the eligible four-cell rows of each study.
     frame = (
         frame.groupby("study")
         .agg(

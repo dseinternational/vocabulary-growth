@@ -3,27 +3,21 @@
 """
 DS-vs-TD population contrasts between RE-based models (separate-model, per-draw).
 
-Honest comparators only: the DS side is the spoken / understood **sub-curve of a
-random-effects DS model** (VG20 by default — study + subject REs, with the
-correlation between the child's two deviations estimated), not the
-no-RE VG01/VG02. The TD side is the univariate study-RE models VG11 (spoken) /
-VG12 (understood).
+Use VG20 for Down syndrome (DS) understood and spoken vocabulary and VG11/VG12
+for typically developing (TD) spoken/understood vocabulary. These models include
+study and child effects. The comprehension-matched comparison uses joint models
+VG20 and VG21 so each population's understood and spoken draws stay paired.
 
-Why separate models suffice for credible intervals
---------------------------------------------------
-The DS and TD datasets are disjoint (no shared studies or children), so the
-joint posterior factorises and a per-draw difference gives an *exact* credible
-interval for any contrast — no joint model required. Accordingly every estimand
-here is computed **draw-by-draw** (contrast the draws, never the summaries),
-on a **common age grid restricted to the empirical overlap**, using the
-**population-level (RE-excluded) outcome-scale** curve on both sides so the
-estimand is identical. A joint/stacked model that makes the TD-DS gap itself a
-generative object (partial pooling, a directly-estimated delay, difference-in-
-differences, the "delayed/scaled TD trajectory" hypothesis) is intentionally NOT
-built here, and **is not currently registered against any model number**. It was
-reserved as VG16 until that number was taken by the DS within-child cross-lag;
-nothing has replaced the reservation, so a reader should not expect this gap to
-be closed by an existing model.
+The fitted models have independent priors and likelihoods. Their joint posterior
+therefore factorises, and pairing draws from the two posteriors samples a
+contrast's posterior. The intervals have Monte Carlo error and depend on both
+models' assumptions. Disjoint data alone would not establish independence if a
+joint model shared parameters or priors.
+
+Compute contrasts before summarising the draws. Both reference curves use zero
+study and child effects on a shared age grid within empirical overlap. Those
+curves are not averages over the child effects. The script does not fit a joint
+model with a shared developmental delay or other cross-population parameter.
 
 Estimands, per outcome, written to the configured comparisons dir (default
 ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
@@ -89,53 +83,13 @@ from vocab_growth.comparisons_provenance import (
 )
 from vocab_growth.fit_consumers import contributing_fits
 
-# DS comparator: the model of record's spoken/understood sub-curve (study+subject
-# REs). One-line swap to vg07/vg08/vg09/vg10 for a sensitivity check (all carry
-# random effects). Moved vg10 -> vg20 on 2026-08-19 with the role (#224): VG20 is
-# VG10 plus the correlation between the child's two deviations, so the population
-# curves here are unchanged, but the between-child panel below is not — see the
-# note on the subject-heterogeneity estimand.
+# Reference curves use zero study and child effects in VG20.
 DS_KEY = "vg20"
-# Dispersion must contrast a kappa that means the same thing on both sides. What
-# kappa means depends on whether a subject random effect is present to absorb
-# between-child variance: without one, kappa carries that variance; with one, it
-# does not.
-#
-# This used to select VG07 (study-RE only) because VG11/VG12 were study-RE only
-# too, so VG07-vs-TD was the like-for-like pairing and VG10 was not. #164 added
-# child random effects to VG11/VG12/VG13, which inverted that: VG07's kappa now
-# carries child variance while the TD models' kappa does not, so the old pairing
-# contrasts incommensurable quantities and overstates DS dispersion. VG10 has
-# subject REs on both outcomes and is now the model that satisfies the original
-# criterion. Corrected 2026-08-05 during the full reporting refit; the July 2026
-# published dispersion contrast is affected and superseded.
-#
-# Third correction, 2026-09-02: VG20's kappa_s is the dispersion of the
-# production ratio q on the child's OWN UNDERSTOOD COUNT as denominator, whereas
-# VG11's kappa is the dispersion of spoken counts out of the 810-item pool. The
-# spoken block below used to feed kappa_s into (kappa + n)/(kappa + 1) with
-# n = 810 regardless, so phi_DS and sigma_Y,DS for spoken were computed as if a
-# conditional concentration were a marginal one. The DS spoken side now uses
-# comparison.load_marginal_spoken_trajectory, whose kappa is the concentration
-# of the Beta-Binomial matching the marginal spoken count's variance (the same
-# product-marginal form the graph's spoken fallback uses), which is on the pool
-# denominator and comparable with VG11's. The understood contrast was always
-# marginal on both sides and is unchanged. Every published spoken dispersion
-# contrast before this date is superseded; see
-# notes/202609021620-dispersion-kappa-comparability.md for the denominator
-# finding this follows from.
-#
-# (Mean/rate/delay keep the same model — subject REs are mean-zero, so the
-# population trajectory is unaffected.)
-#
-# Second correction, 2026-08-19 (#224): the between-child panel this key also
-# drives was derived on the assumption that a child's comprehension and
-# production-ratio deviations are independent, because no DS model estimated a
-# correlation between them. VG20 does, at +0.368, and since
-# log p_S = log p_U + log q gains 2 Cov, the old derivation understated the DS
-# spoken between-child scale by about 15% on the logit scale at every age. The
-# comprehension scale is unaffected, as it must be. The July-2026 and 13-16
-# August published spoken between-child contrasts are superseded by this.
+# Compare dispersion on the same count scale and denominator. Both models
+# include child effects, which distinguish persistent differences from noise.
+# VG20's conditional spoken kappa uses the observed understood count. Convert
+# it to a marginal spoken concentration on n_trials before comparison with VG11.
+# See notes/202609021620-dispersion-kappa-comparability.md.
 DISP_DS_KEY = "vg20"
 # TD comparator per outcome: the univariate models, which since #164 carry both
 # study and subject random effects.
@@ -160,31 +114,12 @@ KEY_AGES = [12, 18, 24, 30]
 LEVEL_GRID_STEP = 1.0
 KEY_LEVELS = [25, 50, 100, 200, 400]
 
-# Comprehension-matched lens needs JOINT models (U and S coupled per draw): the
-# DS joint VG20 vs the TD joint VG21 (RE-based, 8-22 mo). The TD comparator was
-# VG13 (8-18 mo) until 2026-09-02, with the 22-month window reachable only as the
-# `vg13:window-22` sensitivity variant through `resolve_joint`; VG21 is that
-# window as a registered model of its own, adopted on 2026-08-21 precisely so the
-# matched-comprehension contrast could reach the levels MAX_MATCHED_U below was
-# already set for. Under VG13 the TD curve's population median never reached 250
-# words within support, so every q(U) cell above N = 200 was blank on the TD
-# side and the contrast could say nothing about the 300-word milestone. VG06 --
-# wide-age TD comprehension, not validly measured -- remains excluded.
+# Joint models keep each population's understood and spoken draws paired.
 JOINT_DS_KEY = "vg20"
 JOINT_TD_KEY = "vg21"
-# Hard ceiling on every comprehension-matched contrast, in words understood.
-#
-# Set by the TD side's support, not by the DS side or by taste. The TD joint
-# model's q-by-understood grid reaches 220.9 words at VG13's 8-18 month window,
-# 328.0 under VG21's 8-22 (formerly the `window-22` variant) and 355.8 under
-# `window-25` (8-25). 320 sits just inside VG21's reach, the extension adopted on
-# 2026-08-21 --
-# `window-25`'s extra reach comes from the 23-25 month rows where 20-36% of
-# Oxford CDI administrations sit within 10% of the form's 418-item cap, and its
-# q reads visibly high there (0.602 against `window-22`'s 0.504 at 328 words,
-# 89% intervals no longer overlapping). Stopping at 320 keeps every published
-# matched-comprehension number inside ceiling-safe TD support.
-# See notes/202608211100-window-22-adopted.md.
+# Limit matched comprehension to 320 words under the selected TD window.
+# The wider window includes more observations near the form ceiling; see
+# notes/202608211100-window-22-adopted.md. Coverage filtering still applies.
 MAX_MATCHED_U = 320.0
 
 # Comprehension levels N (words understood) for the q(U=N) view. Small-N tail is
@@ -233,11 +168,10 @@ def _merge(grid: np.ndarray, grid_name: str, **frames: pd.DataFrame) -> pd.DataF
 
 
 def _grid_age(frame: pd.DataFrame, age: float) -> float:
-    """The grid point ``_at_age`` will actually read for ``age``.
+    """Return the nearest supported grid age for console labels.
 
-    The console rows are labelled with this rather than the requested age: the
-    understood grid stops at 25 months, so a row asked for at 30 is answered at
-    25, and labelling it "30 mo" overstated the age the estimate belongs to.
+    Label a boundary lookup with the age actually read, rather than a requested age
+    outside the comparator's range.
     """
     i = int((frame["age_months"] - age).abs().idxmin())
     return float(frame.loc[i, "age_months"])
@@ -515,12 +449,8 @@ def _plot_outcome(outcome, td_key, grid, W_td, W_ds, R_td, R_ds, ad,
 
     _save_single(
         pre + "overdispersion",
-        # Both halves of the old title were wrong once DISP_DS_KEY moved to VG10.
-        # "study-RE only" described VG07; VG10 and VG20 carry subject random effects too,
-        # which is the whole point of the repointing. "mean-independent" overclaims:
-        # the factor removes the explicit p(1-p) term, but kappa is itself
-        # level-driven in this family, so a cross-population contrast still carries
-        # part of the level difference (see comparison.overdispersion_factor).
+        # The factor removes explicit p(1-p), but kappa may still vary with level.
+        # It is not independent of the mean across populations.
         dict(xlabel="Age (months)", ylabel=r"Overdispersion $\varphi$",
              title=f"Overdispersion vs Binomial — words {outcome}"),
         overdispersion,
@@ -820,13 +750,10 @@ def _weighted_univariate_trajectory(key: str, trace_path: str, n: int):
 
 
 def _write_weighted_comprehension(ds_key, td_key, ds_trace, td_trace, ds_n, td_n) -> None:
-    """``ds_td_comprehension_q_at_U_weighted.csv``: q(U) for the weighted child.
+    """Write q(U) from administration-weighted child trajectories.
 
-    Same construction as the reference-child table, on the administration-
-    weighted trajectories, so the book can show both and the gap between them:
-    at 300 words the reference-child curves converge (0.43 in both populations)
-    at the typically developing window's edge, where the reference child sits 46
-    words above the only study sampled there.
+    Use the same crossing construction as the zero-effect reference curves so the
+    comparison book can display the reference and administration-weighted curves together.
     """
     ds, why_ds = _weighted_trajectory(ds_key, ds_trace, ds_n)
     td, why_td = _weighted_trajectory(td_key, td_trace, td_n)
@@ -858,17 +785,10 @@ def _write_weighted_comprehension(ds_key, td_key, ds_trace, td_trace, ds_n, td_n
 
 
 def _write_weighted_attainment(outcome: str, td_key: str) -> None:
-    """``ds_td_<outcome>_re_attainment_delay_weighted.csv``: D(v) for the weighted child.
+    """Write attainment delays from administration-weighted child trajectories.
 
-    The reference-child delay to reach v words is the headline; this is the same
-    contrast on the administration-weighted trajectories, against the **same**
-    typically developing comparator the reference-child delay uses (VG11 for
-    spoken, VG12 for understood). Until #289 task 4.5 the univariate
-    comparators had no weighted loader, so this table was read against the
-    joint comparator VG21 instead and stopped at its window's edge -- about
-    100 spoken words -- where the reference-child delay runs on; the two
-    columns of the book's milestone table therefore compared different models
-    as well as different children.
+    Use the same TD comparator as the reference-child table, VG11 for spoken and
+    VG12 for understood, so weighting is the change being compared.
     """
     ds, why = _weighted_trajectory(DS_KEY, C.trace_path(DS_KEY), C.n_trials(DS_KEY), outcome=outcome)
     if ds is None:
@@ -889,17 +809,12 @@ def _write_weighted_attainment(outcome: str, td_key: str) -> None:
 
 
 def _write_observed_children(ds_key: str, td_key: str) -> None:
-    """The children who actually understood ~N words, beside the population curve.
+    """Write observed ratios beside the population-curve comparison at ~N words.
 
-    The curve is the population ratio at the age each population's median reaches
-    N -- a developmental-stage relationship, not E[q | U = N] (#233). The two
-    differ by a lot and in opposite directions to the curves' own convergence:
-    at 300 words the reporting-quality curves both give ~0.4, the observed
-    children 0.27 (TD) and 0.13 (DS). The book's table shows both columns so a
-    reader cannot take the curves' agreement as the children's. Each frame is
-    rebuilt through the loader rules the fit used and verified against the hash
-    the fit recorded; a population whose frame no longer verifies is omitted
-    with a message rather than described from data the fit did not see.
+    The curve is the reference ratio at the age its comprehension curve reaches N.
+    It is not E[q | observed U = N]. Rebuild each fit's frame and verify its stored
+    hash before describing the observed children. Omit a population whose frame
+    cannot be verified and report the reason.
     """
     from vocab_growth.report_cells import (
         _verified_frame,

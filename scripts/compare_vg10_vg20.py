@@ -1,44 +1,28 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Gate 3 of #224: VG20 against VG10, with the pass criteria fixed in advance.
+"""Compare VG20 with VG10 using the screening criteria from issue #224.
 
-VG10 is VG20 at ``rho_uq = 0``, so the two are nested and most of what they
-report must agree. The trap this script exists to avoid is stated in #224's own
-comment thread: the issue says "the reported trajectories should be unchanged"
-and treats movement as a red flag, but a positive ``rho_uq`` **should** move one
-family of quantities. Run without that distinction drawn first, a correct result
-reads as a failure.
+VG20 adds correlation between the child's comprehension and production-ratio
+effects. At fixed values of the other parameters, this leaves the reference
+curves and each effect's marginal Normal distribution unchanged. It can change
+the distribution of spoken vocabulary, which is the product of comprehension
+and the production ratio.
 
-So the criteria are declared here, before any VG20 fit exists, and each one names
-the direction it expects rather than only a tolerance:
+The script checks three empirical criteria:
 
-1. **Population-level quantities must not move.** ``Ey_population`` on both
-   outcomes and the production ratio ``q`` describe the average child, and the
-   correlation between two mean-zero deviates does not change their mean. Each
-   VG20 value must sit inside VG10's own 89% interval at every reported age --
-   the same standard ``compare_sensitivity.py`` applies to a prior variant.
+1. VG20 reference-curve medians lie inside VG10's 89% intervals at each age.
+2. The median ratio of understood subject-marginal interval widths is within
+   2% of one.
+3. The median ratio of spoken subject-marginal interval widths exceeds 1.02.
 
-2. **Understood subject-marginal spread must not move either.** This is the
-   sharp one. The Cholesky construction sets
-   ``delta_q = tau_q (rho z1 + sqrt(1 - rho^2) z2)``, which changes how the two
-   deviates co-vary while leaving each one's marginal SD exactly as it was. So a
-   correlation cannot widen comprehension on its own, and if it does, the
-   whitening term is wrong and ``tau_subj_q`` has been silently rescaled -- a
-   defect that would otherwise show up only as a slightly different number in a
-   reported quantity.
+These are screening rules for separately fitted posteriors. Adding correlation
+can change other parameter estimates, so a failed rule does not by itself prove
+an implementation error. ``Ey_population`` uses zero child and study effects;
+it is not the average after integrating over those effects.
 
-3. **Spoken subject-marginal spread SHOULD widen.** Spoken is ``p_U * q``, so a
-   positive correlation compounds: a child above average on comprehension tends
-   also to convert more of it to speech. That is the whole motivation in #224 --
-   VG10's independent draws understate how much children with Down syndrome
-   differ from one another in speech. Widening here is the correction working,
-   not a red flag. Narrowing, or no change at all, is the failure.
+Usage::
 
-Criterion 3 is therefore the only one whose *pass* is a change. Reporting it
-alongside 1 and 2 is what makes the gate readable.
-
-Usage:
-    python scripts/compare_vg10_vg20.py [--output-dir <dir>]
+    python scripts/compare_vg10_vg20.py [--output-dir DIR]
 """
 
 from __future__ import annotations
@@ -114,8 +98,7 @@ def main() -> None:
     })
 
     # -- Criteria 2 and 3: subject-marginal spread --------------------------
-    # Understood must not widen (the correlation preserves each marginal SD);
-    # spoken should, because spoken is the product of the two deviates.
+    # These are empirical width criteria, not identities between refitted models.
     for outcome, filename, expect_widening in (
         ("understood", "posterior_summary_u.csv", False),
         ("spoken", "posterior_summary_s.csv", True),
@@ -127,8 +110,7 @@ def main() -> None:
         w_var = _width(merged, "Ey_subject_marginal", "var")
         ratio = (w_var / w_base).replace([np.inf, -np.inf], np.nan).dropna()
         median_ratio = float(ratio.median())
-        # 2% either way is the "unchanged" band: these are Monte Carlo interval
-        # bounds from independent chains, so exact equality is not available.
+        # Use the prespecified 2% tolerance; it is not an estimated Monte Carlo error.
         if expect_widening:
             passed = median_ratio > 1.02
             criterion = "3 spoken subject-marginal widens"

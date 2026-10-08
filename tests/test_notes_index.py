@@ -1,22 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The notes index lists every note, and lists nothing that is absent.
+"""Check that the notes index lists every dated note and no missing files.
 
-`notes/README.md` is the index of `notes/`: one table row per dated note,
-`YYYYMMDDHHMM-slug.md`. Nothing enforced that, and ten notes had drifted out of
-it by 2026-09-11 -- the oldest from 2026-08-23, three of them data-decision
-records whose consequences reach the fits of record. An unindexed note is not a
-cosmetic problem: the index is what a reader consults to find out whether a
-question has already been settled, so a note missing from it is, in practice, a
-note that was never written.
-
-Both directions are checked. A row pointing at a file that no longer exists is
-the same defect seen from the other side -- a consolidated note is deleted and
-its row left behind, and the index then promises a record that is gone.
-
-Deliberately not checked: whether a row's summary still describes its note. That
-is a judgement, and a test that asserted it would either be trivial or wrong.
+The link timestamp must match the filename. Summary accuracy needs human
+review and is outside these structural checks.
 """
 
 import re

@@ -1,47 +1,18 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Set a parameter in a recovery truth draw instead of taking what a draw offers.
+"""Set free parameters in a recovery truth draw and record those settings.
 
-A truth draw comes from the model of record's posterior or from the model's own
-prior, and in both cases every parameter takes whatever value that draw happened
-to hold. That answers "does this model recover itself in the regime it reports
-in", which is the question the harness was built for. It cannot answer a
-question about a *designed* parameter setting -- and two of the three cells
-[#297](https://github.com/dseinternational/vocabulary-growth/issues/297) check 4
-asks for are exactly that. VG25 exists to show that a sign -> speech cross-lag
-can be told apart from the persistent sign-speech correlation it sits beside, so
-the cells are ``(beta = 0, rho != 0)``, ``(beta != 0, rho = 0)`` and both
-nonzero. The third is a draw; the first two are settings. #242 item 6 asks the
-same three of VG16.
+The caller recomputes derived quantities after these overrides. Direct changes
+to deterministics are refused because recomputation would overwrite them.
 
-**Free variables only, and on purpose.** An override names a variable the model
-samples, never one it computes. The reported estimands -- the trajectories,
-``rho_sign_q``, the child effects -- are deterministics, and
-:func:`vocab_growth.recovery.simulate._with_deterministics` recomputes them from
-the graph *after* the overrides are applied. So setting a free variable moves
-every quantity downstream of it and the truth stays internally consistent;
-setting a deterministic would be overwritten by that recomputation, and the run
-would silently score against a truth the graph never held. Naming one is refused
-with the reason.
+Numeric settings fill a free variable with one value. ``subject_re=independent``
+replaces a packed Cholesky covariance factor with a diagonal factor, preserving
+its row norms while removing correlations. This transform applies to packed
+blocks; other correlation parameterisations may use named free scalars.
 
-**Two kinds of setting, because two kinds of parameter.** A scalar coefficient
-takes a number: ``beta_sign_lag=0``. A correlation does not, because the model
-does not sample one -- the joint and bivariate correlated blocks sample a packed
-Cholesky factor of the child covariance (``subject_re``) and read every ``rho_*``
-off it as a deterministic. "No correlation" is a statement about that factor's
-*structure*, so it is a named transform rather than a number:
-``subject_re=independent`` replaces the factor with the diagonal one carrying the
-same scales. The scales are the factor's own row norms, so ``tau_subj_*`` come
-back bit-identical and only the correlations move -- which is what makes it the
-``rho = 0`` cell of the same model rather than a different model.
-
-**The setting is part of the run's identity.** Two cells of the same gate differ
-only in their truth, so they must not share a simulation directory, a fit
-directory or a recovery matrix. :func:`override_tag` goes into the recovery
-config name the way ``-under-`` does for a cross-definition run (#226), for the
-same reason: a name that does not distinguish them lets one overwrite the other,
-or be scored as the other.
+Truth settings form part of simulation, fit and score labels so distinct checks
+have separate output identities.
 """
 
 from __future__ import annotations
@@ -132,11 +103,10 @@ def parse_truth_override(text: str) -> TruthOverride:
 
 
 def override_tag(overrides) -> str:
-    """The token a set of settings contributes to a recovery config name.
+    """A settings token sorted by variable name, or empty when none are supplied.
 
-    Sorted by variable name, so the same set always names the same directory
-    however it was typed. Empty for no settings, which is what keeps every
-    existing recovery output at the name it already has.
+    Uses each override's filesystem spelling so argument order does not change
+    the recovery name.
     """
     ordered = sorted(overrides, key=lambda item: item.name)
     if not ordered:
@@ -161,15 +131,11 @@ def _triangular_order(n_packed: int) -> int:
 
 
 def set_independent(values: np.ndarray, *, name: str) -> tuple[np.ndarray, str]:
-    """Replace a packed Cholesky covariance factor with the diagonal one.
+    """Replace a packed covariance Cholesky factor with its row norms on the diagonal.
 
-    ``LKJCholeskyCov`` samples the packed lower triangle of the Cholesky factor
-    of the child covariance, and the model reads both the scales and the
-    correlations off it -- ``tau_subj_*`` are the factor's row norms and each
-    ``rho_*`` an entry of the implied correlation matrix. Replacing the factor
-    with ``diag(row norms)`` therefore sets every correlation to exactly zero and
-    leaves every scale untouched, which is the ``rho = 0`` cell of the *same*
-    model rather than a differently-scaled one.
+    The covariance is ``L @ L.T``, so each marginal standard deviation is a row
+    norm of ``L``. The replacement has the same norms and zero correlations,
+    up to floating-point evaluation; it does not set the scales to zero.
     """
     packed = np.asarray(values, dtype=float)
     if packed.ndim != 1:
@@ -217,12 +183,11 @@ def _deterministic_names(model) -> set[str]:
 def apply_truth_overrides(
     posterior: xr.Dataset, model, overrides
 ) -> tuple[xr.Dataset, list[dict[str, Any]]]:
-    """Return ``posterior`` with each setting applied, and what was applied.
+    """Apply settings to a single-draw free-parameter dataset and record them.
 
-    ``posterior`` holds a single ``(chain, draw)`` of the model's free variables.
-    Deterministics are **not** recomputed here -- the caller does that afterwards,
-    which is what propagates a setting into every reported quantity downstream of
-    it.
+    Numeric settings fill every entry of the named free variable. Structural
+    settings transform its drawn array. The caller must recompute deterministics
+    afterwards to propagate changes to reported quantities.
     """
     if not overrides:
         return posterior, []
@@ -284,14 +249,11 @@ def apply_truth_overrides(
 
 
 def check_all_finite(posterior: xr.Dataset, *, context: str) -> None:
-    """Refuse a truth carrying a non-finite value.
+    """Reject non-finite values in the supplied truth dataset.
 
-    Run after the deterministics are recomputed, which is where a setting on a
-    boundary shows up: a scale set to zero reaches the report as a division or a
-    logarithm of it long before it reaches the sampler, and a truth that is not
-    finite cannot be scored against. It is a guard on the settings rather than on
-    the draw -- a value inside a variable's support that the model nonetheless
-    dislikes is the fit's business, not this check's.
+    Call after recomputing deterministics, since an override can produce a
+    non-finite derived value. This checks finiteness, not distributional support
+    or scientific plausibility.
     """
     offending = sorted(
         name

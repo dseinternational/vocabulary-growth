@@ -1,18 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for sensitivity-runner coverage.
-
-The runner a variant is fitted through used to be a hand-maintained table in
-``scripts/fit_sensitivity.py``, duplicated again in ``scripts/refit_hightune.py``
-and again as engine identity in three other places. It had gone stale: variants
-were registered for VG16, VG21 and VG23 while neither script had a runner for
-them, so ``fit_sensitivity.py vg16 lag-gap-12`` exited with "No sensitivity
-variants for model: vg16" against a registry that holds five (issue #273).
-
-Both scripts now derive the set from the variant registry and the runner from
-:mod:`vocab_growth.models.catalogue`, which is what these tests pin.
-"""
+"""Check that registered sensitivity models resolve to their catalogue engines."""
 
 import importlib.util
 import sys
@@ -48,12 +37,7 @@ def test_vg13_single_administration_variant_has_runner():
 
 @pytest.mark.parametrize("model_key", _MODELS_WITH_VARIANTS)
 def test_every_model_with_variants_is_reachable(model_key):
-    """A registered variant nobody can fit is a variant that does not exist.
-
-    This is the check the hand-maintained table had no equivalent of: VG16's
-    five variants, VG21's and VG23's one each were unreachable from both
-    scripts.
-    """
+    """Every model with registered variants must be reachable by both runners."""
     assert model_key in _MODULE._MODELS_WITH_VARIANTS
     assert model_key in _HIGHTUNE._models_with_variants()
     assert callable(_MODULE._runner(model_key))

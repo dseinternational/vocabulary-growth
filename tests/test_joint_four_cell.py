@@ -456,20 +456,7 @@ def test_es01_defective_row_keeps_its_marginals_but_not_its_gestural_total(
 
 
 def test_psi_carries_a_study_term_and_all_cross_tab_sources_are_on():
-    """psi was once the only latent here with no study-level term.
-
-    delta_u, delta_q and delta_sign were all study random intercepts while log_psi
-    was a bare global scalar — so the reported association was a precision-weighted
-    average over whichever cross-tab sources were in the pool, and it moved 1.80 to
-    2.49 on adding uk_07 alone. The sources disagree far more than that
-    (Mantel-Haenszel, stratified by child: uk_02 6.09, uk_07 13.90, nz_01 14.63,
-    es_01 0.90).
-
-    With delta_psi in place the heterogeneity is estimated rather than averaged
-    away, so every cross-tab source is admitted. This pins both halves: turning a
-    source back off must stay possible, but the defaults must not silently revert
-    to pooling into a study-invariant psi.
-    """
+    """Enable all cross-tab sources and account for study-level association differences."""
     assert VG15.include_uk07_cells is True
     assert VG15.include_es01_cells is True
     assert VG15.include_nz01_cells is True
@@ -502,15 +489,10 @@ def test_es01_real_cells_reconcile_and_sit_near_independence():
 
 
 def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02(tmp_path):
-    """The DSE-native sensitivity on the real sources, through the real engine.
+    """Apply the native-form restriction to marginals and direct cross-tab sources.
 
-    Three things have to hold together, and only the third is obvious from the
-    flag. The merged view must lose every source on a shorter form. The three
-    cross-tab blocks that read their own CSVs must be gated off too — a row filter
-    on the merged view would never see them, so without the gate uk_07, es_01 and
-    nz_01 would slip back in through the side door carrying exactly the
-    harmonisation the variant exists to remove. And uk_02, which ran both
-    instruments, must keep its DSE arm alone.
+    The merged-view filter alone cannot reach sources loaded from their own
+    CSVs. Keep only the uk_02 cross-tabs on the 810-item DSE form.
     """
     context = ModelFitContext(
         reporting=reporting.ReportingConfiguration(
@@ -552,16 +534,10 @@ def test_dse_native_only_restricts_the_pool_and_collapses_psi_to_uk02(tmp_path):
 
 
 def test_single_informed_study_still_gets_a_per_study_psi_row():
-    """The one study that informs psi must not be filtered out for informing it.
+    """Report the sole informed study even when study offsets are fixed at zero.
 
-    With a single cross-tab source the model takes its degenerate branch and
-    pins every ``delta_psi`` to zero, so ``psi_study`` equals the population
-    ``psi`` for every study -- including the informed one. The summary used
-    ``np.allclose(draws, psi)`` as a proxy for "uninformed", which under
-    ``dse_native_only`` (uk_02's DSE arm is the only cross-tab left) discarded
-    every row, wrote no ``posterior_summary_psi_study.csv`` and printed no
-    table for the only study that identifies the association (#266). The
-    indicator is now carried explicitly by the samples object.
+    Equality with the population draws cannot establish that a study is
+    uninformed. Samples must carry the informed-study indicator explicitly.
     """
     rng = np.random.default_rng(266)
     psi_draws = np.exp(rng.normal(0.6, 0.2, size=500))
@@ -671,7 +647,7 @@ def test_signing_milestones_classify_always_true_states_as_censored():
 
 
 def test_signing_milestones_flag_a_milestone_never_reached():
-    """draws_reaching is the identification warning, not decoration."""
+    """Report the fraction of draws with an identified milestone crossing."""
     import numpy as np
 
     from vocab_growth.models.common_joint_modality import _signing_milestones

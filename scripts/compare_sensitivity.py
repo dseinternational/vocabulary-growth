@@ -1,36 +1,18 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Summarise registered sensitivity variants against the model of record.
+"""Compare registered sensitivity variants with the model of record.
 
-Usage:
+Check whether variant summaries lie inside the baseline's 89% intervals. Write
+per-variant detail and a robustness matrix under the sensitivity comparison
+directory. Every selected variant gets a row, including missing or failed fits.
+
+A targeted rerun updates its rows and retains others with their original dates.
+Retained comparisons against an older baseline are marked ``stale-baseline``.
+Compatibility and sampling-quality checks remain separate from the interval test.
+
+Usage::
+
     python scripts/compare_sensitivity.py <model> [--variant all|<name>] [--out CSV]
-
-Resolves the baseline fit (``output/models/<id>-<config_name>/``) and each
-variant fit (``…-<suffix>/``) from the registry, compares headline quantities
-(are they inside the baseline's 89% interval?), writes a per-variant detail CSV
-plus a ``robustness_matrix_<model>.csv`` under ``output/comparisons/sensitivity/``,
-and prints the matrix.
-
-**Every registered variant gets a row.** A variant that was never fitted, or
-whose fit was stopped by the convergence gate and retained under
-``output/failed/``, appears with a status and a reason rather than being skipped
-with a console note. A matrix that silently omits what it could not assess reads
-as coverage it has not got — the requirement recorded in
-``notes/202608142000-refit-run-record-and-disk-failure.md`` §5b, after
-``vg11 / anchor-broad`` failed the gate and vanished from its own matrix.
-
-**A targeted rerun merges rather than replaces.** ``--variant <name>`` used to
-rewrite the whole matrix from that one row, silently dropping every other
-variant's verdict. Carried-over rows keep the ``computed_at_utc`` of the run that
-produced them, so a stale row is visible as one.
-
-**A carried-over row scored against a superseded baseline is marked.** Retaining
-a row is right; presenting it as though it were scored against the current model
-of record is not. A refit moves ``baseline_fit_utc``, and every retained
-``compared`` row that names an earlier one has its status set to
-``stale-baseline``, with
-its verdict prefixed by the baseline it actually used, so the merged matrix is
-internally consistent rather than merely auditable (issue #266 finding 2).
 """
 
 import argparse

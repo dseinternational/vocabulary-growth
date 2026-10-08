@@ -1,35 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""VG25's sign -> speech cross-lag on the joint engine (issue #297).
+"""Check VG25's lagged signed share of understood vocabulary.
 
-VG25 is VG24 with one added coefficient: a child's prior-wave **signed share of
-comprehension**, relative to their own persistent signing standing, shifts the
-logit of their current production ratio ``q``. VG24 is nested exactly at
-``beta_sign_lag = 0``.
-
-Four properties carry the design and are pinned here.
-
-- **The coefficient actually reaches the density.** VG24's first build reported
-  all three of its correlations as ``+0.000`` in every draw because the
-  primitive returned the wrong object, and a model whose headline is silently
-  pinned at zero is indistinguishable from one that fitted and found nothing
-  (``notes/202609061530``). ``beta_sign_lag`` is the same shape of parameter, so
-  :func:`test_the_coefficient_reaches_every_likelihood_it_claims_to` measures the
-  logp's dependence on it rather than reading the source.
-- **VG24 is nested exactly at zero**, which is what makes "did anything else
-  move?" a meaningful question of the comparison.
-- **Turning the lag off leaves the graph VG24's, op for op**, so registering
-  VG25 cannot have moved any other model -- the property the graph baseline
-  records and this checks directly.
-- **The predictor reads what it claims to.** The signed share has two sources in
-  the joint frame (the marginal and the within-understood cells) and one
-  near-miss that must not be a third (``nz_01``'s produced cells, which
-  partition a different denominator).
-
-The definition-subclass check matters as much and is cheap: putting these fields
-on ``JointCorrelatedSubjectREModelDefinition`` would change VG24's serialised
-definition and invalidate every VG24 fit on disk.
+The lag shifts the current speech-rate logit relative to the child's persistent
+signing effect. Tests check source selection, predictor settings, affected
+likelihood terms and VG24 nesting at a zero lag coefficient.
 """
 
 import os
@@ -70,11 +46,7 @@ from vocab_growth.models.likelihood_utils import (
 
 LOGIT_CLIP_HIGH = np.log(1 - 1e-4) - np.log(1e-4)
 
-#: Everything above this line is arithmetic on arrays and costs nothing. The
-#: graph section at the bottom builds real PyMC models, is marked `slow`, and
-#: carries an `xdist_group` for the reason `test_graph_equivalence` records: its
-#: tests share module-scoped built graphs, so a per-test distribution would
-#: rebuild them once per worker that happens to draw one.
+#: Keep graph tests on one worker so their module-scoped builds are shared.
 GRAPH_TESTS = [pytest.mark.slow, pytest.mark.xdist_group("joint-sign-cross-lag")]
 
 
@@ -137,13 +109,7 @@ def test_vg24_does_not_gain_the_fields():
 
 
 def test_vg25_is_the_subclass_and_inherits_the_correlated_block():
-    """Deriving from VG24 rather than VG15 is the whole interpretive argument.
-
-    `rho_sign_q` is what takes the persistent sign-speech association off the
-    lag; without it in the same model the coefficient is a noisy proxy for it
-    (`notes/202608151140` s3). So this is a statistical claim, not a class
-    hierarchy detail.
-    """
+    """Retain the persistent sign-speech correlation in the model with the lag."""
     assert isinstance(VG25, JointCrossLagModelDefinition)
     assert isinstance(VG25, JointCorrelatedSubjectREModelDefinition)
     assert VG25.subject_re_correlation_eta == VG24.subject_re_correlation_eta
@@ -151,13 +117,7 @@ def test_vg25_is_the_subclass_and_inherits_the_correlated_block():
 
 
 def test_the_registered_choices_are_the_ones_the_record_states():
-    """Each of these was a decision with a recorded reason; pin them together.
-
-    A silent flip of any one changes the estimand or the evidence: the baseline
-    decides whether the coefficient duplicates `rho_sign_q`, the cells decide
-    whether uk_07 contributes at all, and the zero treatment decides whether
-    76% of the source logit's sum of squares comes from a floor constant.
-    """
+    """Check the registered baseline, likelihood scope and boundary treatment."""
     assert VG25.sign_lag_baseline == "within"
     # False since 2026-09-15: in the cells the within-child predictor carried each
     # child's estimated signing intercept into the compositions, and the first
@@ -353,13 +313,10 @@ def test_the_result_does_not_depend_on_the_input_row_order():
 
 
 def test_the_largest_denominator_wins_inside_a_source_wave():
-    """The least-truncated-measurement rule, said of a ratio.
+    """Select the largest understood denominator rather than the largest share.
 
-    A shorter form right-truncates numerator and denominator alike, so the
-    wave's largest comprehension total is its least-truncated view of the child
-    -- and it is chosen for that reason, not because its share is larger. Here
-    the larger denominator carries the SMALLER share, so a rule that maximised
-    the share would give a different answer and this would fail.
+    Here the selected row has the smaller signed share. The selection rule
+    must not maximise the predictor itself.
     """
     subject = [0, 0, 0]
     age = [12.0, 12.0, 24.0]
@@ -374,18 +331,10 @@ def test_the_largest_denominator_wins_inside_a_source_wave():
 
 
 def test_a_denominator_tie_is_broken_by_the_numerator_not_the_row_order():
-    """Two quantities are read off the source row, so both are selection keys.
+    """Break equal-denominator ties with the larger signed numerator.
 
-    Review of #339 found the gap: the walk ranked candidate sources on the
-    comprehension denominator alone, but this lag reads the *signed* count off
-    the chosen row as well. Two same-age forms agreeing on the total and
-    disagreeing on how many of those words the child signs are a genuine
-    conflict, and `np.argmax` resolved it by whichever the frame listed first --
-    so a re-sort of the analysis frame could move the predictor. Preferring the
-    larger signed count is the least-truncated rule applied to the numerator.
-
-    No wave that serves as a source offers such a choice on the current frame,
-    for either lag; this pins the rule rather than a present-day number.
+    Both counts affect the predictor. This deterministic rule prevents row
+    order from resolving a conflict between same-age measurements.
     """
     subject = [0, 0, 0]
     age = [12.0, 12.0, 24.0]
@@ -627,18 +576,11 @@ def test_the_two_lags_select_sources_independently():
 
 
 def _mixed_joint_frame(definition):
-    """``synthetic_frame`` with half its children on marginals, not cross-tabs.
+    """Clear cross-tab cells for half the children to exercise marginal likelihoods.
 
-    The shared synthetic frame gives **every** row a four-cell partition, so
-    ``marginal_outcome_eligible`` is empty and the joint engine builds
-    ``y_s_obs`` and ``y_sign_obs`` over zero rows. That is fine for a graph
-    fingerprint and useless here: the scope decision this module has to check is
-    precisely *which* likelihoods the lag reaches, and a frame with no spoken
-    marginal cannot tell the two arms apart.
-
-    Children occupy consecutive row pairs, so clearing the cross-tab columns on
-    the second half moves whole children -- both of their waves -- onto the
-    marginal path, leaving lags available on each branch.
+    The shared synthetic frame gives every row a cross-tab. Its marginal nodes
+    have no observations, so testing their independence would be vacuous.
+    Clearing whole child pairs preserves lags on both branches.
     """
     frame = synthetic_frame(definition).copy()
     marginal = frame.index >= len(frame) // 2
@@ -816,14 +758,7 @@ def test_the_coefficient_is_in_the_graph(graphs):
 @pytest.mark.slow
 @pytest.mark.xdist_group("joint-sign-cross-lag")
 def test_the_coefficient_reaches_every_likelihood_it_claims_to(graphs):
-    """The check VG24's `+0.000` correlations earned.
-
-    A headline parameter the density does not depend on produces a fit that
-    looks exactly like one that found nothing. So this measures the dependence
-    rather than asserting it: the spoken marginal must move when `beta_sign_lag`
-    moves, and the likelihoods the lag has no business touching must not. Since
-    2026-09-15 the cross-tab composition is one of those.
-    """
+    """Perturb the lag coefficient to check the intended likelihood dependence."""
     model = graphs["vg25"]
     moved = _moved_by_beta(model, "y_s_obs")
     assert moved is not None and moved > 1e-8, "y_s_obs does not depend on beta_sign_lag"
@@ -889,13 +824,7 @@ def test_the_baseline_changes_the_predictor_rather_than_the_factors_it_reaches(g
 @pytest.mark.slow
 @pytest.mark.xdist_group("joint-sign-cross-lag")
 def test_vg24_is_nested_exactly_at_zero(graphs):
-    """At `beta_sign_lag = 0` the observed density must be VG24's, exactly.
-
-    Not approximately: this is what makes "did anything else move?" a red flag
-    in the VG25-against-VG24 comparison rather than a vague expectation. Only
-    the observed factors are compared, so VG25's extra prior term does not have
-    to be accounted for by hand.
-    """
+    """At a zero lag coefficient, preserve VG24 observed-factor log densities."""
     vg25, vg24 = graphs["vg25"], graphs["vg24"]
     point = vg25.initial_point()
     key = next(k for k in point if k.startswith("beta_sign_lag"))

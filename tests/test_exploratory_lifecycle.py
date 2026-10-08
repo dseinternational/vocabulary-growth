@@ -1,25 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""VG17 and VG18 are explicitly exploratory, and their output says so.
+"""Check exploratory model builds and output labels.
 
-Issue #273 finding 4, resolved on 2026-08-31 by the study owner's decision:
-these two modules are exploratory and non-validatable rather than candidates for
-a supported lifecycle, and their query grid is clipped to the observation window
-rather than the GP domain widened to meet it.
-
-Two claims are worth a standing check.
-
-**The default build works.** It did not. VG17 copied VG01's query grid, which
-runs to 90 months, while observing 12-66 and taking that as its GP domain, so
-`construct_age_grids` refused and `fit()` raised on its default path -- the model
-could not be built at all. The one test that touched the graph rewrote the
-configuration to get past it, which is why nothing noticed.
-
-**The output declares itself.** These modules write a trace and a contrast table
-into a directory shaped exactly like a registered fit's, carrying none of the
-provenance one has. `sync_report_figures.py` already skips them as unregistered,
-but that protects the report rather than the person who finds the directory.
+VG17 and VG18 remain outside the registered fit lifecycle. Their output must
+identify missing validation artefacts and state that it is not publishable.
+VG17's default query ages must also fit its observation-based GP domain.
 """
 
 from __future__ import annotations
@@ -47,11 +33,7 @@ _EXPLORATORY_MODULES = (vg17, vg18)
 
 
 def test_the_query_grid_lies_inside_the_observation_window():
-    """The defect, stated as the property that was violated.
-
-    Checked on the configuration rather than by building, so it holds without
-    the prepared DuckDB and names the cause rather than the symptom.
-    """
+    """Check the default query ages without requiring a prepared database."""
     grid = vg17._config().ages_query
     assert grid, "the query grid is empty"
     assert min(grid) >= vg17.AGE_LO
@@ -191,13 +173,7 @@ def test_each_module_says_its_output_must_not_be_published(module):
 
 @pytest.mark.parametrize("module", _EXPLORATORY_MODULES)
 def test_the_publication_hazard_is_in_the_first_lines_not_buried(module):
-    """Position, not merely presence.
-
-    VG18 had it as the final clause of a 200-character line at the end of a 50-line
-    docstring whose *first* line is a different hazard, and VG17 had it as the
-    fourth paragraph. A reader who opens the file and reads the top has to meet it,
-    so this pins where it is rather than that it exists somewhere.
-    """
+    """State the exploratory and publication status in the first five docstring lines."""
     assert module.__doc__
     head = module.__doc__.strip().splitlines()[:5]
     joined = " ".join(head).lower()

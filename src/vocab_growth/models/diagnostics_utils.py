@@ -14,39 +14,14 @@ from vocab_growth.fit_artifacts import (
 
 
 def pair_plot_priority(definition) -> tuple[str, ...]:
-    """The variables the pair plot must show for ``definition``, most important first.
+    """Order key child-structure parameters before the pair plot's variable cap.
 
-    ArviZ caps a pair plot at ``floor(sqrt(plot.max_subplots))`` variables, so a
-    grid built in model order fits about six -- and model order is the build
-    order, which puts the mean-function and GP parameters first. Every parameter
-    a child-effect model was *added for* therefore fell off the end: VG19's
-    slope block, VG20's ``rho_uq``, VG22's factor scales. The captions in those
-    reports tell the reader to inspect exactly those ridges, so the plot
-    contradicted the text it was captioned with (#233).
+    Read priorities from the definition, then retain the other names in model
+    order. Joint models prioritise sign/speech association; bivariate models use
+    their own child-correlation or slope structure. Missing trace names are skipped.
 
-    Ordering rather than filtering, so nothing is hidden -- the cap simply
-    consumes the list from a different end. An empty tuple means "model order",
-    which is what every model without a distinguishing child structure gets, and
-    those pair plots are byte-identical to before.
-
-    The names are read from the definition rather than the trace so the intent
-    is declared by the model, not inferred from what happened to be sampled.
-
-    **One function for both engines that order a pair plot.** It began as the
-    bivariate engine's, with the joint engine leading unconditionally with
-    ``psi`` and ``conc`` and taking build order after them -- which reproduced
-    #233 on that side, for VG24 as well as VG25.
-    Consolidating is not a matter of applying the bivariate rules to joint
-    models: the two engines' child blocks differ, and a naive merge would have
-    handed VG24 the *bivariate* headline ``rho_uq`` and dropped the sign-speech
-    correlation the model exists to estimate. The branches below are therefore
-    modality-aware where the structure differs and shared where it does not.
-
-    The engines that do **not** install this ordering -- univariate, univariate
-    with random effects, and trivariate -- must have nothing to order, and
-    ``tests/test_pair_plot_limits.py`` asserts exactly that, so registering a
-    model with a distinguishing structure on one of them fails rather than
-    silently ignoring its priority.
+    An empty tuple keeps model order. test_pair_plot_limits.py checks that engines
+    without this ordering have no registered structure requiring it.
     """
     joint = _is_joint(definition)
     head = ["psi", "conc"] if joint else []
@@ -57,11 +32,7 @@ def pair_plot_priority(definition) -> tuple[str, ...]:
     # because `psi` happened to make the list non-empty.
     priority: list[str] = []
 
-    # The sex coefficients (#324) are deliberately not prioritised. They led this
-    # list while the only model carrying them was the VG20 sex experiment, where
-    # they were the headline; on the reporting models they are a covariate, a
-    # scalar with no ridge the pair grid exists to show, and putting them first
-    # would push out the parameters each of those models was registered for.
+    # Keep the capped grid for the model's main child-structure parameters.
 
     if getattr(definition, "use_cross_lag", False):
         priority.append("beta_lag")

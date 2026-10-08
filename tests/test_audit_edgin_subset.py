@@ -1,15 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for the Edgin subset audit's exact run probability.
+"""Check the Edgin audit's probability of consecutive flagged records.
 
-The audit's strongest finding is that 21 consecutive Words & Sentences records
-sit at exactly the 680-word form ceiling, which
-``notes/202607261245-edgin-duplicated-outcome-records.md`` §13 quotes at a
-probability of 1.3e-22 against chance. That number carries real weight — the
-source author no longer holds the original files, so no confirmation is coming
-and the published claim rests on this arithmetic — so it is pinned here against
-cases countable by hand rather than trusted from a single ad-hoc run.
+The calculation assumes equally likely arrangements of a fixed number of
+flags. It describes the run under that assumption, not the probability that
+the records are erroneous. Small cases are checked by enumeration.
 """
 
 import importlib.util

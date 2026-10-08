@@ -1,13 +1,9 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Every engine's monthly-summary call site must survive a real invocation.
+"""Check each engine's monthly-summary calls with its actual sample class.
 
-The wiring passes engine-specific sample arrays into a shared helper, and a
-wrong attribute name there raises only when the fit actually runs — invisible to
-a unit test that exercises the helper alone. That is the failure mode that got
-through review once already in this codebase, so these tests reach into each
-engine's own sample class and call the emitter for real.
+Helper-only tests would miss references to fields an engine does not supply.
 """
 
 import inspect
@@ -111,13 +107,7 @@ def test_joint_engine_reads_only_fields_its_samples_have():
 
 
 def test_n_obs_counts_only_the_administrations_observing_that_outcome(tmp_path):
-    """n_obs is per-outcome, not per-administration.
-
-    A first cut of the joint-engine wiring passed the whole analysis frame's
-    ages for all three outcomes, so every outcome reported the same total and
-    overstated the coverage of the sparser ones. The other engines pass their
-    per-outcome ``x_obs``; this pins the contract the shared emitter relies on.
-    """
+    """Count administrations that observe the selected outcome."""
     X_plot, p_plot, y_plot = _grid()
     frame = pd.DataFrame(
         {
@@ -176,14 +166,7 @@ _ENGINE_MODULES_WITH_MONTHLY = (common, cb, ct, cj)
     "module", _ENGINE_MODULES_WITH_MONTHLY, ids=lambda m: m.__name__.rpartition(".")[2]
 )
 def test_every_emit_monthly_summary_call_passes_interval_kind(module):
-    """`emit_monthly_summary` defaults `interval_kind` to "eti".
-
-    That default is a convenience for a direct caller, not a licence for an engine:
-    an engine that omits it pins its monthly tables to ETI while the rest of its
-    reporting follows `context.reporting.interval_kind`. The bivariate and trivariate
-    engines had omitted it. Checked as a rule on the source rather than by running a
-    fit, so it costs nothing and covers the engines no CI job samples.
-    """
+    """Require every engine to pass its reporting interval policy explicitly."""
     import ast
 
     tree = ast.parse(inspect.getsource(module))

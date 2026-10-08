@@ -1,27 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Registered definitions and their fixed collections are immutable.
+"""Keep registered definitions and their fixed collections immutable.
 
-Issue #273. Twenty definitions are module-level singletons shared by every fit,
-every sensitivity variant, every recovery replicate and every validator in the
-same process, and until this they were mutable dataclasses holding mutable
-lists. Nothing was observed mutating one; the point is that nothing *can*, so a
-future edit to a shared definition fails at the write rather than as an
-unexplained difference between two fits of the same model.
-
-Two consequences worth stating. ``_as_definition_subclass`` shares nested prior
-blocks with its base by reference — VG20, VG22 and VG23 all carry VG10's or
-VG13's kappa objects — and freezing those blocks is what makes the sharing safe
-rather than merely untested; the sensitivity override code has carried a comment
-about exactly this aliasing risk since it was written. And a frozen definition
-is hashable, so it can be a dictionary key or go in a set, which the plan
-resolution in ``SubjectEffectPlan`` relies on for caching.
-
-Serialisation is deliberately unaffected: ``normalise_for_json`` renders a tuple
-and a list as the same JSON array, so freezing the classes and tupling the query
-grids left every registered model's recorded definition byte-identical and no
-fitted output was invalidated.
+Definitions and nested prior blocks are shared across fits and variants.
+Freezing both prevents one mutation from changing several models. Hashable
+definitions also support cached child-effect plans. Tuple and list fields
+serialise to the same JSON arrays.
 """
 
 from __future__ import annotations
@@ -114,11 +99,7 @@ def test_replace_still_builds_a_variant():
 
 
 def test_the_serialised_definition_is_unaffected_by_the_container_type():
-    """The claim that freezing invalidated no fitted output, as a test.
-
-    A tuple and a list both render as a JSON array, so a fit recorded before
-    this change still compares equal to the definition registered after it.
-    """
+    """Serialise tuple and list query grids to the same definition payload."""
     from vocab_growth.fit_artifacts import normalise_for_json
 
     base = MODEL_REGISTRY["vg10"]

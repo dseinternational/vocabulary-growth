@@ -1,16 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The spoken-fallback treatments (issues #233 and #236).
+"""Check treatments for spoken rows without a usable understood count.
 
-455 of the current frame's 1,428 spoken observations cannot condition on an
-observed understood count, and have always been given ``S ~ BB(810, p_U*q,
-kappa_S)`` instead of the paired model's second line. These tests pin the four
-treatments of that branch: that the default is unchanged, that dropping the rows
-drops exactly those rows, that the separate-dispersion form nests the default,
-and -- the substantive one -- that the moment-matched concentration really is
-the true marginal's, checked against a brute-force sum over the latent parent
-count rather than against a restatement of the formula.
+Retain the default expression, drop only the selected rows in paired-only fits,
+and recover the default at zero separate-dispersion offset. Compare the
+moment-matched Beta-Binomial's mean and variance with the exact latent-parent
+marginal; agreement of two moments does not imply identical distributions.
 """
 
 import dataclasses
@@ -51,11 +47,9 @@ def _spec(**overrides):
 
 
 def _exact_marginal_pmf(n_trials, p_u, kappa_u, q, kappa_s):
-    """P(S = s) under the paired model, by summing over the latent parent count.
+    """Sum the nested spoken distribution over every possible latent parent count.
 
-    ``U ~ BB(n, p_U, kappa_U)`` then ``S | U ~ BB(U, q, kappa_S)``, summed over
-    every U that could have produced each S. Feasible only for a small
-    inventory, which is exactly why the graph cannot do this.
+    Use a small inventory to keep this explicit numerical check inexpensive.
     """
     u = np.arange(n_trials + 1)
     p_parent = betabinom.pmf(u, n_trials, p_u * kappa_u, (1 - p_u) * kappa_u)
@@ -155,11 +149,7 @@ def test_the_default_fallbacks_variance_error_flips_sign_at_q_kappa_s_equals_kap
 
 
 def test_the_moment_match_reduces_to_the_default_in_the_limit_it_assumes():
-    """At ``p_U = 1`` with a deterministic comprehension process the two agree.
-
-    Which is the sense in which the default is not wrong but incomplete: it is
-    the moment-matched form under an assumption the data contradict.
-    """
+    """Recover the default when comprehension is deterministic and includes every item."""
     kappa_eff = float(
         product_marginal_concentration(
             np.array(1.0 - 1e-12), np.array(1e12), np.array(0.4), np.array(9.0),
@@ -231,9 +221,7 @@ def test_every_registered_model_carries_a_known_treatment():
     bivariate = [
         d for d in MODEL_REGISTRY.values() if isinstance(d, BivariateModelDefinition)
     ]
-    # 12 since VG23 joined on 2026-08-25, 13 since VG26 on 2026-09-13. Pinned
-    # rather than derived so a new bivariate model has to be looked at here
-    # rather than silently inheriting the default treatment.
+    # Pin the count so new bivariate models require review of their treatment.
     assert len(bivariate) == 13
     for definition in bivariate:
         assert definition.spoken_fallback == SPOKEN_FALLBACK_PRODUCT, (
@@ -272,11 +260,7 @@ def _alpha_beta(treatment, **overrides):
 
 
 def test_the_default_treatment_emits_the_historical_expression():
-    """The eleven models' graphs must be unchanged by the refactor.
-
-    Hand-built here rather than compared to a pinned number, so the check keeps
-    meaning if the data change.
-    """
+    """Compare the default graph expression with its explicit arithmetic."""
     (alpha, beta), _ = _alpha_beta(SPOKEN_FALLBACK_PRODUCT)
     p = np.where([1, 0, 1, 0], [0.4, 0.5, 0.6, 0.7], [0.2, 0.25, 0.3, 0.35])
     np.testing.assert_allclose(alpha, p * 12.0, rtol=0, atol=0)
@@ -284,11 +268,7 @@ def test_the_default_treatment_emits_the_historical_expression():
 
 
 def test_the_separate_dispersion_treatment_nests_the_default_at_zero():
-    """Its whole value as a readout depends on this.
-
-    The offset is replaced by a constant zero rather than left to whatever test
-    value the RV happens to carry, so this is arithmetic and not sampling.
-    """
+    """Replace the offset by zero and compare graph expressions without sampling."""
     import pymc as pm
     import pytensor.tensor as pt
     from pytensor.graph.replace import graph_replace

@@ -98,10 +98,8 @@ def test_sync_copy_failure_preserves_previous_destination(tmp_path, monkeypatch)
 
 
 def test_all_model_outputs_validate_before_any_cache_is_changed(tmp_path, monkeypatch):
-    # Both fits belong to publication-required models, chosen by role rather
-    # than by name: a development step that fails validation is skipped by
-    # role instead of blocking (next test), and when VG02 became one on
-    # 2026-09-09 this test silently turned into that one.
+    # Choose required fits by role so later catalogue changes do not silently
+    # turn this into a test of skipping optional development output.
     valid, invalid = (MODEL_REGISTRY[key] for key in publication_models()[:2])
     output_root = tmp_path / "output"
     _write_output(output_root, valid, state="complete")
@@ -134,10 +132,9 @@ def test_all_model_outputs_validate_before_any_cache_is_changed(tmp_path, monkey
 def test_a_model_that_supplies_no_number_is_skipped_rather_than_fatal(
     tmp_path, monkeypatch, capsys
 ):
-    """The other half of the roles doctrine: a development step whose fit fails
-    validation is reported and left out, and the models that carry a number
-    still sync. Before roles were declared this was the all-or-nothing failure
-    of #301, where one stale rung took every model down with it.
+    """Report failed development-fit validation without blocking required fits.
+
+    The invalid development fit contributes no cached figures.
     """
     valid = MODEL_REGISTRY[publication_models()[0]]
     step = MODEL_REGISTRY[models_with_role(ModelRole.DEVELOPMENT_STEP)[0]]

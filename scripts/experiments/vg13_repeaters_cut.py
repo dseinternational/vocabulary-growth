@@ -1,87 +1,34 @@
 #!/usr/bin/env python
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Does pinning the child scales from the repeaters repair VG13's geometry?
+"""Compare VG13 sampling with child scales nearly fixed at fitted values.
 
 Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+Revised with assistance from OpenAI Codex/GPT-6.
 
-The question
-------------
-``notes/202609072230-vg12-repeaters-prior.md`` established, on VG12, that the
-typically developing models' low energy BFMI and their tau-kappa ridge are
-repaired by a **cut** -- estimating the between-child / within-child split from
-the children who carry replication and holding it there -- and not by a prior,
-because the singletons' likelihood outweighs any prior at the strength the
-repeaters can justify. That note scopes [#289](
-https://github.com/dseinternational/vocabulary-growth/issues/289) task 4.6 and
-says explicitly what it has *not* established:
+``baseline`` fits the full frame. ``repeaters`` retains children with at least
+two visits and rebuilds study and child codes. ``pinned`` fits the full frame
+with narrow scale priors centred at the repeaters' posterior means.
+``pinned-baseline`` centres them at the full-frame baseline means instead.
 
-    VG13, VG21 and VG23 have two free child scales and no partition. The same
-    cut is to fix ``tau_subj_u`` and ``tau_subj_q`` from a repeaters-only fit,
-    or to add the partition first. **This has not been tested**; the analogue
-    of this experiment on VG13 is the next check, and it is bivariate, so about
-    twice the cost.
+Compare BFMI, divergences and posterior correlations at the same tier. The two
+pinned arms help distinguish sensitivity to the chosen scale values from the
+restriction of scale uncertainty. Keeping the same number of free parameters
+does not make their energy distributions or BFMI directly equivalent.
 
-This is that check. VG13 is the right model for it: VG23 is VG13's frame
-*exactly* plus one free correlation, and VG21 is VG13 with the window widened
-to 8-22 months, so the three share one replication profile (828-943 repeaters
-out of 5,496-5,707 children, drawn from the same three of six studies) and one
-answer.
-
-One structural difference from VG12 makes this test necessary rather than a
-formality. VG12 carries ``subject_variance_partition``, so its split is a
-single ``Beta`` share and a prior on it is expressible; a near-degenerate Beta
-is what pinned it. VG13 carries two independent ``HalfNormal`` scales, and a
-``HalfNormal`` has its mode at zero -- there is **no** way to express "the
-scale is about 0.73" as a prior of that family at any sigma. So on VG13 the
-prior arm of the VG12 experiment does not exist, and the pin is the only lever
-there is. That is itself part of the finding.
-
-Arms
-----
-    baseline   VG13 as registered, on its full frame
-    repeaters  VG13 as registered, on the children with >= 2 visits only,
-               study and child codes re-issued densely
-    pinned     VG13 on the full frame with ``tau_subj_u`` and ``tau_subj_q``
-               held at the repeaters arm's posterior means, near-degenerately
-               (the VG12 precedent: a distribution with sd 0.001 rather than a
-               removed parameter, so the dimension still enters the energy and
-               the BFMI stays comparable)
-    pinned-baseline
-               the control for `pinned`: the same pin, at the **baseline's own**
-               posterior means instead of the repeaters'. Circular as an
-               estimator -- it pins at the answer the full frame already gave --
-               and that is the point. It separates two things `pinned` confounds:
-               whether the geometry is repaired by *removing the split direction*
-               (in which case this arm repairs it too, at no cost to the reported
-               number) or by *the repeaters' information specifically* (in which
-               case only `pinned` repairs it). Without it, a BFMI rise in `pinned`
-               cannot be attributed.
-
-Read: min BFMI per chain, ``corr(tau_subj_u, kappa_young_u)`` and
-``corr(tau_subj_q, kappa_young_s)``, the marginal-energy correlates and the
-energy SD against ``sqrt(d/2)``. If the pinned arm clears the 0.3 threshold and
-both ridges fall, the cut generalises from the partition models to the
-two-scale models and task 4.6 has one remedy rather than two. If it does not,
-the bivariate TD models need the partition adding first, which is a larger
-change and belongs in the refit window either way.
-
-What this is not
-----------------
-Not a fit of record and not a registered variant. The pinned arm uses the
-repeaters' posterior means and discards their uncertainty, which the VG12 note
-is explicit is *not* the honest reported interval -- propagating that
-uncertainty is a design question this experiment does not settle. It writes to
-its own output root, never a publication root.
+These exploratory arms discard uncertainty in their fitted centres. Better
+sampling would not certify their intervals or establish a remedy for every TD
+model. A zero-centred HalfNormal cannot express a positive modal scale, but
+other prior families can; pinning is one candidate, not the only possible one.
 
 Usage::
 
     uv run python scripts/experiments/vg13_repeaters_cut.py baseline repeaters --output-dir output/experiments/vg13-repeaters-cut
     uv run python scripts/experiments/vg13_repeaters_cut.py pinned --output-dir output/experiments/vg13-repeaters-cut
 
-``pinned`` needs ``repeaters.json`` in the output root; ``all`` runs the three
-in order. ``--config`` defaults to ``test``, the tier the VG12 experiment used
-and at which its baseline reproduced the fit of record's geometry.
+``pinned`` needs ``repeaters.json``; ``pinned-baseline`` needs ``baseline.json``.
+``all`` runs all four arms in order. ``--config`` defaults to ``test``. Use a
+separate output root; none of these arms is a fit of record.
 """
 
 from __future__ import annotations

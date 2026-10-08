@@ -74,8 +74,7 @@ def main() -> int:
                 expected_sampling_parameters=asdict(expected_sampling),
                 current_git=current_git,
                 current_source_data_hash=current_source_hash,
-                # Both purposes this script offers carry the data checks, so the
-                # prepared-frame hash is always computed (issue #266 finding 1).
+                # Resume and publication both require the prepared-frame check.
                 current_analysis_frame_hash=expected_analysis_frame_hash(
                     key, definition
                 ),

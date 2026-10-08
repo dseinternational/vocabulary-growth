@@ -17,13 +17,10 @@ import pandas as pd
 # How a nested outcome treats the rows it cannot condition on
 # --------------------------------------------------------------------------
 #
-# The paired model is U ~ BB(N, p_U, kappa_U) then S | U ~ BB(U, q, kappa_S).
-# Rows with no usable parent count cannot take the second line, and the engines
-# have always substituted S ~ BB(N, p_U*q, kappa_S). That substitution has the
-# right *mean* but is not the paired model's marginal, and it affects 455 of the
-# 1,428 spoken observations in the current frame (issues #233 and #236). These
-# four treatments are the sensitivity family over that choice; every one of them
-# leaves the conditional branch alone.
+# U ~ BB(N, p_U, kappa_U), then S | U ~ BB(U, q, kappa_S).
+# Without a usable parent count, the historical fallback is
+# S ~ BB(N, p_U*q, kappa_S). It matches the mean but generally not the
+# nested model's marginal variance. Sensitivities leave conditional rows alone.
 #
 # What the exact marginal is, and why `moment_matched` is not a guess:
 # binomial thinning gives S | theta_U, theta_S ~ Bin(N, theta_U*theta_S)
@@ -49,29 +46,28 @@ equal. Which side the fitted models sit on is a question about their posterior
 concentrations, not one that can be settled from the structure."""
 
 SPOKEN_FALLBACK_PAIRED_ONLY = "paired_only"
-"""Drop the fallback rows from the outcome's likelihood entirely.
+"""Drop fallback rows from the nested outcome's likelihood.
 
-The cleanest sensitivity and the most expensive one: it answers "what would the
-model say if the approximation had never been made" at the cost of a third of
-the spoken observations, which are older and concentrated by study, so the loss
-is not a random subsample. Read it as a bound, not as a better model."""
+This checks dependence on the fallback approximation. Removed rows can differ
+in age and study from retained rows, so the result reflects a changed sample
+as well as a changed likelihood. It is not a bound on the correct estimate.
+"""
 
 SPOKEN_FALLBACK_SEPARATE_DISPERSION = "separate_dispersion"
-"""As `product_marginal`, but the fallback branch carries its own concentration.
+"""Give the product-mean fallback its own concentration multiplier.
 
-One scalar, `log_kappa_<outcome>_fallback`, multiplying the shared age-varying
-kappa on the fallback rows only. Nests the default exactly at zero, so its
-posterior is a direct readout of how much dispersion the branch wants and in
-which direction -- which a duplicated two-anchor block, weakly identified on 455
-rows, would not give. Unlike `moment_matched` it is agnostic: it lets the data
-say what the branch needs instead of imposing what the paired model implies,
-which makes the two together a check on each other."""
+log_kappa_<outcome>_fallback scales the shared age-varying concentration on
+fallback rows only. At zero it gives the historical fallback. Compare this
+flexible residual spread with the moment-matched treatment; neither guarantees
+the full marginal distribution is correct.
+"""
 
 SPOKEN_FALLBACK_MOMENT_MATCHED = "moment_matched"
-"""Match the exact first two moments of the paired model's true marginal.
+"""Match the first two moments of the nested model's count marginal.
 
-Same cost as the default, and correct where the default is not: see
-`product_marginal_concentration`."""
+The product of independent Beta probabilities is generally not Beta, so the
+Beta-Binomial approximation need not match higher moments or tail probabilities.
+"""
 
 # --------------------------------------------------------------------------
 # How the cross-lag predictor handles a zero-count source (issue #242)
@@ -83,13 +79,11 @@ Same cost as the default, and correct where the default is not: see
 # choice that was never registered as one.
 
 LAG_ZERO_CLIP = "clip"
-"""Clip the proportion into ``[1e-4, 1 - 1e-4]``, the historical treatment.
+"""Clip the proportion into [1e-4, 1 - 1e-4] before taking its logit.
 
-On an 810-item reference a zero source becomes ``logit(1e-4) = -9.21``. That
-value is set by the clip, not by the data: it would be the same on a source of
-zero out of 396. Seven of the 477 rows carrying a lag source have a zero source
-on the current frame, and they sit at the extreme of the predictor's range,
-where a regression coefficient takes its leverage from."""
+A zero source becomes logit(1e-4), about -9.21, regardless of inventory size.
+This predictor boundary is a modelling choice; it can affect lag estimates.
+"""
 
 LAG_ZERO_CONTINUITY = "continuity"
 """Use ``(u + 0.5) / (n + 1)`` before taking a logit.
@@ -104,18 +98,14 @@ and a Binomial likelihood; it is used here as a predictor sensitivity.
 LAG_ZERO_TREATMENTS = (LAG_ZERO_CLIP, LAG_ZERO_CONTINUITY)
 
 LAG_BASELINES = ("population", "within")
-"""What the lag predictor is measured *from*, for ``lag_baseline``.
+"""Reference trajectories for the lag residual.
 
-Both are defined relative to the child's understood subject intercept: ``"within"``
-subtracts it, so the predictor is the child's own deviation from their own level;
-``"population"`` adds it back, so the predictor is the level itself. They coincide
-when there is no comprehension child effect, which is why both
-``definitions.validate_model_definition`` and ``cross_lag.validate_cross_lag``
-refuse that combination.
-
-Here beside :data:`LAG_ZERO_TREATMENTS` so the definition-level check and the
-engine-level one read one tuple. They were two literals with different messages,
-in ``definitions.py`` and in the engine."""
+The within baseline includes the child's modelled understood effect; the
+population baseline excludes it. The residual therefore removes or retains that
+standing, respectively. Both include the other configured baseline terms.
+Without an understood child effect the two coincide, so validation rejects that
+configuration. Definition and graph checks share this tuple.
+"""
 
 SPOKEN_FALLBACK_TREATMENTS = (
     SPOKEN_FALLBACK_PRODUCT,
@@ -124,10 +114,8 @@ SPOKEN_FALLBACK_TREATMENTS = (
     SPOKEN_FALLBACK_MOMENT_MATCHED,
 )
 
-# Floors for the moment-matched concentration. Both quantities are positive by
-# construction -- E[X^2] > (E X)^2 for a non-degenerate X, and Var <= m(1-m) for
-# any variable on [0, 1] -- so these only guard the arithmetic at the clipped
-# extremes, never the intended regime.
+# Numerical floors protect the division and concentration near degenerate
+# probabilities. If active, they change the exact moment match.
 _VARIANCE_FLOOR = 1e-12
 _CONCENTRATION_FLOOR = 1e-6
 
@@ -275,8 +263,8 @@ def nested_outcome_spec(
 def product_marginal_concentration(parent_p, parent_kappa, child_p, child_kappa, *, epsilon):
     """Concentration of the Beta-Binomial matching the true marginal's variance.
 
-    The paired model draws ``theta_U ~ Beta(p_U kappa_U)`` and
-    ``theta_S ~ Beta(q kappa_S)`` independently, then ``U ~ Bin(N, theta_U)``
+    The paired model draws ``theta_U ~ Beta(p_U kappa_U, (1 - p_U) kappa_U)`` and
+    ``theta_S ~ Beta(q kappa_S, (1 - q) kappa_S)`` independently, then ``U ~ Bin(N, theta_U)``
     and ``S | U ~ Bin(U, theta_S)``. Binomial thinning collapses those two
     lines to ``S | theta_U, theta_S ~ Bin(N, theta_U theta_S)`` exactly, so the
     marginal of ``S`` is a Binomial mixed over the product of two independent
@@ -328,17 +316,11 @@ def nested_outcome_alpha_beta(
     outcome: str,
     fallback_kappa_sigma: float,
 ):
-    """Return ``(alpha, beta)`` for a nested outcome's Beta-Binomial likelihood.
+    """Return alpha and beta for the selected nested-outcome likelihood treatment.
 
-    Shared by both bivariate engines so the two graphs cannot drift: before this
-    existed they carried the same eight lines twice. Under
-    `SPOKEN_FALLBACK_PRODUCT` and `SPOKEN_FALLBACK_PAIRED_ONLY` the ops emitted
-    are exactly the ones the engines emitted before -- op for op, so those fits
-    reproduce bit-for-bit -- because the paired-only treatment is applied at data
-    preparation, by dropping the rows, and never reaches the graph.
-
-    ``is_conditional`` selects the branch per row; every argument sized by
-    observation is already restricted to the outcome's own rows.
+    is_conditional selects the branch per row. Observation-sized arguments must
+    already be restricted to the outcome's rows. The paired-only treatment removes
+    fallback rows at data preparation rather than altering this graph.
     """
     import pymc as pm
 

@@ -1,19 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for two reporting guards in the comparison scripts.
+"""Check trace group names and warnings for unreliable LOO approximations.
 
-Both were written after a real run misreported rather than failed loudly, which
-is the failure mode these pin:
-
-* ``aggregate_summary._group_names`` -- ArviZ 1.x reads a trace into a
-  ``DataTree`` whose ``groups`` is a *property* holding *paths*
-  (``"/sample_stats"``). The old ``idata.groups()`` raised ``TypeError``, but
-  the obvious repair -- dropping the parentheses -- silently reports every model
-  as having no divergences, because ``"sample_stats"`` is not among the paths.
-* ``loo_compare._warn_if_unusable`` -- the high Pareto-k count was printed but
-  never judged. VG11's first LOO put 48% of observations above k = 0.7 with
-  p_loo = 10,720, and the row still entered the table looking like any other.
+DataTree groups use paths such as ``"/sample_stats"``. The reader must normalise
+these to the names used by reporting checks. The LOO warning tests use
+synthetic summaries with many unreliable Pareto-k values.
 """
 
 import importlib.util
@@ -78,12 +70,7 @@ def test_group_names_finds_nothing_that_is_absent():
 
 
 def test_trace_divergences_reads_a_real_count(tmp_path):
-    """The end-to-end path the TypeError broke: a stored trace's divergences.
-
-    Pins the number rather than merely that it returns, because the tempting
-    repair returns ``None`` here -- indistinguishable, in the summary table,
-    from a model that genuinely never diverged.
-    """
+    """Read the count from a saved trace rather than report missing diagnostics."""
     rng = np.random.default_rng(1)
     diverging = np.zeros((2, 50), dtype=bool)
     diverging[0, :7] = True
@@ -133,17 +120,13 @@ def test_degenerate_models_are_called_out(capsys, label, n_high, n_obs):
     [("VG01", 1428), ("VG07", 987), ("VG03", 4075)],
 )
 def test_clean_models_stay_silent(capsys, label, n_obs):
-    """Every model measured without subject random effects had zero high-k."""
+    """Do not warn when the summary contains no unreliable Pareto-k values."""
     _LOO_COMPARE._warn_if_unusable(label, _row(0, n_obs, p_loo=21.9))
     assert capsys.readouterr().out == ""
 
 
 def test_the_threshold_separates_the_two_families_with_room():
-    """0% for every clean model, 30.3% for the lowest degenerate one.
-
-    The guard is only useful if it sits strictly inside that gap; pinning it
-    stops a later tweak from quietly moving it outside.
-    """
+    """Keep the warning threshold between zero and the tested high-k share."""
     assert 0.0 < _LOO_COMPARE.HIGH_PARETO_K_UNUSABLE_SHARE < 299 / 987
 
 

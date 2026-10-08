@@ -1,29 +1,25 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Apply a trace-persistence tier to a trace that was already written in full.
+"""Apply a trace-persistence tier to a fit already stored at ``full``.
 
-``--trace-persistence`` chooses a tier when a fit *writes* its trace. This
-applies the same policy afterwards, to fits that were written before the tier
-was chosen or under ``full`` by default. It is the recovery path for a full
-output volume, which is how it came to exist: on 2026-08-14 the reporting run
-filled a 433 GB disk and lost five in-flight refits to ``ENOSPC``.
+Reuse the persistence policy in :mod:`vocab_growth.fit_artifacts` and record
+omissions in the fit manifest. The replacement trace is checked before it
+replaces the original.
 
-It reuses :mod:`vocab_growth.fit_artifacts` rather than reimplementing the
-policy, so what is dropped here is exactly what a ``--trace-persistence compact``
-fit would never have written, and the manifest record is the same shape.
+``compact`` retains free parameters, sample statistics, log likelihood and
+posterior predictive draws. It drops scaled random effects and any legacy
+observation-sized posterior deterministics. Current fits omit those observation
+arrays at every tier. ``minimal`` also drops observation-sized log likelihood
+and posterior predictive entries.
+
+Plot regeneration, leave-one-subject-out comparison and parameter-recovery
+scoring require ``full`` and refuse compacted fits. Check downstream needs
+before compacting; the recovery headline set is VG20, VG12 and VG15.
+
+Usage::
 
     python scripts/compact_traces.py --dry-run
     python scripts/compact_traces.py VG03-age-spoken-td --tier compact
-
-**What this costs.** ``compact`` keeps every free parameter, ``sample_stats``,
-``log_likelihood`` and ``posterior_predictive``, so the reporting output, the
-publication gate, ``loo_compare.py`` and the DS/TD comparison suite are all
-unaffected. It drops observation-sized deterministics that are recomputable
-from the free parameters, and three consumers read those directly and will
-refuse a compacted fit up front: ``regenerate_plots.py``, ``loso_compare.py``
-and parameter-recovery scoring. Each then needs a refit. Choose accordingly —
-in particular, think twice before compacting a model in the recovery headline
-set (VG10, VG12, VG15).
 
 See ``notes/202608081445-trace-persistence-tiers.md``.
 """
@@ -62,26 +58,20 @@ def _model_dirs(root: str, names: list[str]) -> list[str]:
         for name in os.listdir(models)
         if os.path.isfile(os.path.join(models, name, TRACE_FILENAME))
     ]
-    # Smallest first. Each rewrite needs room for its output *beside* the
-    # original, so on a nearly-full volume the order is what decides whether the
-    # largest trace can be rewritten at all: the small ones free the space it
-    # needs. Alphabetical order happens to work today and would not survive a
-    # renamed model.
+    # Rewrite smaller traces first to free space for larger replacements.
+    # Each replacement must fit beside its original.
     return sorted(found, key=lambda d: os.path.getsize(os.path.join(d, TRACE_FILENAME)))
 
 
 def _is_live(staging_entry: str) -> bool:
-    """Whether a staging directory belongs to a process that still exists.
+    """Return whether a staging entry may belong to a live process.
 
-    Staging names end ``-<timestamp>-<pid>-<hash>``. A crashed or ``ENOSPC``-killed
-    fit leaves its directory behind, and this script exists precisely for the
-    aftermath of such a run — so "staging exists" cannot mean "a fit is running".
-    An unreadable or unparseable name is treated as live: the conservative
-    direction is to refuse. The probe is ``psutil.pid_exists`` because it works
-    on every platform this project supports — ``os.kill(pid, 0)`` is not a
-    portable liveness check, since CPython's ``os.kill`` on Windows calls
-    ``TerminateProcess`` — and a probe that fails for any reason is likewise
-    treated as live.
+    Names end in ``-<timestamp>-<pid>-<hash>``. Stale directories can remain after a
+    failed fit, so their presence alone does not prove a fit is running. Treat an
+    unreadable name or failed probe as live and refuse the rewrite.
+
+    Use ``psutil.pid_exists``. On Windows, ``os.kill(pid, 0)`` can terminate the
+    process rather than check whether it exists.
     """
     parts = staging_entry.rsplit("-", 3)
     if len(parts) < 4 or not parts[2].isdigit():
@@ -125,9 +115,7 @@ def compact_one(directory: str, tier: TracePersistence, *, dry_run: bool) -> dic
             row["status"] = "would rewrite"
             return row
 
-        # Write beside the original, then swap: a half-written trace must never
-        # be able to take the place of a complete one, and this project has
-        # already lost fits to a truncated write.
+        # Write beside the original so an incomplete write cannot replace it.
         tmp = path + ".compacting"
         from vocab_growth.fit_artifacts import _filtered_trace
 
@@ -198,12 +186,8 @@ def main() -> int:
     if excluded:
         console.print(f"[dim]Leaving at full: {', '.join(sorted(excluded))}[/dim]")
 
-    # Refuse only where a staging entry belongs to a model being rewritten. A
-    # blanket "staging is non-empty" refusal is wrong in the situation this
-    # script exists for: the run that fills the disk leaves stale staging
-    # directories behind, and a *live* fit of some other model is exactly what
-    # the free space is being reclaimed for. Staging names are
-    # `<config_name>-<timestamp>-<pid>-<hash>`.
+    # Refuse a rewrite if this model has a live or unidentifiable staging entry.
+    # Stale entries and live fits of other models do not block compaction.
     staging = os.path.join(root, STAGING_DIRNAME)
     if os.path.isdir(staging):
         entries = os.listdir(staging)

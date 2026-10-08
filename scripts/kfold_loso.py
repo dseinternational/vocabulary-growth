@@ -1,7 +1,7 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-K-fold leave-one-subject-out (LOSO) gold-standard comparison of DS bivariate models.
+Grouped K-fold and leave-one-study-out comparisons of vocabulary models.
 
 Defaults to VG07/VG08/VG09, the set it was written for; ``--models`` selects any
 subset of VG07-VG10, VG19, VG20 and VG22, and ``--suffix`` keeps a non-default
@@ -252,9 +252,8 @@ TD_HOLDOUT_UNITS = ("subject", "study")
 VISIT1_CONDITIONINGS = ("all-outcomes", "understood-only")
 
 #: Posterior draws the integrated scorer averages over, evenly thinned from the
-#: fold's chains. The held-out density is a mean over draws, so thinning a long
-#: chain costs Monte Carlo precision, not bias; 2,000 is the cap the 2026-09-23
-#: corrections use for their new-child predictives.
+#: fold's chains. Thinning reduces Monte Carlo precision. Taking the log of a
+#: finite mean can also bias estimated log predictive density. The cap is 2,000.
 DEFAULT_SCORE_DRAWS = 2000
 #: Adaptive Gauss-Hermite nodes per effect dimension (11, or 11 x 11 = 121 for the
 #: bivariate models' two child effects).

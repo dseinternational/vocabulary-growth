@@ -1,19 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Refit a model to its own simulated data (issue #163).
+"""Refit an engine to a synthetic analysis frame.
 
-The refit must be the *same* fit the study publishes, or the check proves
-nothing about the study. It therefore runs the engine's own pipeline — the same
-priors, the same build, the same sampler settings, the same diagnostics gate —
-with exactly one stage substituted: data preparation is replaced by a loader that
-injects the simulated analysis frame produced by
-:mod:`vocab_growth.recovery.simulate`.
-
-Output lands in its own ``models/<model_id>-<config_name>-recovery-rNN/``
-directory, so a recovery fit can never overwrite or be mistaken for a model of
-record (``sync_report_figures`` and ``check_fit`` both key off the registered
-config names and skip these labels).
+The engine's preparation stage is replaced by a frame loader. Its remaining
+pipeline uses the requested fitted definition and sampling configuration, which
+may differ from the generating definition in a controlled comparison. Recovery
+outputs have separate names under ``models/`` and do not replace registered fits.
 """
 
 from __future__ import annotations
@@ -45,16 +38,10 @@ RECOVERY_SOURCE_FILENAME = "recovery_source.json"
 def make_recovery_definition(
     definition, replicate: int, *, truth_definition=None, truth_overrides=()
 ):
-    """Return a copy of ``definition`` whose output lands in a recovery directory.
+    """Copy the fitted definition with a recovery config name and banner.
 
-    Only the identity fields change. Every prior, every hyperparameter and every
-    structural flag is ``definition``'s, because ``definition`` is the model
-    being asked to do the recovering.
-
-    ``truth_definition`` is the definition the data came from, when that differs
-    (issue #226). It changes nothing about the model built -- it only marks the
-    output, and the banner, as a cross-definition run. ``truth_overrides`` marks
-    them the same way for a truth whose parameters were set rather than drawn.
+    Priors, hyperparameters and structure remain unchanged. A distinct generating
+    config name and truth settings contribute output identity and provenance.
     """
     if replicate < 1:
         raise ValueError("replicate is 1-based.")
@@ -86,7 +73,11 @@ def make_recovery_definition(
 
 
 def _validate_frame(frame: pd.DataFrame, definition, columns: list[str]) -> None:
-    """Reject a synthetic frame the engine could not have produced."""
+    """Require age and check finite numeric outcome values against checklist bounds.
+
+    This range check is not a complete validation of the generating likelihood;
+    it does not check integrality, missingness, nesting or cross-tab coherence.
+    """
     if "age" not in frame.columns:
         raise ValueError("Synthetic frame has no 'age' column.")
     n_trials = definition.n_trials
@@ -149,27 +140,15 @@ def fit_recovery_replicate(
     fit_definition=None,
     truth_overrides=(),
 ) -> ModelFitContext:
-    """Refit ``model_key`` to replicate ``replicate``'s simulated data.
+    """Refit a requested definition to one replicate's synthetic frame.
 
-    ``definition`` overrides the model of record, for recovering a registered
-    *sensitivity variant* — Proposal A1 is the first, and its whole claim is a
-    structural one, so it needs recovery under its own structure rather than the
-    record's. The engine plumbing still resolves from ``model_key``: a variant
-    shares its base model's engine by construction, and reading the spec off the
-    variant would let a mis-registered override quietly select a different one.
+    ``definition`` identifies the generating model or sensitivity variant and
+    validates the stored simulation. ``fit_definition`` identifies the model
+    fitted to those data, defaulting to the generating definition. Engine stages
+    resolve from the base registry key; only preparation is substituted.
 
-    ``fit_definition`` separates the two roles ``definition`` otherwise plays
-    (issue #226). ``definition`` is where the *data* came from; ``fit_definition``
-    is what is fitted to it. They are the same by default, and while they are the
-    same the harness can only ask whether a model recovers itself — so it cannot
-    answer whether a prior *causes* an observed recovery bias, because moving the
-    prior moves the truth with it. Simulating under one definition and refitting
-    under another is what makes that a controlled comparison.
-
-    The simulation's own provenance guard is deliberately still checked against
-    ``definition``: the recorded definition must match the one that produced the
-    frame, and the seam does not weaken that. It only stops requiring the fitted
-    model to be that same definition.
+    Keeping simulated data fixed while changing the fitted definition supports
+    comparisons of fitting choices without also changing the generating truth.
     """
     target = recovery_target(model_key)
     definition = MODEL_REGISTRY[model_key] if definition is None else definition

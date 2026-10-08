@@ -4,13 +4,9 @@
 """
 Console reporting shim for the ``vocab_growth`` pipelines.
 
-Historically this module implemented a bespoke set of rich-based primitives
-(banner, heading, key/value table, dataframe table, pipeline summary,
-timed section, ...). Those primitives now live in
-:mod:`dse_research_utils.console` and are shared across DSE research
-projects. This module preserves the legacy public API — signatures, default
-column headers, early-return behaviour for empty inputs — so no caller has
-to change, and routes every call through the shared implementation.
+Shared console tools live in ``dse_research_utils.console``. These wrappers
+preserve the package's public signatures, default column headers and behaviour
+for empty inputs.
 """
 
 from collections.abc import Iterable, Mapping
@@ -122,8 +118,7 @@ def pipeline_summary(
 ) -> None:
     """Render a summary table of per-stage timings.
 
-    Mirrors the historical behaviour of emitting a blank line before the
-    table and returning silently when ``timings`` is empty.
+    Emits a blank line before the table and returns silently for empty timings.
     """
     if not timings:
         return
@@ -170,14 +165,9 @@ __all__ = [
 def stage_report_sources(model_key: str, output_dir: str, *, docs_dir: str | None = None) -> list[str]:
     """Copy a model's report template and the shared includes into ``output_dir``.
 
-    The report stage copies ``docs/models/<model>/index.qmd`` into the fitted
-    output directory and renders it there, so a Quarto ``{{< include >}}`` in the
-    template resolves relative to that directory, not to the repository. The
-    shared prediction body the bivariate random-effects family transcludes
-    (``docs/models/_bivariate_re_body.qmd``) therefore has to travel with the
-    template, or every page that uses it renders with a missing-include error.
-    Every ``_*.qmd`` under ``docs/models/`` is copied, so a second include needs
-    no change here. Returns the destination paths, the template first.
+    Quarto resolves ``{{< include >}}`` paths relative to the copied template.
+    Copy every ``_*.qmd`` directly under ``docs/models/`` alongside it so shared
+    report sections remain available. Returns destination paths, template first.
     """
     import glob
     import os

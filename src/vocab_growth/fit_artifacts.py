@@ -96,24 +96,17 @@ def read_json(path: str | os.PathLike[str]) -> dict[str, Any]:
 def write_atomic(
     path: str | os.PathLike[str], write_temporary: Callable[[Path], object]
 ) -> None:
-    """:func:`dse_research_utils.storage.files.atomic_write`, with this repo's mode.
-
-    The one place the file-mode decision is made. Every other writer in this
-    repository goes through here so a manifest, a fit-state file and a cached
-    report table cannot end up with three different modes.
+    """Write through the shared atomic-file helper with the project's default mode.
     """
 
     atomic_write(path, write_temporary, mode="default")
 
 
 def write_json_atomic(path: str, payload: dict[str, Any]) -> None:
-    """Write metadata atomically so interruption cannot leave partial JSON.
+    """Write metadata atomically in the manifest's established JSON format.
 
-    The replacement is :func:`write_atomic`; the *serialisation* stays here
-    deliberately. The two-space indent, sorted keys, :func:`_json_default`
-    encoder and trailing newline are the stored format that every manifest on
-    disk and every manifest-hash in a comparison manifest was written with, and
-    the shared helper is explicit that JSON encoding belongs to the caller.
+    Preserve two-space indentation, sorted keys, the custom encoder and a trailing
+    newline so stored-file fingerprints use the same serialisation.
     """
 
     def write_temporary(temporary: Path) -> None:
@@ -176,35 +169,16 @@ def write_fit_state(
     write_json_atomic(path, payload)
 
 
-#: Seconds allowed for the one Git query behind :func:`git_metadata`.
-#:
-#: The shared helper defaults to 5.0; this repository has always allowed 10,
-#: and a status scan of a large checkout on a busy or slower volume is slower
-#: than on a laptop. Preserved rather than inherited so a timeout does not start
-#: recording ``dirty: None`` -- which fails ``require_clean_fit`` -- on a
-#: checkout that is in fact clean.
+#: Allow slower-volume Git scans ten seconds before recording unknown provenance.
 GIT_QUERY_TIMEOUT_SECONDS = 10.0
 
 
 def git_metadata(repo_dir: str) -> dict[str, object]:
-    """Return the repository revision and dirty state without requiring Git.
+    """Return revision and checkout state from a bounded Git query.
 
-    The four keys are the manifest's stored schema and are unchanged: every
-    fit on disk carries them, and :func:`validate_fit_output` compares
-    ``commit`` and ``dirty``. What moved into
-    :func:`dse_research_utils.metadata.provenance.git_snapshot` (shared library
-    0.14.0) is *how* they are obtained -- one bounded ``status --porcelain=v2
-    --branch`` call instead of three separate commands, with inherited
-    ``GIT_*`` repository overrides stripped, optional index locks and the
-    filesystem-monitor hook disabled.
-
-    The recorded values keep their meaning. ``dirty`` still counts staged,
-    unstaged, unmerged and untracked changes and still excludes ignored files;
-    it is ``None`` whenever the query could not establish it, rather than
-    ``False``, so an unavailable Git never reads as a clean checkout.
-    ``detached`` is now reported by Git itself instead of inferred from an
-    empty ``branch --show-current``. ``commit`` is ``None`` on an unborn
-    branch, as it was when ``rev-parse HEAD`` failed there.
+    The stored schema is ``commit``, ``branch``, ``detached`` and ``dirty``.
+    Dirty state includes tracked and untracked changes, excluding ignored files.
+    An unavailable query returns unknown values rather than a clean verdict.
     """
     snapshot = git_snapshot(repo_dir, timeout=GIT_QUERY_TIMEOUT_SECONDS)
     return {
@@ -234,15 +208,7 @@ def source_data_hash(data_dir: str) -> str:
 
 
 def require_classified_sampling_config(sampling_config_name: str) -> None:
-    """Refuse a sampling tier this repository has no convergence-gate class for.
-
-    The same check as :func:`is_reporting_quality_config`, called for the raise
-    rather than the answer -- ``--config`` has no argparse ``choices``, so an
-    unrecognised tier would otherwise reach the sampler and produce output with no
-    gate classification. Named so a reader can tell it is doing something: as a
-    bare ``is_reporting_quality_config(config)`` expression statement with its
-    return value discarded it read as dead code, and ruff's B018 does not flag
-    call statements.
+    """Raise if the sampling tier has no registered convergence-gate class.
     """
     is_reporting_quality_config(sampling_config_name)
 
@@ -324,50 +290,22 @@ def fit_validation_kwargs(
     current_source_data_hash: str | None = None,
     current_analysis_frame_hash: str | None = None,
 ) -> dict[str, Any]:
-    """Build one documented validation policy for each artefact consumer.
+    """Build the validation policy for a fit consumer.
 
-    Resume is intentionally strict about the current code and raw data because
-    downstream computations would otherwise mix revisions. Publication instead
-    checks that the fit itself came from a clean revision and carries the current
-    executable-code signature. Later documentation commits do not invalidate an
-    already complete fit. Provisional local syncs retain lifecycle, definition
-    and sampling checks while allowing dirty provenance and relaxed data checks.
+    Resume, strict sync and publication compare executable signatures. Render
+    and provisional sync omit that check for local inspection. Provisional sync
+    still checks lifecycle, definition and sampling settings, but relaxes data
+    and checkout-provenance checks.
 
-    The executable-code signature is asked for by ``resume`` and the publication
-    purposes only. ``render`` and ``provisional-sync`` deliberately omit it: the
-    signature covers every module in the package, so requiring it there would
-    mean a one-line change to a plot helper stopped an existing fit being
-    re-rendered and stopped ``sync_report_figures.py --allow-provisional`` from
-    working in the checkout where code is being edited, which is the one place
-    it exists to work.
+    Resume also requires the current commit and a clean checkout. Strict sync
+    and publication require reporting-quality sampling, a rendered report,
+    clean sampling provenance and convergence evidence. Later prose-only commits
+    do not change the executable signature.
 
-    Publication also requires clean convergence: a fit carrying soft-tier
-    sampling caveats (divergences, low energy BFMI) stays usable for development
-    and review, but must not be syndicated into the report as though it were
-    clean. ``provisional-sync`` deliberately does not ask for this, so
-    ``sync_report_figures.py --allow-provisional`` remains the way to work
-    locally with a caveated fit.
-
-    The ``-with-caveats`` purposes are the publication path for a fit that clears
-    the hard tier but not the soft one. They keep **every** other publication
-    check — reporting quality, rendered report, clean fit provenance, matching
-    definition, sampling effort and raw-data fingerprint — and relax only the
-    soft-tier requirement. They exist because the operative phrase above is *as
-    though it were clean*: the objection is misrepresentation, not invalidity.
-    ``methods-workflow.qmd`` §"Convergence diagnostics" states the same policy in
-    the report's own words — such a fit "remains reportable ... but it is marked,
-    and it cannot be syndicated into this report as a clean fit without that mark
-    being carried with it" — and for several models in this family a handful of
-    divergences or a BFMI slightly below 0.3 has not been removable without an
-    infeasible reparameterisation. A blanket refusal is therefore *stricter than
-    the documented policy*, and in practice blocks the whole report over the
-    typically-developing hierarchical models' intrinsic BFMI.
-
-    The mark is what makes this honest, so it is not optional: the caller must
-    carry the caveats into the rendered output. ``sync_report_figures.py``
-    discharges that by writing ``convergence_caveats.csv`` into the report figure
-    cache, which Appendix B renders. Prefer plain ``publish``/``sync`` whenever a
-    fit is clean; reach for these only for a fit whose caveats are being shown.
+    ``-with-caveats`` purposes retain the other strict checks while accepting
+    disclosed sampling caveats and a matching registered R-hat exception.
+    Callers must carry caveats into rendered output; report sync writes them to
+    ``convergence_caveats.csv``. Prefer ordinary sync or publication for clean fits.
     """
     from vocab_growth.models.implementation_identity import implementation_signature
 
@@ -379,14 +317,7 @@ def fit_validation_kwargs(
     if purpose == "provisional-sync":
         return kwargs
     if purpose != "render":
-        # The executable-code signature covers every module in the package, so
-        # any code edit anywhere invalidates it. That breadth is right for the
-        # purposes that syndicate a fit into the report or build new numbers on
-        # top of it, and wrong for the two that only read one back: ``render``
-        # re-renders a fit that already exists, and ``provisional-sync`` is the
-        # documented local-dev path for exactly the checkout where code is
-        # being changed. Requiring it there would make an edit to a plot helper
-        # enough to render every fit unusable for its own report.
+        # Strict uses require matching package code; local rendering does not.
         kwargs["expected_implementation"] = implementation_signature()
 
     if current_source_data_hash is None:
@@ -607,25 +538,14 @@ ACCEPTED_EXCEPTION_KEY = "accepted_rhat_exception"
 
 
 def convergence_caveats(gate_summary: dict | None) -> list[str]:
-    """Soft-tier convergence problems recorded in a diagnostics-gate payload.
+    """Read sampling caveats and accepted exceptions from a diagnostics payload.
 
-    ``write_diagnostics_summary`` (dse_research_utils) evaluates four checks. Two
-    are **hard**: the R-hat/ESS scan is fail-closed in
-    ``vocab_growth.models.common.enforce_convergence_gate``, because a fit that
-    has not mixed cannot be summarised at all. The other two — divergent
-    transitions and the energy BFMI — are **soft**: they indicate the sampler may
-    have failed to traverse part of the posterior (so tail quantiles, i.e. the
-    reported interval bounds, are the least trustworthy part of the fit), but a
-    small number of divergences or a mildly low BFMI has been an accepted,
-    recorded trade-off for this family rather than a bar to reporting (see
-    ``notes/202607191614-full-refit-rep-hightune-run.md``).
+    Divergences and low BFMI trigger caveats under the study's reporting policy.
+    Registered R-hat exceptions also require disclosure. These diagnostics flag
+    possible sampling problems; they do not quantify bias in reported estimates.
 
-    This lives here, beside the validators, because both ends need one
-    implementation: the gate writes the caveats at fit time, and
-    :func:`validate_fit_output` recomputes them from the payload on disk. Reading
-    the payload rather than trusting a marker file means fits produced before the
-    marker existed are assessed correctly too, instead of counting as clean
-    because nothing ever looked.
+    The fitting gate and output validator both use this function. Reading the
+    payload lets older fits be assessed even if they lack a caveat marker file.
     """
     if not gate_summary:
         return []
@@ -697,23 +617,15 @@ def validate_fit_output(
     require_convergence_evidence: bool = False,
     require_clean_convergence: bool = False,
 ) -> list[str]:
-    """Return every reason that fitted output is unsuitable for its intended use.
+    """Return errors under the caller's requested compatibility and quality checks.
 
-    Every ``expected_*`` argument means the same thing: ``None`` is *not
-    checked*. ``expected_implementation`` in particular is never inferred from
-    the current code — a caller that wants the executable-code signature checked
-    passes it (``fit_validation_kwargs`` supplies it for the purposes that ask
-    for it). Defaulting it on would silently impose the strictest check in this
-    function on every caller that happens to pass a definition, including
-    ``scripts/loso_compare.py`` and :mod:`vocab_growth.recovery.simulate`, which
-    read a model of record back rather than publishing from it.
+    ``None`` skips an ``expected_*`` check. In particular, this function does
+    not infer a current executable signature; strict callers pass one through
+    ``fit_validation_kwargs``.
 
-    ``require_clean_convergence`` additionally rejects a fit that cleared the hard
-    convergence gate but recorded soft-tier caveats (divergent transitions or a low
-    energy BFMI). Those caveats do not invalidate the fit for development or review
-    — that is the project's recorded position — but publishing from one without
-    saying so would misrepresent it, so the publication path asks for this while
-    ``--allow-provisional`` does not.
+    ``require_clean_convergence`` rejects disclosed soft-tier caveats or accepted
+    R-hat exceptions. Other validation paths may permit these with disclosure.
+    Missing or malformed convergence evidence cannot pass a check that requires it.
     """
     errors: list[str] = []
     state_path = os.path.join(output_dir, FIT_STATE_FILENAME)
@@ -783,16 +695,8 @@ def validate_fit_output(
 
     manifest_definition = manifest.get("model", {}).get("definition")
     if expected_definition is not None:
-        # Compared field by field through the classified payload rather than by
-        # raw dictionary equality (issue #273). Every difference is still fatal,
-        # including reporting and identity ones -- what the classification adds
-        # is a message that says *what kind* of thing moved, and the one
-        # documented excuse: a field absent from an older manifest whose
-        # `BACKFILL_DEFAULTS` entry states that its absence meant exactly the
-        # value registered today. Without that, adding a field with a default
-        # invalidates every historical fit of its dataclass even when the
-        # default reproduces what those fits did, which is the constraint that
-        # has shaped the model API more than any statistical consideration.
+        # Classify differences for useful errors. Only tested BACKFILL_DEFAULTS
+        # entries can supply an exact missing historical default.
         differences = definition_differences(manifest_definition, expected_definition)
         if differences:
             summary = "; ".join(
@@ -810,9 +714,7 @@ def validate_fit_output(
 
         recorded = manifest.get("model", {}).get("implementation")
         if not implementation_identity.matches(recorded, expected_implementation):
-            # Name what moved. This message is the whole basis for deciding to
-            # spend a reporting-quality refit, and "a hash differs" cannot tell
-            # a dependency point release from an edited likelihood.
+            # Distinguish changed source from changed numerical libraries.
             errors.append(
                 "The fitted implementation signature is missing or differs from "
                 "the current executable code or numerical libraries ("
@@ -840,15 +742,8 @@ def validate_fit_output(
         )
 
     data_payload = manifest.get("data", {})
-    # A model consumes the raw data only through its prepared analysis frame,
-    # so a recorded frame hash that matches the one the current loader rules
-    # produce vouches for the fit against raw-CSV churn the model never reads:
-    # a new Down syndrome study CSV changes the directory-wide fingerprint for
-    # every model, but cannot move a typically-developing model's frame. The
-    # fingerprint therefore stays a hard failure only when the frame hash
-    # cannot vouch — the caller did not supply one, the manifest predates it,
-    # or it mismatches too (then both messages are reported: the raw change is
-    # part of the diagnosis, not hidden behind the frame drift).
+    # A matching prepared frame can explain a raw-file change outside this
+    # model's inputs. Without that match, report raw and frame differences.
     frame_hash_vouches = (
         expected_analysis_frame_hash is not None
         and data_payload.get("analysis_frame_hash") == expected_analysis_frame_hash
@@ -919,24 +814,12 @@ def require_valid_fit(output_dir: str, **kwargs: Any) -> None:
 
 
 def create_staging_root(output_root: str, tag: str) -> str:
-    """Create an isolated root for a fit before atomic publication.
+    """Create an isolated fit root before promotion.
 
-    ``tag`` must be **short** -- the model id, not the model label. The label
-    already names the ``models/<label>/`` directory this root contains, and
-    repeating it here cost enough characters to push a long variant's paths
-    past Windows' 260-character ``MAX_PATH``: on 2026-09-06 graphviz silently
-    failed to write ``gp_model_graph.svg`` for the VG10
-    ``us01-masked-production-reinstated`` arm at 262 characters, while Python
-    wrote a 273-character sibling in the same directory without complaint.
-    ``LongPathsEnabled`` only lifts the limit for processes whose manifest
-    declares it -- Python's does, ``dot``'s does not -- so a staging path has
-    to stay short for any external tool that writes into it.
-
-    The run id already guarantees uniqueness; the tag exists only so that a
-    ``.staging`` directory left behind by a killed fit says which model it
-    belongs to. Quarantine naming is unaffected: :func:`retain_failed_fit` is
-    passed the inner ``models/<label>`` directory, so its basename is the
-    label whatever this root is called.
+    Use a short ``tag``, usually the model id. Repeating the full variant label
+    can exceed external tools' Windows path limits even when Python accepts the
+    path. The timestamp, process id and random suffix provide uniqueness; the
+    tag identifies interrupted runs left in ``.staging``.
     """
     safe_tag = tag.replace(os.sep, "-")
     run_id = f"{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
@@ -945,57 +828,30 @@ def create_staging_root(output_root: str, tag: str) -> str:
     return staging_root
 
 
-#: Serialises the two renames a directory promotion performs.
-#:
-#: The shared helper takes the lock rather than choosing one, so the scope is
-#: this repository's to state: it covers *threads of one process*. That is the
-#: whole of the exposure this repository actually has -- a fit promotes the one
-#: ``models/<label>/`` directory it staged, and two concurrent fits of the same
-#: model into the same output root would already be racing for that directory
-#: before either reached promotion. Fitting several models at once (``fit_model.py
-#: all``, the sensitivity runners) targets a different destination per run and is
-#: unaffected. A deployment that did run two processes over one model would need a
-#: process lock here instead. Public, and shared with
-#: ``scripts/sync_report_figures.py``, so the two promoting call sites in this
-#: repository serialise against each other rather than against nothing.
+#: Serialise promotion renames within one process, including report-cache sync.
+#: Separate processes writing the same destination would need a process lock.
 PROMOTION_LOCK = threading.Lock()
 
 
 def promotion_path(path: str) -> Path:
-    """``path`` with its parents resolved and its own name left alone.
+    """Resolve parent directories while preserving the final path component.
 
-    :func:`dse_research_utils.storage.directories.promote_directory` refuses a
-    symlinked ancestor, and ``<repo>/output`` may be a symlink to another
-    volume (see :mod:`vocab_growth.environment`), as ``/tmp`` is on macOS.
-    Resolving the parent chain deliberately -- these are directories this
-    repository created itself -- is what the shared helper documents for
-    that case. The final component is **not** resolved: a destination that is
-    itself a symlink must still be rejected rather than silently followed.
-
-    Public so ``scripts/sync_report_figures.py`` promotes its figure cache
-    through the same rule rather than a second copy of it.
+    Configured output roots can be symlinks. Resolve their parent chain before
+    calling the shared promotion helper, which rejects symlink components.
+    Preserve the final component so a symlinked destination remains rejectable.
     """
     absolute = Path(path).absolute()
     return absolute.parent.resolve() / absolute.name
 
 
 def promote_staged_fit(staged_output_dir: str, canonical_output_dir: str) -> None:
-    """Replace canonical output only after a staged fit has fully completed.
+    """Replace canonical output after a staged fit completes.
 
-    Delegates the renames to
-    :func:`dse_research_utils.storage.directories.promote_directory` (shared
-    library 0.14.0), which validates the three paths against each other -- no
-    nesting, no aliasing through a mounted tree, no symlink in any component,
-    one filesystem -- before it touches the destination, and restores the
-    previous directory itself if the second rename fails.
-
-    Two decisions stay here because the helper leaves them to the caller. The
-    lock is :data:`PROMOTION_LOCK`; and the retained backup is deleted on
-    success, as it always has been -- ``.previous`` is a rollback slot for the
-    promotion itself, not an archive, and a fit's output can be tens of
-    gigabytes. A cleanup failure is reported and *not* raised: the promotion
-    has already succeeded at that point, and turning a leftover directory into
-    a failed fit would be a false report.
+    The shared directory helper validates path separation and filesystem
+    constraints, then restores the previous destination if promotion fails.
+    ``PROMOTION_LOCK`` protects threads in this process. The previous directory
+    is a rollback copy for promotion, not an archive, and is removed on success.
+    A cleanup failure warns without changing the completed promotion's verdict.
     """
     parent = os.path.dirname(canonical_output_dir)
     output_root = os.path.dirname(parent)
@@ -1166,21 +1022,25 @@ class TracePersistence(StrEnum):
     """How much of a fitted trace to persist to ``trace.nc``."""
 
     FULL = "full"
-    """Store everything. The default, and what every fit before this did."""
+    """Keep all arrays supplied in the trace, including likelihood and predictions.
+
+    Default sampling omits observation-sized deterministics before any tier is
+    applied; ``full`` does not restore them.
+    """
 
     COMPACT = "compact"
     """Drop the duplicated scaled random effects (and any observation-sized
     posterior deterministics, which fits made since 2026-08-23 no longer carry
-    at any tier — see :func:`sampled_variable_names`). ``log_likelihood`` and
+    at any tier; see :func:`sampled_variable_names`). ``log_likelihood`` and
     ``posterior_predictive`` are kept, so LOO and predictive checks can still be
     recomputed from the file."""
 
     MINIMAL = "minimal"
     """Additionally drop the observation-sized ``log_likelihood`` and
     ``posterior_predictive`` entries. Their consumers run during the fit and
-    persist their own output, but recomputing LOO or a new predictive view later
-    without refitting is no longer possible. Unlike ``COMPACT`` this is a real
-    trade, not a free saving."""
+    persist summaries, but later tools needing these arrays cannot use the
+    reduced file directly. Recovery scoring and replotting require ``full``.
+    """
 
 
 # Resolved at call time with the same precedence as the output root: an explicit
@@ -1196,13 +1056,9 @@ TRACE_PERSISTENCE_ENV_VAR = "DSE_VOCAB_GROWTH_TRACE_PERSISTENCE"
 NUTPIE_BACKEND_ENV_VAR = "DSE_VOCAB_GROWTH_NUTPIE_BACKEND"
 
 #: The backends nutpie compiles a PyMC model with. ``numba`` is nutpie's own
-#: default and the one every fit of record was made with; ``jax`` compiles the
-#: same log-density through JAX instead. The choice changes nothing about the
-#: posterior -- it is which compiler evaluates the density and its gradient --
-#: and is recorded in the fit manifest's ``runtime`` block rather than its
-#: ``sampling`` block for exactly that reason: the sampling parameters are
-#: compared field for field at publication, and a fit made with the other
-#: compiler is the same fit.
+#: default; ``jax`` compiles the same model density through JAX. The target
+#: distribution is unchanged, though numerical draws can differ. Record this
+#: compiler choice under ``runtime`` rather than statistical sampling settings.
 NUTPIE_BACKENDS = ("numba", "jax")
 
 _nutpie_backend_override: str | None = None
@@ -1229,18 +1085,11 @@ def _parse_nutpie_backend(raw: str, source: str) -> str:
 
 
 def configured_nutpie_backend() -> str:
-    """The nutpie backend to compile with: the override, the environment, else ``numba``.
+    """Resolve the backend from the override, environment or ``numba`` default.
 
-    This exists for one documented case (#289 task 4.1). nutpie assembles the
-    gradient of the log-density by concatenating one array per free random
-    variable in a single call, and on linux-aarch64 numba's
-    ``np_concatenate`` over VG15 ``fallback-dispersion``'s 44 free variables
-    failed in LLVM register allocation ("ran out of registers during register
-    allocation"); the model of record's 42 compiled, and the same 44 compile
-    and draw on win-amd64 with the locked numba and llvmlite. Upstream nutpie
-    (0.16.11, the latest release, and ``main``) still concatenates in one call,
-    so the escape hatch is the other compiler, selected for that one fit and
-    recorded in its manifest.
+    JAX is the documented fallback for a VG15 ``fallback-dispersion`` numba
+    compilation failure on Linux aarch64. The manifest records the selected
+    compiler. See ``docs/runbooks/full-refit.md`` for that measured failure.
     """
     if _nutpie_backend_override is not None:
         return _nutpie_backend_override
@@ -1457,9 +1306,7 @@ def plan_trace_persistence(
 
 def _filtered_trace(trace: Any, plan: dict[str, list[str]]) -> Any:
     """A copy of ``trace`` with ``plan``'s variables removed, leaving it unchanged."""
-    # Imported here rather than at module scope: everything else in this module
-    # is stdlib, and it is imported by tooling that has no other reason to pull
-    # in xarray.
+    # Defer xarray imports until a caller needs to filter a trace.
     import xarray as xr
 
     if not hasattr(trace, "children"):
@@ -1481,16 +1328,10 @@ def _filtered_trace(trace: Any, plan: dict[str, list[str]]) -> Any:
 
 
 def record_trace_persistence(output_dir: str, record: dict[str, Any]) -> bool:
-    """Store what :func:`save_trace` actually wrote in the fit manifest.
+    """Record the tier and variables actually written by ``save_trace``.
 
-    Recorded after the fact rather than when the manifest is first written,
-    because that happens at the end of the fit's first stage — long before the
-    trace exists, and before it is known whether a save was pinned to ``full``
-    (the convergence-failure path is). A manifest stating the *intended* tier
-    could therefore contradict the file beside it.
-
-    Returns whether a manifest was found; a fit that writes none (VG17) is not
-    an error.
+    Record after saving because failure paths may explicitly retain a full trace
+    despite the configured tier. Return False if no readable manifest is present.
     """
     path = os.path.join(output_dir, FIT_MANIFEST_FILENAME)
     if not os.path.isfile(path):

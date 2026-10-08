@@ -1,18 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""A model report template must not link outside its own output directory.
+"""Require model-template links to resolve within their published directory.
 
-A template is staged into ``<output-root>/models/<label>/`` and published from
-there as a standalone page, so a relative link that climbs out of that directory
--- ``../vg14/index.qmd``, ``../../notes/...`` -- resolves on GitHub and in the
-checkout but 404s on the published page. ``upload.py`` refuses such a page, but
-only after the upload has already gone out: on 2026-09-17 VG15, VG20 and VG25
-were published and then failed verification for exactly this, while the other
-six publication models passed. Link to the repository by absolute GitHub URL
-instead, as the notes links elsewhere in these templates already do.
-
-This reads the template text, so it needs no fit and no render.
+Templates become standalone pages under each model output directory. Relative
+links to sibling models or notes escape that directory; use absolute repository
+links for those references. This text check needs no fit or render.
 """
 
 from __future__ import annotations

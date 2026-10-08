@@ -3,11 +3,10 @@
 """
 Expressive-delay & distributional DS-vs-TD contrasts (per-draw, separate-model).
 
-Every estimand here is a deterministic functional of the already-fitted,
-*disjoint* DS and TD posteriors, so per-draw pairing gives exact credible
-intervals with **no joint/stacked model**. (The generative joint model that would
-make the gap itself a parameter is not built and holds no reserved model number;
-see ``compare_ds_td_re.py``.)
+Each contrast uses draws from separately fitted Down syndrome (DS) and typically
+developing (TD) models. Under the models' independent priors and likelihoods,
+pairing their posterior draws samples the contrast's posterior distribution.
+The intervals are Monte Carlo estimates and inherit both models' assumptions.
 
 Outputs (individual, linear-axis figures + CSVs) to the configured comparisons
 dir (default ``output/comparisons/``; see ``vocab_growth.environment.output_root``):
@@ -70,47 +69,17 @@ from vocab_growth.models.definitions import VG15
 
 # -- Comparators (joint U+S models so U and S are coupled per draw) --
 DS_JOINT_KEY = "vg20"          # DS joint, study+subject REs, correlated (model of record)
-TD_JOINT_KEY = "vg21"          # TD joint, study+subject REs, 8-22 mo (VG13 until 2026-09-02)
-# Dispersion / distributional contrasts need the DS model whose kappa means the
-# same thing as the TD comparators' -- i.e. one that ALSO carries subject REs,
-# so neither side's kappa absorbs between-child variance. This matches
-# `compare_ds_td_re.DISP_DS_KEY`.
-#
-# This was `vg07` until 2026-08-21, under the opposite rationale: that both
-# sides should be study-RE-only because "the TD models keep child variance in
-# kappa". That premise was false by the time it was acted on -- VG11 and VG12
-# both carry `tau_subject` (verified in their fitted diagnostics), so the TD
-# side pulls child variance OUT of kappa while VG07, which has only `tau_u`
-# and `tau_q`, leaves it in. The pairing therefore compared a DS kappa
-# containing between-child variance against a TD kappa with it removed, which
-# inflates the DS side of every dispersion contrast.
+TD_JOINT_KEY = "vg21"          # TD joint, study+subject REs, 8-22 months
+# Distributional contrasts use subject effects on both sides so persistent
+# child differences are represented separately from administration noise.
 DS_DISP_KEY = "vg20"
 TD_SPOKEN_KEY = "vg11"
 TD_UNDERSTOOD_KEY = "vg12"
-# Sign-inclusive total expressive p_any comes from the joint sign/speech VG15
-# (its own understood and spoken curves are used too, so every DS series in the
-# signing sections shares one posterior and is draw-aligned).
-#
-# This was VG14 until 2026-08-16, and the switch is not cosmetic. VG14 derives
-# p_any by *assuming* sign and speech are independent given age, which is the
-# assumption VG15 exists to test -- and VG15 measures psi = 2.34 [1.89, 2.81],
-# P(psi > 1) = 1.00. VG14 also carries no study or subject random effects, while
-# every other DS quantity in this report comes from a model that does (VG10 or
-# VG07) and the TD comparator (VG11) does too, so the old pairing broke the
-# like-for-like rule the method table sets out. Between them the two problems put
-# DS total expressive vocabulary at 52.1 words at 24 months against VG15's 36.6,
-# and the independence assumption is the smaller half: VG15's own independence
-# counterfactual is 38.2. Both are now reported, so the cost of the assumption is
-# a visible contrast rather than an argument.
+# Use VG15's joint sign/speech posterior for every DS signing quantity.
+# It estimates overlap rather than assuming conditional independence.
 DS_SIGN_KEY = "vg15"
 
-# Highest age for the DS-internal signing profile. That section has no TD
-# comparator, so it is not bounded by TD support at 30 months -- every quantity
-# in it is a ratio of understood built from the signed ratio, so it stops at
-# the tighter of VG15's comprehension and signing reporting caps. Derived from
-# the model definition rather than hardcoded: this constant sat at a literal
-# 84.0 while describing itself as the comprehension cap, and did not move when
-# that cap dropped to 72 on 2026-08-22 (#238).
+# Signed ratios need both comprehension and signing support; use the tighter cap.
 DS_SIGNING_MAX_AGE = float(reporting_ages.max_age_for_sign_ratio(VG15))
 
 OUT_DIR = env.comparisons_output_dir()
@@ -145,23 +114,11 @@ COL_SIGN_ONLY = plot_styles.CHART_COLOURS[2]
 
 
 def _band(ax, frame, x, label, colour, *, cov=MIN_COVERAGE):
-    """Plot a median line and interval band, dropping low-coverage grid points.
+    """Plot a median and interval band above the requested draw coverage.
 
-    The default is :data:`MIN_COVERAGE` deliberately. It used to be ``0.0``,
-    which silently overrode ``plot_summary_band``'s own 0.80 default and made
-    *this wrapper* weaker than the library function it delegates to — so the
-    level-indexed panels, which pass ``cov`` explicitly, were filtered while
-    every age-indexed panel was not. On the delay-by-age panel that drew the
-    curves a third of the way past the point where the typically-developing
-    comparator runs out: both equivalent ages saturate at the TD comparator's
-    (then VG13's 18-month, now VG21's 22-month)
-    ceiling, so the delays rise 1:1 with age and their difference is forced to
-    zero, and at 40 months the plotted interval was a single draw (coverage
-    2.8e-05). Filtering removes exactly that region and nothing else — the
-    sign-inclusive and below-percentile panels are fully covered, so the
-    default costs them no points.
-
-    Pass ``cov=0.0`` to opt out, deliberately and visibly.
+    Use the same minimum coverage for age- and level-indexed panels. Estimates near
+    a comparator's age limit may otherwise rest on very few draws. Pass ``cov=0.0``
+    to disable filtering.
     """
     C.plot_summary_band(ax, frame, x, label, colour, min_coverage=cov)
 
@@ -303,15 +260,10 @@ def run_sign_inclusive() -> None:
 
 
 def _signing_milestones(grid: np.ndarray, g: dict[str, np.ndarray]) -> pd.DataFrame:
-    """Per-draw ages for the sign-to-speech hand-over (shared implementation).
+    """Summarise per-draw signing milestones using the fit pipeline's crossing rules.
 
-    Delegates to :func:`vocab_growth.posterior_analysis.signing_milestone_table`,
-    the same implementation the fit pipeline writes ``signing_milestones.csv``
-    with — this script used to carry a duplicate whose crossing rule reported
-    *first age true* rather than a genuine false-to-true transition, whose peak
-    rule reported a grid-boundary maximum as reached, and whose intervals were
-    equal-tailed where the project policy for milestone ages is HDI (#238). The
-    script's arrays are ``(n_draw, n_age)``; the helper takes ``(n_age, n_draw)``.
+    Transpose this script's ``(n_draw, n_age)`` arrays to the helper's
+    ``(n_age, n_draw)`` order.
     """
     return posterior_analysis.signing_milestone_table(
         grid,
@@ -327,27 +279,12 @@ def _signing_milestones(grid: np.ndarray, g: dict[str, np.ndarray]) -> pd.DataFr
 # 3b. DS-internal signing profile (no TD comparator, so not TD-bounded)
 # ----------------------------------------------------------------------------
 def run_ds_signing_profile() -> None:
-    """How much signing contributes to a DS child's own expressive vocabulary.
+    """Summarise signing's share of Down syndrome expressive vocabulary.
 
-    The sign-inclusive gap above answers "how much does counting sign close the
-    distance to typically developing children?", and stops at 30 months because
-    that is where TD support stops. It is the wrong question for a practitioner
-    and the wrong bound for the data: signing is now observed on 904
-    administrations from 549 children across nine studies, out to 115 months, and
-    the interesting part of the trajectory — signing handing over to speech —
-    happens entirely above the TD window.
-
-    This section drops the comparator and asks the DS-internal question instead:
-    of everything a child can express, how much is available only in sign, and
-    for how long? Three quantities, all ratios of understood built from the
-    signed ratio and therefore capped at the tighter of VG15's comprehension
-    and signing reporting ages (``DS_SIGNING_MAX_AGE``):
-
-    * ``uplift`` — total expressive vocabulary as a multiple of spoken alone.
-    * ``sign_only_share`` — the fraction of expressive vocabulary a speech-only
-      assessment would miss.
-    * ``r`` — the signed fraction of comprehension, whose rise and fall is the
-      "signing as a bridge" trajectory itself.
+    No TD comparator bounds this profile. Apply VG15's joint comprehension and
+    signing reporting cap. Report total expressive vocabulary divided by spoken
+    vocabulary, the sign-only share of expressive vocabulary, and signed vocabulary
+    as a share of comprehension. All quantities use the same VG15 draws.
     """
     print(f"\n=== DS SIGNING PROFILE: {C.model_label(DS_SIGN_KEY)} "
           f"(DS-internal, to {DS_SIGNING_MAX_AGE:.0f} mo) ===", flush=True)
@@ -518,11 +455,10 @@ def _verify() -> None:
     assert np.allclose(res["delta_exp"], 5.0, atol=0.1), res["delta_exp"]
     assert np.allclose(res["latency_ds"], 8.0, atol=0.1)
     assert np.allclose(res["latency_td"], 3.0, atol=0.1)
-    # Comprehension-equivalent age: DS_U(a) = TD_U(a-8) -> cea_U(a)=a-8, delay=8.
+    # For these linear curves, TD_U(t) = DS_U(a) gives t = a/2 - 3.
     age_grid = np.arange(20, 51, 1.0)
     cea = C.comprehension_equivalent_age(ages, U_ds, S_ds, ages, U_td, S_td, age_grid)
-    # DS_U=10(a-10); TD_U=20(a-2). Solve 20(t-2)=10(a-10) -> t = a/2 + ... check delay sign
-    # Just assert delays are finite & expressive >= receptive monotonicity holds.
+    # Check that interpolation returns some finite comprehension delays.
     assert np.isfinite(cea["delay_U"]).any()
     # Exercise the nested-count path used by the report. These diffuse counts
     # have small discrete jumps near their tenth percentile.

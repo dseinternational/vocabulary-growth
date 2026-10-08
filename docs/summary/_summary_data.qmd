@@ -5,8 +5,8 @@ the prose is typed: each is computed from the fitted output and exported with a
 binding intended for a future site component.
 
 The cell is deliberately unlabelled. all.qmd includes every page, and a labelled
-cell included ten times is a duplicate-label error; an unlabelled one is simply
-re-run, which costs nothing.
+cell included ten times causes a duplicate-label error. An unlabelled cell can
+be rerun for each page.
 
 Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17.
@@ -68,7 +68,7 @@ PACK = {
 }
 
 # --- Vocabulary --------------------------------------------------------------
-# Every helper returns a Markdown object carrying <span data-vg="key">value</span>.
+# bound() returns Markdown carrying <span data-vg="key">value</span>.
 # The value is written into the Markdown export, DOCX and PDF. A future site
 # component could refresh the span from a matching prediction pack. A plain
 # string containing HTML would be escaped and smart-quoted by the Markdown
@@ -99,7 +99,7 @@ _BANDS = {0.5: ("Y_ci50_lo", "Y_ci50_hi"), 0.89: ("Y_ci_lo", "Y_ci_hi")}
 
 
 def median_at(age, outcome):
-    """The predictive median count for a child not in the data."""
+    """Predictive median for a new child under the fit's reference conditions."""
     row = _row(age, outcome)
     return bound(f"median:{age}:{outcome}", MISSING if row is None else _count(row["Y_median"]))
 

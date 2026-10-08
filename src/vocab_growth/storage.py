@@ -52,19 +52,17 @@ def upload_to_blob_storage(
     Parameters
     ----------
     include_traces : bool
-        If True, include NetCDF trace files (.nc). Excluded by default due to size.
+        If True, include NetCDF trace files (.nc). Traces contain observation-level
+        data and identifiers. Keep False for public report uploads.
     skip : callable, optional
         Predicate called with each file's POSIX-style path relative to
         ``output_dir``; return True to skip uploading that file. Use to exclude
-        unreferenced artifacts (e.g. heavy SVG figures superseded by PNGs).
+        unreferenced artefacts (e.g. large SVG figures superseded by PNGs).
     verify : bool
         After uploading, check that every asset the report's ``index.html``
         references was uploaded, then request the page and each asset back
-        over HTTP and fail on anything that does not return 200 (#289 task
-        4.10). The upload is not reported complete until it has. This is the
-        check ``publish_comparison.py`` performs for the comparison book,
-        after a hand-assembled upload published that book with every image
-        broken; the model reports had the same gap.
+        over HTTP and fail on anything that does not return 200. The upload is
+        reported complete only after these checks pass.
     fetch_status : callable, optional
         Transport for the HTTP check, receiving ``(url, timeout)`` and
         returning an integer status. Defaults to the shared bounded GET that
@@ -156,9 +154,7 @@ def _verify_report_upload(
             f"upload cannot serve — missing locally, or excluded by the skip filter "
             f"or the trace exclusion: {listed}. The page would publish broken."
         )
-    # The entry page first, deliberately: the shared check requests paths in the
-    # order given, and a publication whose own page is unreachable is not worth
-    # checking asset by asset.
+    # Check the entry page before its assets.
     entry = inspection.pages[0]
     required = (entry, *(path for path in inspection.required_paths if path != entry))
     http_failures = verify_published(

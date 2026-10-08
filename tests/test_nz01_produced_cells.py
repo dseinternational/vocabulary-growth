@@ -1,15 +1,11 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Regression tests for the VG15 nz_01 (Foster-Cohen) produced three-cell path.
+"""Check the nz_01 produced-cell path in the joint-modality model.
 
-nz_01 is production-only (no comprehension): its checklist partitions produced
-items into word-only, sign-only and both. Conditioned on production those three
-cells form a within-produced Dirichlet-Multinomial that informs ``psi`` (see
-``common_joint_modality.build_model``). These tests pin the data-prep path — the
-loader's column mapping and zero-produced drop, and ``prepare_joint_data``'s
-inclusion behind the ``include_nz01_cells`` gate without double-counting the
-production-only marginal.
+The production-only checklist records word-only, sign-only and overlapping
+items. These three cells inform composition conditional on production. The
+separate marginal row must be excluded to avoid counting the same data twice.
 """
 
 import dataclasses
@@ -40,7 +36,7 @@ def _write_nz01_csv(path):
 
 
 def _write_uk07_csv(path):
-    """A minimal uk_07 fixture — prepare_joint_data always loads this CSV."""
+    """Write the minimal uk_07 source required by joint-data preparation."""
     pd.DataFrame(
         [
             dict(
@@ -53,7 +49,7 @@ def _write_uk07_csv(path):
 
 
 def _write_es01_csv(path):
-    """A minimal es_01 fixture — prepare_joint_data always loads this CSV."""
+    """Write the minimal es_01 source required by joint-data preparation."""
     pd.DataFrame(
         [
             dict(
@@ -175,13 +171,7 @@ def test_prepare_joint_data_excludes_nz01_when_flag_false(tmp_path, monkeypatch)
 
 
 def test_a_requested_but_missing_nz01_source_fails_closed(tmp_path, monkeypatch):
-    """Asking for the nz_01 cross-tab and not getting it must be an error.
-
-    This block used to tolerate the file's absence so the model "still builds",
-    which silently fitted VG15 without all of nz_01's composition observations
-    while the build banner still reported `include_nz01_cells` as True — a
-    missing data source that looked exactly like a successful fit (issue #266).
-    """
+    """Reject a missing nz_01 source when produced-cell observations are requested."""
     monkeypatch.setattr(env, "DATA_DIR", str(tmp_path))
     # Every other source the joint prep reads, but no nz_01 CSV.
     pd.DataFrame(

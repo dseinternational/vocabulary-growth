@@ -1,33 +1,17 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Canonical definitions of the terms the reports use.
+"""Shared definitions for standalone model reports and the technical report.
 
-The technical report carries a glossary chapter, but every model report renders
-as a standalone page inside its own fitted output directory, so a reader who
-lands on one of them gets none of it. Ten independent reviews of the fifteen
-model reports each raised the same finding: terms that decide whether a figure
-can be read at all -- which direction of :math:`\\kappa` means more variability,
-whether a band is a population mean or one child, what an 89% interval is --
-appear undefined on pages that then ask the reader to interpret them.
-
-Holding the definitions here rather than in each ``.qmd`` means a term is
-defined once and every report that uses it gets the same words. The report
-chapter is generated from this module (``scripts/build_glossary.py``), and
-:func:`vocab_growth.glossary.render_glossary` prints the subset a given model
-needs into a report cell, so the two cannot drift.
-
-Definitions are written for a reader who has met probability and calculus but
-not Bayesian workflow -- an undergraduate science or maths student -- because
-that is the audience these reports are meant to serve.
+``scripts/build_glossary.py`` generates the glossary chapter from these entries.
+``render_glossary`` prints the subset needed by each model report. Definitions
+assume familiarity with probability and calculus, but not Bayesian modelling.
 """
 
 from __future__ import annotations
 
-# Ordered so the rendered list reads as a progression rather than an alphabet:
-# what the model is, what its parts mean, what the fitted numbers mean, and how
-# to tell whether to believe them. `render_glossary` preserves this order
-# regardless of the order a caller asks for terms in.
+# Render terms in conceptual order, from model structure to interpretation and
+# sampling checks, regardless of the caller's requested order.
 GLOSSARY: dict[str, str] = {
     # -- The modelling framework --
     "Bayesian inference": (
@@ -57,8 +41,9 @@ GLOSSARY: dict[str, str] = {
     "Reference inventory": (
         "The common 810-word scale every vocabulary count is expressed against. "
         "Studies used different checklists, so counts are harmonised onto this "
-        "scale to be comparable; it is a unit of measurement, not a checklist "
-        "any child was actually given."
+        "scale to be comparable. Some children completed the full DSE checklists; "
+        "other studies used shorter forms whose counts are treated on the same "
+        "reference scale."
     ),
     "Logit": (
         "The transformation $\\operatorname{logit}(p) = \\log\\!\\big(p/(1-p)\\big)$, "
@@ -138,11 +123,12 @@ GLOSSARY: dict[str, str] = {
         "logit scale. Small $\\eta$ keeps the trend close to linear."
     ),
     "GP anchor": (
-        "A constraint pinning the GP's contribution to zero at one reference age "
-        "(and, in the anchored models, removing its linear component as well). "
-        "It is an identifiability device, not a claim about development: without "
-        "it the GP and the linear trend can trade off against each other freely, "
-        "which is what made earlier models in this family sample badly."
+        "A constraint setting the GP contribution to zero at a reference age. "
+        "Anchored models first project out mean-like components, then subtract "
+        "the GP value at that age. The subtraction can restore a constant "
+        "component, so the result need not remain orthogonal to the trend basis. "
+        "The constraint helps distinguish model components; it is not a claim "
+        "about development."
     ),
     "Mean clamp": (
         "Holding a fitted mean level above the highest age anchor rather than "
@@ -270,8 +256,9 @@ GLOSSARY: dict[str, str] = {
     "R-hat ($\\hat{R}$)": (
         "A convergence diagnostic comparing variation within each chain to "
         "variation between chains. Values near 1 indicate agreement; this "
-        "project requires $\\hat{R} \\le 1.01$ for every parameter before a fit "
-        "may be reported."
+        "project's usual reporting limit is 1.01. A narrowly registered exception "
+        "can permit a named failure with disclosure; passing the limit alone "
+        "does not prove convergence."
     ),
     "Effective sample size (ESS)": (
         "The number of independent samples the correlated MCMC draws are worth. "
@@ -305,18 +292,15 @@ GLOSSARY: dict[str, str] = {
         "The odds ratio measuring how much signing and speaking a given "
         "understood word go together. $\\psi = 1$ means independence; $\\psi > 1$ "
         "means a word a child signs is *more* likely to be a word they also say. "
-        "Because the two overlap, the total number of words expressed either way "
-        "is **smaller** than independence would predict."
+        "At fixed spoken and signed shares, $\\psi > 1$ increases overlap and "
+        "reduces the expected expressive union relative to independence; "
+        "$\\psi < 1$ has the reverse effect."
     ),
 }
 
 
 def render_glossary(terms: list[str] | None = None, *, title: str = "Terms used in this report") -> None:
     """Print a collapsible glossary for a report cell with ``#| output: asis``.
-
-    Mirrors :func:`vocab_growth.models.calibration.render_calibration_section`
-    and :func:`vocab_growth.plotting.ppc_count_distribution_gallery`, which is
-    how every other shared report block reaches the page.
 
     ``terms`` selects the subset this model needs; ``None`` prints all of them.
     An unknown term raises rather than being skipped, so a typo in a template

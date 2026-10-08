@@ -1,18 +1,16 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """
-Compute time-to-milestone tables for every fitted model.
+Compute time-to-milestone tables for supported fitted models.
 
-For each target word count we report the posterior **age at which the population
-trajectory first reaches it**, summarised as the median and 89% HDI of the
-*per-draw* crossing age (median-of-crossings). This is the statistically correct
-inversion: it draws each posterior trajectory, finds where that draw crosses the
-target, and summarises those ages — as opposed to inverting the median/HDI count
-curves (crossing-of-median), which differs for a nonlinear trajectory and cannot
-be relabelled as "percentile children". The reported interval is posterior
-uncertainty on the population milestone age, not a spread across individual
-children (that would need new-child posterior-predictive draws; see the
-predictive-interval caveat in the report).
+Find a first crossing age on each posterior expected-count trajectory, then
+summarise the finite crossing ages with a median and 89% HDI. ``prop_reaching``
+records the retained draw share; non-crossing and pre-grid cases are both excluded. These are modelled
+expected checklist counts, not known ages of word learning.
+
+The interval describes uncertainty in the reference trajectory's crossing age,
+not variation between children. Inverting a summary count curve is a different
+operation and can give different results, particularly with non-monotone draws.
 
 Reads each model's `trace.nc` directly (the per-draw ``p_plot`` /
 ``p_u_plot``/``p_s_plot`` trajectories), so it requires fitted traces.

@@ -1,30 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""VG14 and VG15 can now run the marginal-fallback sensitivity (issue #266 finding 8).
+"""Check marginal-fallback choices on the trivariate and joint engines.
 
-Roughly 455 of 1,428 Down syndrome spoken rows cannot condition on an observed
-comprehension count, and take ``BB(810, p_U*q, kappa)`` instead. That is
-mean-correct but is **not** the marginal implied by the paired model — it misses
-the variance — and the affected rows are older and clustered by study, so the
-approximation is not ignorable. The bivariate engines have carried a choice of
-treatment since #240; the trivariate and joint engines hard-coded the default, so
-no sensitivity could be run at all on the two signing models.
-
-Both now route their child-outcome likelihoods through the same shared builder,
-for the **signed** rows as well as the spoken ones: signing is nested inside
-comprehension exactly as speech is, so exposing the choice for one outcome and
-not the other would leave half the exposure unmeasurable.
-
-Two properties matter and are checked separately, because a routing change that
-satisfied only the first would be decorative:
-
-* under the default, the graph is **unchanged** —
-  ``tests/test_graph_equivalence.py`` pins that for all twenty models;
-* under each alternative, the graph **actually differs**, on a frame that has
-  marginal rows to differ on. The synthetic frame the equivalence harness uses
-  is fully paired, so ``paired_only`` and ``moment_matched`` are no-ops there;
-  a test that used it would pass while proving nothing.
+Paired speech and signing condition on understood count. Rows without a valid
+parent count need a fallback treatment. A product-mean Beta-Binomial has the
+nested mean but generally differs in variance and distribution. These tests
+build rows that exercise each alternative and check that it changes the graph
+and evaluated density. Fully paired rows cannot exercise those fallback branches.
 """
 
 from __future__ import annotations
@@ -138,13 +121,7 @@ def test_separate_dispersion_adds_one_offset_per_nested_outcome(
 def test_every_treatment_changes_the_likelihood_on_rows_that_have_one(
     base, tmp_path, monkeypatch
 ):
-    """The routing must be substantive, not decorative.
-
-    Checked on a frame that HAS marginal rows. On the fully paired frame the
-    equivalence harness uses, `paired_only` drops nothing and `moment_matched`
-    never selects its branch, so all four treatments agree there — a test that
-    used it would pass while proving nothing.
-    """
+    """Compare fallback densities on a frame containing unpaired outcomes."""
     import dse_research_utils.statistics.models.data as model_data
 
     engine = get(base.model_id.lower()).engine
@@ -186,12 +163,7 @@ def test_every_treatment_changes_the_likelihood_on_rows_that_have_one(
 
 @pytest.mark.parametrize("base", _MODELS, ids=lambda d: d.model_id)
 def test_a_fit_made_before_the_field_existed_still_validates(base):
-    """The first real use of the backfill mechanism (#273 step 5).
-
-    Under raw dictionary equality, adding this field would have invalidated
-    every VG14 and VG15 fit ever made, for a field whose default is what those
-    fits already did.
-    """
+    """Accept a missing legacy field only at its recorded default behaviour."""
     from vocab_growth.fit_artifacts import normalise_for_json
 
     recorded = normalise_for_json(base)

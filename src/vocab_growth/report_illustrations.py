@@ -1,48 +1,19 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Illustrative figures for the report that are simulated rather than fitted.
+"""Simulated figures for the report's introduction and model structure.
 
-Nothing here reads fitted output, so every figure can be regenerated at any
-time, and none of it is validated by ``scripts/sync_report_figures.py``, which
-covers fit artefacts only. ``scripts/prepare_report_figures.py`` is the entry
-point that writes them into the report figure cache.
+``write_intro_illustrations`` shows Bayesian updating and count dispersion.
+``write_prior_illustrations`` shows VG01's anchor-defined trend and VG10's
+per-draw GP constraint. ``scripts/prepare_report_figures.py`` writes these
+illustrations into the report cache; they do not use fitted output.
 
-Two families.
-
-**Introduction** (:func:`write_intro_illustrations`, into the cache root):
-
-``bayes_update``, ``bayes_update_2``, ``bayes_update_3``
-    A Beta prior on a proportion updated by 20, 100 and 250 simulated Bernoulli
-    trials, with the scaled likelihood between them.
-``binomial_betabinomial_draws``
-    Simulated counts under a Binomial and a mean-matched Beta-Binomial, so the
-    only difference on display is the dispersion.
-
-**Model structure** (:func:`write_prior_illustrations`, into ``methods/``),
-simulated from the registered model definitions' own priors so that a
-recalibrated prior moves the figure with it:
-
-``model_structure_prior_vg01``
-    VG01's prior trajectories with the two slope anchors, their 50% and 89%
-    intervals, and the median trend joining them. One draw is shown against its
-    own trend so the Gaussian-process contribution is a visible gap rather than
-    something inferred from the spread of the bundle. The methods chapter embeds
-    it as ``@fig-prior-structure`` at the end of ``@sec-anchors``; it carries no
-    title because the figure caption is one.
-``gp_anchoring_vg10``
-    VG10's per-draw GP anchor at 54 months, as a like-for-like comparison: both
-    columns share one set of draws and differ only in whether the GP is
-    orthogonalised and pinned. Supports ``@sec-gpanchor``.
-
-Ages in the model-structure figures are handled in months rather than
-standardised units. The models standardise age before building the kernel, the
-trend and the soft clamp, and the standardisation cancels in all three, so the
-simulated prior is identical and the plotted axis stays readable
-(``tests/test_build_utils.py`` pins the clamp equality). Population trajectories
-set every random effect to zero. The GP is drawn exactly rather than via the
-HSGP, which is the same prior and avoids reproducing the basis approximation in
-a figure about model structure.
+Anchor priors, GP amplitudes and the VG10 clamp setting come from registered
+model definitions. GP length-scale settings and plotting domains are local
+constants. Ages are handled in months, and random effects are set to zero.
+These illustrations draw from the GP kernel directly; fitted models use its
+finite HSGP approximation, so the simulated curves are not exact draws from
+those fitted model graphs.
 """
 
 from __future__ import annotations
@@ -86,7 +57,7 @@ def _save(fig, out_dir: str, filename: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Introduction — Bayesian updating and count dispersion
+# Introduction: Bayesian updating and count dispersion
 # --------------------------------------------------------------------------- #
 def plot_bayes_update(out_dir, n, rng, true_p, alpha0, beta0, filename):
     """A Beta(alpha0, beta0) prior updated by ``n`` simulated Bernoulli trials."""
@@ -237,10 +208,10 @@ def write_intro_illustrations(out_dir: str, seed: int = RANDOM_SEED) -> list[str
 
 
 # --------------------------------------------------------------------------- #
-# Model structure — shared helpers, in months
+# Model structure: shared helpers, in months
 # --------------------------------------------------------------------------- #
 def _definition(model_id):
-    """The registered definition, so the priors here cannot drift from the models."""
+    """Read anchor priors and GP amplitudes from the registered definition."""
     return MODEL_REGISTRY[model_id.lower()]
 
 
@@ -299,7 +270,7 @@ def _draw_anchor_priors(ax, anchors, dists, callouts=None):
 
 
 # --------------------------------------------------------------------------- #
-# Figure 1 — VG01 prior structure
+# Figure 1: VG01 prior structure
 # --------------------------------------------------------------------------- #
 def build_prior_structure(out_dir, filename="model_structure_prior_vg01",
                           n_draws=250, n_grid=260, seed=RANDOM_SEED):
@@ -334,10 +305,9 @@ def build_prior_structure(out_dir, filename="model_structure_prior_vg01",
     ax.plot([], [], color=C_DRAWS, alpha=0.6, lw=1.2,
             label=f"Prior trajectories ({n_draws} draws)")
 
-    # One draw against its own trend. Restricted to draws whose trend sits near
-    # the median trend at the high anchor (so the gap is the GP, not a different
-    # pair of anchors) and whose result is monotone -- an example chosen to be
-    # legible, not the prior's worst case -- then the largest remaining excursion.
+    # Highlight a draw near the median trend at the high anchor. Prefer monotone
+    # curves, then choose the largest GP departure among eligible draws. This is
+    # a selected illustration, not a representative random draw.
     k = int(np.argmin(np.abs(ages - anchors[1])))
     near = np.abs(trends[:, k] - median_trend[k]) < 0.12 * median_trend[k]
     mono = np.all(np.diff(counts, axis=1) >= -1e-9, axis=1)
@@ -372,7 +342,7 @@ def build_prior_structure(out_dir, filename="model_structure_prior_vg01",
 
 
 # --------------------------------------------------------------------------- #
-# Figure 2 — VG10 per-draw GP anchoring
+# Figure 2: VG10 per-draw GP anchoring
 # --------------------------------------------------------------------------- #
 def _observed_ages():
     """Ages of the VG10 analysis frame, with multiplicity, for the projection."""
@@ -391,23 +361,20 @@ def build_gp_anchoring(out_dir, filename="gp_anchoring_vg10",
     d_hi = beta_dist(d.p_slope_hi_u_alpha, d.p_slope_hi_u_beta)
 
     rng = np.random.default_rng(seed)
-    # The reference age goes on the plot grid explicitly, or the nearest point is
-    # up to ~0.22 months away and the pinch reads as approximate rather than exact.
+    # Include the reference age exactly to show the per-draw zero constraint.
     plot_ages = np.unique(
         np.concatenate([np.linspace(*GP_DOMAIN_MONTHS, n_grid), [ref]])
     )
     obs_ages = _observed_ages()
 
     # One GP realisation per draw over the union of plot, observed and anchor
-    # ages -- the rows the model stacks into X_all.
+    # ages, as in the model's stacked X_all grid.
     grid = np.unique(np.concatenate([plot_ages, obs_ages, [ref]]))
     i_plot = np.searchsorted(grid, plot_ages)
     i_obs = np.searchsorted(grid, obs_ages)
     i_ref = int(np.searchsorted(grid, ref))
 
-    # Whether the mean levels off above the high anchor is read from the
-    # definition, not assumed: a model with the clamp turned off would otherwise
-    # be drawn with a flattening its own specification does not have.
+    # Match the definition's choice of whether to flatten the trend.
     if d.clamp_mean_above_hi_anchor:
         eff_plot, eff_grid = _soft_clamp(plot_ages, anchors), _soft_clamp(grid, anchors)
     else:

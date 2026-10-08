@@ -1,40 +1,12 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Every registered model's priors table must describe every parameter it fits.
+"""Check prior-table coverage against graph-reported parameter names.
 
-The graph-to-report contract asked for by issue #273. `_PRIOR_SPECS` maps one
-fitted parameter to one definition field, and a parameter family that fits
-neither half of that shape simply produces no row -- silently, because the table
-is built from the specs rather than checked against the fit. VG22 lost its whole
-low-rank factor block that way, and the only record was a sentence hand-written
-into that model's template.
-
-The check is made against each model's **real graph**: the same variable set
-`common.diagnostics_var_names` writes into `diagnostics.csv`, which is what the
-priors table gates on. The graph is built on the small fixed synthetic frame in
-`support.synthetic_graphs` rather than on the prepared DuckDB, which is what
-`test_graph_equivalence` has always done and is licensed here by a measurement
-rather than by analogy -- see `_reported_parameters` below. The two tests that
-build a graph are still `slow`; nothing here samples.
-
-The mark is **per test, not on the module**. This file was the slow set's largest
-single cost -- 106 graph builds, 45% of that set's CPU -- and the exemption check
-below builds nothing, so it belongs in the fast job where it guards every pull
-request. The two graph tests carry no shared fixture and are deliberately left
-ungrouped, so `--dist loadgroup` can spread them across workers. It is no longer
-that cost: 6 m 02 s serial to 1 m 30 s, and out of the slow set's slowest fifteen
-entirely, almost all of it from the batched size evaluation in
-`common._element_counts` rather than from the frame (#331,
-`notes/202609111158-slow-test-cost-was-not-data-preparation.md`).
-
-Writing it found three more omissions of the same class straight away: VG15's
-Dirichlet-Multinomial concentration, which has its own prior figure and is named
-on that model's page as a prior-sensitivity target; and, among the registered
-sensitivity variants, the separate-dispersion fallback offset and Proposal A1's
-age-varying scale ratio. Variants are covered here because a variant fit renders
-the model of record's own template, so a prior with no row shows up on a real
-page.
+Build registered models and sensitivity variants on the fixed synthetic frame.
+This checks the branches represented by that fixture; it does not exhaust every
+data-dependent branch. Graph tests are slow, while the exemption-only guard
+runs in the fast set. No test here samples.
 """
 
 from __future__ import annotations
@@ -59,31 +31,11 @@ def _variant_keys():
 
 
 def _reported_parameters(engine, definition, tmp_path, monkeypatch):
-    """Build ``definition``'s graph and return what ``diagnostics.csv`` would hold.
+    """Build the synthetic graph and return its diagnostic parameter names.
 
-    Built on the synthetic frame, which is what makes this file affordable. Until
-    2026-09-11 each of these 106 tests ran the engine's real ``prepare`` stage --
-    106 full DuckDB loads and 106 full-size graph builds, 591.7 s and 45% of the
-    slow set's CPU -- to read back a set of parameter *names*.
-
-    The licence for dropping the preparation is a measurement, not an argument,
-    because the risk is specific: a parameter whose existence follows from the
-    data rather than from the definition would then go unchecked. All 21
-    registered models and all 85 registered variants were built both ways and
-    their reported names compared (issue #331 item 1). **In no case did the
-    synthetic frame report fewer parameters than the real one**, and no free
-    variable crossed the size<=2 boundary that separates the summary set from
-    the gate set. One case differs, in the safe direction:
-    ``vg15/dse-native-only`` leaves exactly one psi-informed study in the real
-    pool, so its documented single-study branch drops ``tau_psi`` and ``z_psi``
-    -- which the synthetic frame's four cross-tab studies keep. A superset is a
-    stricter coverage demand, never a looser one, so the check can only get
-    harder to pass this way.
-
-    ``survey_vocab_max`` is on the synthetic frame for this file's sake:
-    ``vg16/lag-same-form`` is the one variant whose build reads it, and without
-    it that case raised instead of building. Adding it moved no entry in
-    ``support/graph_baseline.json``.
+    The fixture contains several studies and both joint-cell sources. It also
+    provides form ceilings for lag variants. This keeps graph-name checks separate
+    from real-data preparation.
     """
     context = build_synthetic_model(
         definition,
@@ -130,17 +82,7 @@ def test_the_priors_table_covers_every_reported_parameter(
 
 
 def test_no_parameter_is_both_rendered_and_exempt():
-    """An exemption that shadows a rendered row would hide a lost row.
-
-    Checked on the exemption predicate alone, so it needs no graph: any
-    parameter `_PRIOR_SPECS` names a row for must not also be exempt, or
-    dropping that row would leave the coverage check silent.
-
-    Not parametrised over the models: `_PRIOR_SPECS` and the exemption
-    predicate are both global, and the body never read the model key, so the
-    parametrisation this carried until 2026-09-10 ran one assertion twenty-one
-    times over.
-    """
+    """Reject exemptions that could conceal a missing rendered prior row."""
     for parameter, _, _, _ in report_cells._PRIOR_SPECS:
         assert report_cells._is_exempt(parameter) is None, (
             f"{parameter} has a priors-table row and is also exempt; the "
@@ -158,13 +100,7 @@ _VARIANTS = sorted({(model_key, name) for model_key, name in _variant_keys()})
 def test_the_priors_table_covers_every_variant_parameter(
     model_key, variant_name, tmp_path, monkeypatch
 ):
-    """A variant renders the model of record's template, gaps and all.
-
-    Two variants had one: `fallback-dispersion` samples an offset the table had
-    no row for, and `a1-tau-age-varying` names its ratio parameter
-    `log_tau_subj_u_ratio`, which the block row's coverage rule did not
-    recognise.
-    """
+    """Check variant-specific parameters against the table rendered by their model."""
     from vocab_growth.sensitivity.registry import build_variant
 
     (definition,) = build_variant(model_key, variant_name)

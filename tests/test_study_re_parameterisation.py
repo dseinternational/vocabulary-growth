@@ -1,23 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Guard the study random-intercept parameterisation in ``build_model_re``.
+"""Check non-centred, zero-sum study random intercepts in the VG07 graph.
 
-Issue #65 switched the study-level random intercepts (``delta_u`` / ``delta_q``)
-from a centred form (``delta ~ Normal(0, tau)``) to the non-centred form used
-everywhere else in the codebase (``delta = tau * delta_raw``, ``delta_raw ~
-Normal(0, 1)``). This test pins two things that downstream code depends on:
-
-1. the non-centred raw variables ``delta_u_raw`` / ``delta_q_raw`` exist, and
-   the named ``delta_u`` / ``delta_q`` are *deterministic* (not free RVs) — i.e.
-   we have not regressed to the centred form; and
-2. the public names ``delta_u`` / ``delta_q`` / ``tau_u`` / ``tau_q`` are still
-   exposed, because ``scripts/vg07_study_effects.py`` and ``scripts/loso_compare*``
-   extract them from the trace by name.
-
-It builds the real VG07 model (no sampling), so it needs the prepared DuckDB; it
-skips cleanly when that isn't present (the CI fit job runs ``prepare_data`` first,
-but bare ``pytest`` may not).
+Raw offsets and scales remain free variables. Scaled offsets remain named
+deterministics for trace consumers. The graph build requires prepared data.
 """
 
 import os
@@ -77,10 +64,7 @@ def test_study_deltas_are_deterministic_not_free(vg07_model):
 
 
 def test_study_raw_offsets_are_sum_to_zero(vg07_model):
-    """The unit study offsets are ZeroSumNormal, removing the intercept vs
-    study-RE-mean ridge that broke R-hat for the hierarchical models. Guards the
-    reparameterisation: prior draws of delta_u_raw / delta_q_raw sum to ~0 across
-    studies, and the underlying free RV is the zero-sum axis."""
+    """Check zero-sum raw offsets and their underlying sampled variables."""
     import numpy as np
     import pymc as pm
 

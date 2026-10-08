@@ -1,18 +1,13 @@
-"""Choose variance-partition priors whose induced marginals match VG12's current ones.
+# Copyright (c) 2026 Down Syndrome Education International and contributors
+# SPDX-License-Identifier: AGPL-3.0-or-later
 
-Current VG12 priors:
-    tau_subject        ~ HalfNormal(1.5)
-    kappa_excess_young ~ LogNormal(log 40, 0.9)     (young anchor at 12 months)
+"""Calibrate a variance-budget prior against fixed legacy VG12 scale priors.
 
-Target parameterisation:
-    v_total ~ LogNormal(total_mu, total_sigma)
-    share   ~ Beta(share_alpha, share_beta)
-    tau_subject        = sqrt(share * v_total)
-    kappa_excess_young = c / ((1 - share) * v_total),  c = 1/(p0 (1-p0))
-
-We do not need an exact match -- the prior is *meant* to move onto the budget and
-the split -- but the induced marginals should be recognisably the same beliefs,
-otherwise the reparameterisation smuggles in a different model.
+The targets are HalfNormal(1.5) for child scale and LogNormal(log(40), 0.9) for
+young excess concentration. The candidates specify a LogNormal total variance
+and an independent Beta share. Their induced marginals are only approximately
+matched; even matching both marginals would not reproduce the original joint
+prior. This experiment does not read the current registered priors.
 """
 import numpy as np
 from scipy import optimize, stats

@@ -1,67 +1,35 @@
 #!/usr/bin/env python
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Does the typically developing tau-kappa ridge appear when replication is thinned?
+"""Compare VG08's sampling diagnostics after thinning repeated visits.
 
 Drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
+Revised with assistance from OpenAI Codex/GPT-6.
 
-The question
-------------
-Every typically developing model with a child effect sits below the 0.3 energy
-BFMI threshold and carries a strong positive posterior correlation between the
-child scale and the young-age Beta-Binomial concentration -- +0.57 to +0.76 in
-VG12, VG13, VG21 and VG23 (``notes/202609061900-td-bfmi-is-the-tau-kappa-ridge.md``).
-The Down syndrome control, VG08, has the same two random effects on the same
-probability scale and **no** ridge: corr(tau_subj_u, kappa_young_u) = -0.001.
-The obvious difference is replication -- 46.6% of Down syndrome children are
-seen twice or more, against 17.2% in VG12 -- and #229 proposes the decisive test:
-thin the Down syndrome pool to the typically developing replication profile and
-see whether the ridge appears.
+Fit three frames derived from VG08's prepared data. ``baseline`` retains all
+rows. ``thinned`` keeps every child but reduces the share with repeated visits
+to ``TARGET_REPEATER_SHARE``. ``control`` removes the same number of rows at
+random and can remove children entirely. Compare child-scale/concentration
+correlation, energy BFMI and divergences at the same sampling tier.
 
-That is what this fits. Three arms of VG08, on frames derived from its own
-prepared analysis frame:
+The arms test sensitivity to these deletion schemes. Thinning also changes age
+coverage and outcome availability; random row deletion does not perfectly
+separate sample size from repetition. A difference can support a replication
+hypothesis without establishing it as the sole cause.
 
-    baseline   the frame as fitted (1,708 rows, 943 children, 46.6% repeaters)
-    thinned    the same 943 children; enough repeaters truncated to one randomly
-               chosen visit that the repeater share falls to VG12's 17.2%. Only
-               extra visits leave, so the number of child effects is unchanged
-               and replication is the only thing that moves.
-    control    the same number of rows as `thinned` removes, dropped uniformly at
-               random from the full frame. Children can vanish and the repeater
-               share barely moves, so this separates "fewer rows" from "less
-               replication".
-
-Reading the result (#229, 2026-09-06):
-
-    thinned shows the ridge, control does not   replication is the mechanism
-    both show it                                it is sample size, not replication
-    neither shows it                            the difference between the two
-                                                populations is something else
-
-"Shows the ridge" is read on corr(tau_subj_u, kappa at the young anchor) and on
-the energy BFMI beside it, against the baseline arm fitted on the same machine
-at the same tier -- not against the model of record's numbers, which were
-measured on a different machine.
-
-What this is not
-----------------
-Not a refit of any model of record and not a registered sensitivity variant: the
-arms are frames, not definition fields, and adding a field to
-``BivariateModelDefinition`` would invalidate every bivariate fit of record.
-Like the other harnesses here it writes to its own output root and is a dated
-record of how a number was obtained, not an entry point.
+The target share comes from the dated VG12 frame described in
+``notes/202609061900-td-bfmi-is-the-tau-kappa-ridge.md``. Recheck it before using
+this experiment to represent a newer frame. The arms are exploratory frame
+changes, not registered sensitivity variants or fits of record.
 
 Usage::
 
     uv run python scripts/experiments/vg08_replication_thinning.py all \
         --output-dir output/experiments/vg08-replication-thinning
-    uv run python scripts/experiments/vg08_replication_thinning.py thinned --config test ...
 
-``--config`` defaults to ``rep``: BFMI and a posterior correlation are properties
-of the posterior geometry, and the model of record's figures are ``rep`` ones.
-Each arm writes ``<output-dir>/models/VG08-replication-<arm>/`` (trace and
-diagnostics) and ``<output-dir>/<arm>.json``; ``all`` (or a later ``score``
-call) also writes ``<output-dir>/summary.csv`` and ``summary.md``.
+``--config`` defaults to ``rep``. Each arm writes its fit and JSON summary under
+``<output-dir>``. ``all`` and ``score`` also write combined CSV and Markdown
+summaries. Check convergence before interpreting posterior correlations.
 """
 
 from __future__ import annotations
@@ -112,12 +80,11 @@ def replication_profile(df: pd.DataFrame) -> dict:
 def thin_replication(
     df: pd.DataFrame, rng: np.random.Generator, target_share: float
 ) -> pd.DataFrame:
-    """Truncate repeaters to one random visit until the repeater share hits the target.
+    """Keep all children and reduce the repeater share by retaining random visits.
 
-    Every child stays in the frame. Repeaters to keep intact are chosen at random
-    from the repeaters; each of the rest keeps one visit, chosen at random rather
-    than the first, so the truncated children's ages stay spread over the range
-    the way the typically developing singletons' are.
+    Choose the retained repeaters at random. Each remaining child keeps one
+    random visit. This avoids always choosing their earliest age, but does not
+    reproduce another population's age or repetition distribution.
     """
     per_child = df.groupby(CHILD_KEY, sort=False).size()
     repeaters = per_child.index[per_child >= 2].to_numpy()

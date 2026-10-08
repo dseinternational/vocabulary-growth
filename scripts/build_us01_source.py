@@ -49,8 +49,9 @@ Verification gate
 ``--verify`` re-derives the in-window Down syndrome administrations and checks them
 against ``wordbank_administration_data.csv`` as a multiset of
 ``(age, comprehension, production)``.  This reproduces 87 WG and 109 WS rows
-exactly; the reconstruction is only trustworthy for the out-of-window rows because
-it is exact on the in-window ones.
+apart from the two empty WG administrations excluded from the reconstruction.
+Agreement within the age window checks the scoring and extraction rules; it does
+not establish the validity of every out-of-window record.
 
 Usage::
 

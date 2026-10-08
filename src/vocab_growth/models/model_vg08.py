@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 """
-Model VG08: Joint model of words understood and spoken with study + subject
-random intercepts (on understood) - children with Down syndrome.
+VG08 jointly models understood and spoken vocabulary in Down syndrome.
 
-Extends VG07 by adding non-centered subject-level random intercepts on the
-understood trajectory, partitioning between-child variability from within-child
-repeated-measures correlation.
+It adds child random intercepts on comprehension to VG07's study effects.
+The child intercepts describe persistent differences between children and
+induce dependence among repeated observations from the same child.
 """
 
 from vocab_growth.models.common_bivariate_re import (

@@ -1,21 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""One resolution of a definition's child-effect structure (issue #273).
+"""Check child-effect resolution and invalid combinations without building graphs.
 
-Five structures can occupy the same seam, three of them through a scalar field
-that holds an object instead. Until this, "what child structure does this model
-have?" was answered by four selector calls, two ``getattr`` reads and five
-rejection rules interleaved with graph construction inside the PyMC context --
-so a refusal fired part-way through a half-built model, and the rules could only
-be tested by building one.
-
-``subject_effects.resolve`` is a pure function of the definition, so everything
-here runs without PyMC and without data: the resolution for every registered
-model, and every combination the engines refuse.
-
-That the resolution did not change any model's graph is the separate claim, and
-``tests/test_graph_equivalence.py`` is where it is checked.
+The plan records outcome-specific kinds, scale names and joint structures.
+Graph equivalence is checked separately in test_graph_equivalence.py.
 """
 
 from __future__ import annotations
@@ -77,13 +66,9 @@ EXPECTED = {
     "vg23": ({"u": "constant", "q": "constant"}, 2.0, None, False),
     # VG26 is VG21 plus the correlation, exactly as VG23 is VG13 plus it.
     "vg26": ({"u": "constant", "q": "constant"}, 2.0, None, False),
-    # VG24 is VG15 plus the correlation, so all three blocks stay constant and
-    # the eta appears. The joint engine does not consume this plan -- `resolve`
-    # is called only from `common_bivariate_re`, and the joint seam reads the
-    # field directly -- so this row records what the resolver says about a joint
-    # definition rather than what fits it. It is checked because a resolver that
-    # silently dropped the third block, or reported no correlation, would be
-    # wrong about VG24 the day something starts consuming it.
+    # The joint engine currently reads its fields directly. Check the resolver
+    # too so future consumers retain all three child blocks and the correlation.
+
     "vg24": (
         {"u": "constant", "q": "constant", "sign": "constant"}, 2.0, None, False,
     ),

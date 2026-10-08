@@ -1,18 +1,15 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Quantitative posterior-predictive calibration summaries.
+"""Summaries of in-sample posterior predictive checks.
 
-Every fit writes one of these tables. It answers a different question from the
-convergence gate: the gate establishes that the sampler characterised the
-specified posterior, while this establishes whether the fitted model's replicated
-outcomes look like the observed ones — how often a predictive interval contains
-the observation it is predicting, and whether the observations sit uniformly
-within their predictive distributions.
+Tables compare replicated and observed counts through interval coverage, zero
+rates and discrete probability-integral transforms. They assess different
+properties from sampling diagnostics. A convergence pass does not establish
+model fit, and these checks do not establish coverage for a new child.
 
-The reporting helpers at the foot of this module turn a written table into the
-form the report and the per-model dashboards present, so the interpretation
-cannot drift between them.
+Shared reporting helpers select and label the same columns for model pages
+and report chapters.
 """
 
 import os
@@ -206,32 +203,20 @@ def write_trace_calibration(
     strata: dict[str, tuple[str, str, str]] | None = None,
     child_column: str | None = "subject_id",
 ) -> pd.DataFrame:
-    """Write calibration rows for posterior-predictive variables in a trace.
+    """Write age-grouped checks for posterior-predictive variables in a trace.
 
-    Each outcome is ``(label, posterior_predictive_variable, mask_variable)``.
-    A ``None`` mask means every prepared analysis row is represented.
+    Each outcome is (label, posterior_predictive_variable, mask_variable). A None
+    mask includes every prepared row.
 
-    ``strata`` splits an outcome into two additional labelled sub-tables, keyed
-    by outcome label and giving ``(constant_data variable, true label, false
-    label)``. It exists for the spoken outcome's two likelihood branches (issue
-    #236): the conditional and marginal-fallback rows are fitted by different
-    distributions and differ systematically in age and study, so a pooled
-    calibration row can be well behaved while one branch is not. The split is
-    read from the fitted trace's own ``constant_data``, so it costs no refit and
-    applies to fits made before it existed. A stratum with no rows is skipped
-    rather than written empty -- which is what the ``paired_only`` treatment
-    leaves behind.
+    strata maps an outcome label to a constant-data variable and two group labels.
+    This separates likelihood branches whose pooled check could hide different
+    errors. Empty strata are skipped.
 
-    Every outcome is also split by whether its child is seen more than once
-    among that outcome's own observed rows, when the prepared frame carries
-    ``child_column`` (issue #236's repeated-child check). A child effect is
-    informed by replication for a repeated child and by shrinkage alone for a
-    single-visit one, and most children in the typically developing pool are
-    seen once, so a pooled row can hide a group the child block fits poorly. A
-    row with no recorded child counts as a single visit. The split is written
-    only when both groups are present, since otherwise it repeats the pooled
-    row, and like the branch split it is read from the prepared frame, so it
-    needs no refit.
+    When child_column is present, checks also split children seen once from those
+    seen more than once among that outcome's observed rows. Both groups' child
+    effects use observations and shrinkage, but repeated visits provide more
+    information about a persistent effect. Missing child identifiers count as
+    single visits. The split is written only when both groups are present.
     """
     strata = strata or {}
     tables: list[pd.DataFrame] = []

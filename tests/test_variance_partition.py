@@ -1,24 +1,13 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Guard the shared-scatter-budget reparameterisation of the subject/dispersion pair.
+"""Check the total-variance and share parameterisation used by VG11 and VG12.
 
-``SubjectVariancePartitionParams`` replaces independent priors on ``tau_subject``
-and the young ``kappa`` anchor with one prior on their total and one on the share
-between them, to break the ridge that drives VG12's and VG13's energy BFMI
-failure (``notes/202608050900-td-hierarchical-geometry.md`` §§2, 4, 7.1).
-
-What has to hold:
-
-1. exactly VG11 and VG12 use it, each calibrated for its own outcome level --
-   attaching it anywhere else is a graph change that invalidates that model's fits;
-2. with it off, the graph is exactly what every existing fit was produced under;
-3. with it on, ``tau_subject`` and ``kappa_excess_young`` are *still present* under
-   their usual names, because the DS/TD heterogeneity contrast and every summary
-   read them by name -- this is the property that makes the change a
-   reparameterisation rather than a different model;
-4. the algebra round-trips: the budget and share recover the two scales exactly;
-5. the misuse combinations are rejected rather than silently ignored.
+The budget and share map to child scale and young excess concentration. Check
+that the mapping is invertible, downstream names remain available and invalid
+combinations are rejected. These properties preserve an interface, not the
+previous independent joint prior. Calibration aims for similar selected
+marginals and can change dependence between the derived quantities.
 """
 
 import dataclasses
@@ -224,11 +213,10 @@ def test_reference_proportion_must_be_a_proportion(p0):
 
 
 def test_induced_marginals_stay_near_the_priors_they_replace():
-    """The calibration claim in the definition comment, checked rather than trusted.
+    """Check selected quantiles of the calibrated induced scale marginals.
 
-    The dispersion marginal should stay close to ``LogNormal(log 40, 0.9)``; the
-    subject marginal is expected to be *tighter* than ``HalfNormal(1.5)``, because
-    a shared budget cannot let both range over 30x independently.
+    These broad checks do not establish equality with the legacy priors or
+    validate the resulting posterior geometry.
     """
     vp = _TD_UNDERSTOOD_VARIANCE_PARTITION
     c = 1.0 / (vp.reference_proportion * (1 - vp.reference_proportion))
@@ -250,8 +238,7 @@ def test_induced_marginals_stay_near_the_priors_they_replace():
     assert 0.65 < tau_q[1] < 0.95
     assert 1.3 < tau_q[2] < 1.9
 
-    # The share prior must not assert the split: VG12's posterior implies 0.598,
-    # and it should sit in the prior's central mass, not its tail.
+    # Check where the fixed calibration reference lies in the share prior.
     from scipy import stats
 
     cdf = stats.beta.cdf(0.598, vp.share_alpha, vp.share_beta)

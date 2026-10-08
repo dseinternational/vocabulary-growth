@@ -1,17 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""The consumer-side half of issue #266 finding 1.
+"""Check the shared compatibility helper for stored-fit consumers.
 
-The finding asked for the exact prepared-frame hash to be compared "for every
-fit consumer". The pipeline and the publication path did; the scripts that open
-a stored trace and print a number off it did not, and a loader-rule change is
-invisible to the raw-CSV fingerprint they carried, because the rules run in
-Python after the CSVs are read.
-
-These check the shared helper rather than each script: the wiring is pinned
-separately in :mod:`tests.test_fit_consumer_coverage`, which is the test that
-notices a *new* trace-reading script arriving unvalidated.
+Consumers compare the registered definition, raw inputs and exact prepared
+frame. Script wiring is checked separately in test_fit_consumer_coverage.
 """
 
 from __future__ import annotations
@@ -98,7 +91,7 @@ def test_a_missing_fit_directory_is_an_error_not_a_crash(tmp_path, monkeypatch):
 
 
 def test_the_frame_hash_is_computed_once_per_model(monkeypatch):
-    """Eighteen models must not mean eighteen frame rebuilds."""
+    """Cache repeated hash requests for the same model."""
     calls: list[str] = []
 
     def _count(key, definition):
@@ -165,18 +158,10 @@ def test_each_recorded_exemption_carries_a_reason():
 
 
 def test_the_recovery_exemption_describes_what_the_harness_actually_does():
-    """The reason has to be checked, not asserted.
+    """Check that recovery validates a stored truth fit inside its own harness.
 
-    The first version of this entry said a stale truth draw is still a valid
-    parameter vector and that "staleness does not make the truth worse" -- which
-    argues *against* the check `truth_from_trace` makes, and would read as a
-    licence to remove it. It survived a review because nothing compared the
-    reason with the code.
-
-    So compare them. The claim is that the model-of-record trace is validated
-    inside the recovery harness, and against the same three things this module
-    checks: the registered definition, the raw-data fingerprint and the exact
-    prepared-frame hash.
+    It must compare the definition, raw-data hash and prepared-frame hash, and
+    carry the simulated definition into subsequent loading stages.
     """
     import inspect
 

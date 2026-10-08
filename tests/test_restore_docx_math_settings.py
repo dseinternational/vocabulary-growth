@@ -1,15 +1,10 @@
 # Copyright (c) 2026 Down Syndrome Education International and contributors
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""Tests for ``scripts/restore_docx_math_settings.py`` and the DOCX template's fonts.
+"""Check reference fonts and restoration of DOCX equation settings.
 
-Pandoc copies only a fixed list of settings from the reference document, and
-the math properties are not on it, so a rendered DOCX would set its equations
-in Cambria Math. The post-render script copies the template's ``m:mathPr`` back.
-These tests pin that the template names Noto Sans, Noto Sans Mono and Noto Sans
-Math, and that
-the script inserts the properties in schema order, replaces rather than
-duplicates them, and leaves every other part of the package untouched.
+Restore the template's math properties in schema order, replace rather than
+duplicate them, and leave other package parts unchanged.
 """
 
 import importlib.util

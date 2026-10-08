@@ -290,19 +290,11 @@ def test_require_valid_counts_delegates_the_non_finite_message():
 
 
 def test_the_months_and_standardised_soft_clamps_are_exactly_equal():
-    """One constant, two implementations, and they must not merely be close.
+    """Check the same soft clamp in months and standardised age.
 
-    `gp_utils._soft_clamp_z` works in standardised age for the graph;
-    `vocab_growth.report_illustrations` works in months for the methods chapter's
-    figures, which `sync_report_figures.py` does not validate. Because
-    CLAMP_SOFTNESS is expressed per unit of anchor span, the standard deviation
-    cancels: `beta_z * (hi_z - z)` reduces to `CLAMP_SOFTNESS * (hi - age) / span`.
-    So the two agree exactly in algebra, and the assertion below is a tolerance
-    tight enough that no changed constant can hide inside it: 1e-9 absolute with
-    `rtol=0`, against clamp arguments of order 1. Not literal float identity --
-    the two expressions reach the same value by different operation orders, so the
-    last bit is not guaranteed to match and asserting it would make this test
-    brittle rather than strict.
+    Standardisation cancels from ``CLAMP_SOFTNESS * (hi - age) / span``.
+    The two operation orders can differ in their last floating-point bits,
+    so the check uses a small absolute tolerance rather than exact identity.
     """
     import numpy as np
 
