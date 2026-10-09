@@ -118,28 +118,9 @@ def needs_full_checks(paths: list[str], before, after) -> bool:
                     json.loads(after(path))
                 ):
                     return True
-            elif path == "package-lock.json":
-                for read in (before, after):
-                    project = json.loads(read("package.json"))
-                    _node_project(project)
-                    locked = json.loads(read(path))
-                    root = locked["packages"][""]
-                    if root.get("devDependencies", {}) != project.get(
-                        "devDependencies", {}
-                    ):
-                        return True
-                old, new = json.loads(before(path)), json.loads(after(path))
-                old_root, new_root = (
-                    copy.deepcopy(old["packages"][""]),
-                    copy.deepcopy(new["packages"][""]),
-                )
-                old_root.pop("devDependencies", None)
-                new_root.pop("devDependencies", None)
-                if old_root != new_root or {
-                    k: v for k, v in old.items() if k != "packages"
-                } != {k: v for k, v in new.items() if k != "packages"}:
-                    return True
             else:
+                # pnpm lock and workspace settings need a YAML parser to verify
+                # their contents. Keep this job stdlib-only and run full checks.
                 return True
     except (
         OSError,

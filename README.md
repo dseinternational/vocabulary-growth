@@ -57,7 +57,7 @@ uv run python scripts/fit_model.py vg01 --config dev
 
 Quarto renders reports. Graphviz supplies model diagrams. The report book's PDF format also needs LaTeX and its specified fonts. For a reporting-quality run, follow the [full-refit runbook](docs/runbooks/full-refit.md).
 
-For code and documentation checks, see [AGENTS.md](AGENTS.md). Node dependencies are installed with `npm ci`.
+For code and documentation checks, see [AGENTS.md](AGENTS.md). Install the documentation tools with `pnpm install --frozen-lockfile`; the [environment guide](docs/runbooks/environment-locks.md#install-the-documentation-tools) covers pnpm setup.
 
 ## Contributing
 
