@@ -77,7 +77,7 @@ if [[ -d $OUTPUT_ROOT ]]; then
 fi
 
 echo "== tools"
-for tool in git uv pwsh quarto dot node npm az fc-list; do
+for tool in git uv pwsh quarto dot node pnpm az fc-list; do
     command -v "$tool" >/dev/null && ok "$tool" || fail "$tool is not on PATH"
 done
 for font in "Noto Sans" "Noto Sans Mono" "Noto Sans Math"; do
@@ -98,7 +98,7 @@ git -C "$CHECKOUT" checkout --quiet --detach "$TAG" || { fail "tag $TAG not foun
 cd "$CHECKOUT" || exit 1
 uv sync --locked --quiet && ok "locked environment" || fail "uv sync --locked failed"
 uv run --locked python scripts/prepare_data.py >/dev/null && ok "data prepared" || fail "prepare_data.py failed"
-npm ci --silent >/dev/null 2>&1 && ok "node tools" || warn "npm ci failed; only the documentation checks need it"
+pnpm install --frozen-lockfile --silent >/dev/null 2>&1 && ok "node tools" || warn "pnpm install --frozen-lockfile failed; only the documentation checks need it"
 # matplotlib caches its font list; a cache built before the Noto fonts were
 # installed keeps substituting until it is deleted.
 cache=$(uv run --locked python -c 'import matplotlib; print(matplotlib.get_cachedir())' 2>/dev/null)

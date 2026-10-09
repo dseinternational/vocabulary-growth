@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, and from Claude Code/Opus 5.5 on 2026-09-27 and 2026-09-28.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-09, and from Claude Code/Opus 5.5 on 2026-09-27 and 2026-09-28.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -28,11 +28,23 @@ Five things are not Python packages and so are not in the lock:
 - **Graphviz** (`brew install graphviz`, `apt install graphviz`, `winget install Graphviz.Graphviz`). The optional model-diagram figure uses `dot`; if it is absent, the fit skips that figure with a warning.
 - **[Quarto](https://quarto.org/docs/get-started/)** renders reports. Quarto resolves its Jupyter kernel from `PATH`, independently of the interpreter that ran the fit; see [Full refit](full-refit.md) for what that means in practice.
 - **LaTeX** (`quarto install tinytex`) is needed for the report book's `pdf` format. Use a XeLaTeX-capable distribution. The `html` format loads the three fonts from Google Fonts and does not need LaTeX. The `docx` format names them, so readers need them installed to see them. A Quarto post-render script, `scripts/restore_docx_math_settings.py`, restores the template's math font, which Pandoc drops.
-- **Node.js** runs CSpell and Prettier. Use Node.js 24 and install the locked project tools with `npm ci`.
+- **Node.js** runs CSpell and Prettier. Use Node.js 24 and install the locked project tools with `pnpm install --frozen-lockfile`. See the pnpm setup below.
 
 Quarto bundles Pandoc, Dart Sass, Deno and Typst. Run `quarto check` to inspect the installed versions and the resolved LaTeX, Python and Jupyter paths. Confirm that rendering uses this project's Python environment.
 
 The lock intentionally covers CPU installations. GPU drivers and CUDA are host-specific and remain an opt-in overlay rather than part of the reporting baseline.
+
+## Install the documentation tools
+
+Install [pnpm](https://pnpm.io/installation) alongside Node.js 24. `package.json` pins the pnpm version in `packageManager`; pnpm uses that version in the project, and CI reads the same pin. `pnpm-lock.yaml` records the exact documentation-tool versions and package hashes.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run spellcheck
+pnpm run format:check
+```
+
+`--frozen-lockfile` fails if the lock does not match `package.json`. After an intentional documentation-tool update, run `pnpm install` and commit `package.json` and `pnpm-lock.yaml` together. `pnpm run format` applies Markdown formatting.
 
 ## Refresh the lock after an intentional dependency change
 
@@ -51,6 +63,6 @@ The lock reconstructs a known software environment prospectively. Every complete
 
 ## CI work selection and compilation reuse
 
-CI always runs lint, type and documentation checks. `scripts/ci_changes.py` compares parsed dependency files before skipping model tests and the smoke fit for Ruff, mypy or documentation-tool updates. It retains dependencies shared with the runtime or tests and treats unknown or unreadable changes as requiring the full checks. Changes to agent instructions and model documentation also run the full checks.
+CI always runs lint, type and documentation checks. `scripts/ci_changes.py` compares parsed dependency files before skipping model tests and the smoke fit for Ruff, mypy or changes limited to documentation-tool versions in `package.json`. It retains dependencies shared with the runtime or tests and treats unknown or unreadable changes as requiring the full checks. Changes to `pnpm-lock.yaml`, pnpm workspace settings, agent instructions and model documentation also run the full checks. The classifier uses only the Python standard library, so it does not parse pnpm's YAML files.
 
 The compiled-cache key records the locked environment apart from dependencies used exclusively by Ruff and mypy, the Python interpreter, runner image, compiler and compilation settings. A source digest lets subsequent runs save newly compiled functions. Restore prefixes include the complete environment digest, so a numerical-library change cannot restore an older environment's cache. A changed environment digest starts a new compiled cache.

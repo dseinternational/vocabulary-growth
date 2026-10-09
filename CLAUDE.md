@@ -26,7 +26,7 @@ Use the [locked environment](https://github.com/dseinternational/vocabulary-grow
 ```bash
 uv sync --locked
 uv run python scripts/prepare_data.py
-npm ci
+pnpm install --frozen-lockfile
 ```
 
 `uv` supplies Python from `.python-version` and packages from `uv.lock`. Supported platforms are Linux x86_64 and aarch64, Apple Silicon macOS and native Windows AMD64. Set `PYTHONUTF8=1` on Windows. Refresh the lock only for an intentional dependency change. Scientific dependencies come from `dse-research-utils`; do not duplicate their version floors here. The commented `[tool.uv.sources]` override supports a sibling checkout. The lock covers CPU installations; GPU support is host-specific.
@@ -40,18 +40,18 @@ uv run ruff check src/ scripts/ tests/
 uv run mypy
 uv run pytest
 uv run pytest -m "slow or not slow"
-npm run spellcheck
-npm run format:check
+pnpm run spellcheck
+pnpm run format:check
 python3 tests/test_notes_index.py
 ```
 
 Bare `pytest` selects `not slow`. Run both sets before pushing engine changes. For parallel tests, use `-n auto --dist loadfile -m "not slow"` and `-n auto --dist loadgroup -m slow`. Slow tests sharing an expensive fixture need an `xdist_group` mark. `mypy` checks the four declaration modules in `pyproject.toml`, not the PyTensor graph code.
 
-CI runs fast and slow jobs separately. Verified Ruff, mypy and documentation-tool dependency updates can skip model tests and the smoke fit. Shared dependencies, unknown changes, agent instructions and `docs/models/` changes run full CI checks.
+CI runs fast and slow jobs separately. Updates limited to Ruff, mypy or documentation-tool versions in `package.json` can skip model tests and the smoke fit. Changes to the pnpm lock, workspace settings, shared dependencies, agent instructions or `docs/models/` run full CI checks, as do unknown changes.
 
 Prepare data before tests in a fresh checkout. The database and merged CSV are generated files. Test fixtures use Matplotlib's Agg backend and suppress routine reporting figures; mark a test `emits_reporting_artefacts` when it checks those outputs.
 
-Use British English and one line per prose paragraph, with blank lines between paragraphs. `npm run format` applies Markdown formatting; `.cspell.config.yaml` defines spelling policy.
+Use British English and one line per prose paragraph, with blank lines between paragraphs. `pnpm run format` applies Markdown formatting; `.cspell.config.yaml` defines spelling policy.
 
 ## Data rules
 

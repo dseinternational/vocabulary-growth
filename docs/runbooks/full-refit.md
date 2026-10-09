@@ -290,7 +290,7 @@ git worktree add ..\vocabulary-growth-fits fits/2026-10-01
 cd ..\vocabulary-growth-fits
 uv sync --locked
 uv run python scripts/prepare_data.py
-npm ci
+pnpm install --frozen-lockfile
 ```
 
 The worktree's own `.venv` holds an editable install of the pinned tree, so the signature the fits record, and the one later validation compares against, are the pinned tree's.

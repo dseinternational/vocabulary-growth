@@ -54,7 +54,14 @@ class ChangeClassificationTests(unittest.TestCase):
         )
 
     def test_unknown_paths_and_sensitive_documentation_run_everything(self):
-        for path in ("AGENTS.md", "docs/models/VG01.qmd", "new-file.xyz", "src/new.py"):
+        for path in (
+            "AGENTS.md",
+            "docs/models/VG01.qmd",
+            "pnpm-lock.yaml",
+            "pnpm-workspace.yaml",
+            "new-file.xyz",
+            "src/new.py",
+        ):
             self.assertTrue(ci.needs_full_checks([path], lambda _: "", lambda _: ""))
         self.assertFalse(
             ci.needs_full_checks(
