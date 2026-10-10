@@ -61,6 +61,10 @@ bash bootstrap.sh fits/2026-10-02 --output-root /data/vocabulary-growth --with-t
 
 It checks the architecture, cores, memory, swap, lingering, the output root's filesystem and free space, the tools and the fonts. It then clones the repository detached at the tag, installs the locked environment, prepares the data, clears matplotlib's font cache and runs the fast tests. Finally it writes `~/.config/vocabulary-growth/vm.env`. That file lives outside the clone deliberately: an untracked file in the clone would mark every fit dirty and unpublishable. Fix whatever it reports and rerun it until it ends with `Ready`.
 
+### Seeding fits made elsewhere
+
+Fits made from the same tag on another host, from a clean checkout with the locked environment, can be copied into the output root before launch. Copy each model's whole directory under `models/`. Then confirm them from the clone with `uv run python scripts/check_fit.py <models> --config rep --purpose resume`. The signature records source hashes and package versions, not the platform, and resume validation reads every file relative to the fit directory. A seeded fit that validates is skipped by its refit step, and one that does not is refitted. The 2026-10-10 cycle seeds VG15, VG20, VG24 and VG25 from the Apple Silicon workstation; see its [run record](../../notes/202610101215-refit-cycle-2026-10-10.md).
+
 ## 4. Plan and launch
 
 ```bash

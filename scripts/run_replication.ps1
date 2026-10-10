@@ -302,7 +302,9 @@ function Get-AvailableMemoryGB {
             $stat  = & vm_stat
             $free  = (($stat | Where-Object { $_ -match '^Pages free:' })     -replace '\D', '')
             $inact = (($stat | Where-Object { $_ -match '^Pages inactive:' }) -replace '\D', '')
-            if ($free) { return [math]::Round(((([double]$free + [double]$inact) * 4096) / 1GB), 1) }
+            # Apple Silicon pages are 16 KiB, not 4 KiB; vm_stat's header states the size.
+            $page  = if ($stat[0] -match 'page size of (\d+) bytes') { [double]$Matches[1] } else { 4096 }
+            if ($free) { return [math]::Round(((([double]$free + [double]$inact) * $page) / 1GB), 1) }
         }
     }
     catch { }
