@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-09, and from Claude Code/Opus 5.5 on 2026-09-27 and 2026-09-28.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-09, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -33,6 +33,24 @@ Five things are not Python packages and so are not in the lock:
 Quarto bundles Pandoc, Dart Sass, Deno and Typst. Run `quarto check` to inspect the installed versions and the resolved LaTeX, Python and Jupyter paths. Confirm that rendering uses this project's Python environment.
 
 The lock intentionally covers CPU installations. GPU drivers and CUDA are host-specific and remain an opt-in overlay rather than part of the reporting baseline.
+
+### PyTensor's linker flag on macOS 27
+
+PyTensor 3.3.3 adds `-ld64` to every C compilation on macOS 15 and later, to select Apple's classic linker. The Xcode tools on macOS 27 (Apple clang 21, `ld-27037`) no longer recognise it and read it as a request for a library named `d64`, so the first compiled operation fails with `ld: library 'd64' not found` and the fit is moved to `failed/`. This is [pytensor#2268](https://github.com/pymc-devs/pytensor/issues/2268), with a proposed fix in [pytensor#2432](https://github.com/pymc-devs/pytensor/pull/2432). Until a fixed release is locked, point PyTensor at a compiler wrapper outside the checkout that drops the flag. The wrapper's name must contain `clang++`, because PyTensor checks it:
+
+```bash
+mkdir -p ~/.local/share/pytensor-cxx
+cat > ~/.local/share/pytensor-cxx/clang++ <<'EOF'
+#!/bin/bash
+args=()
+for a in "$@"; do [[ $a == -ld64 ]] || args+=("$a"); done
+exec /usr/bin/clang++ "${args[@]}"
+EOF
+chmod +x ~/.local/share/pytensor-cxx/clang++
+export PYTENSOR_FLAGS=cxx=$HOME/.local/share/pytensor-cxx/clang++
+```
+
+The wrapper changes the linker, not the compiled code, and leaves the executable-code signature unchanged. `PYTENSOR_FLAGS` is part of the numerical environment that the report and comparison checkpoints record, so outputs made with and without it are not reused across that difference. Keep the wrapper and the variable outside the repository: an untracked file in the checkout marks fits dirty.
 
 ## Install the documentation tools
 
