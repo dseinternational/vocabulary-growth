@@ -22,7 +22,7 @@ dependencies = [
 # Separate lint and typecheck groups let CI install those tools without the
 # scientific stack. Development groups do not enter wheel dependency metadata.
 lint = [
-  "ruff>=0.16.10"
+  "ruff>=0.17.0"
 ]
 typecheck = [
   "mypy>=2.4.0"
