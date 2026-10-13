@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7.1.0
         with:
-          node-version: "24"
+          node-version: "26"
           # cspell ships its dictionaries as packages; without this the whole
           # tree is re-downloaded on every run.
           cache: "pnpm"

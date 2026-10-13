@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17 and 2026-10-09, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09 and 2026-10-13, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -28,7 +28,7 @@ Five things are not Python packages and so are not in the lock:
 - **Graphviz** (`brew install graphviz`, `apt install graphviz`, `winget install Graphviz.Graphviz`). The optional model-diagram figure uses `dot`; if it is absent, the fit skips that figure with a warning.
 - **[Quarto](https://quarto.org/docs/get-started/)** renders reports. Quarto resolves its Jupyter kernel from `PATH`, independently of the interpreter that ran the fit; see [Full refit](full-refit.md) for what that means in practice.
 - **LaTeX** (`quarto install tinytex`) is needed for the report book's `pdf` format. Use a XeLaTeX-capable distribution. The `html` format loads the three fonts from Google Fonts and does not need LaTeX. The `docx` format names them, so readers need them installed to see them. A Quarto post-render script, `scripts/restore_docx_math_settings.py`, restores the template's math font, which Pandoc drops.
-- **Node.js** runs CSpell and Prettier. Use Node.js 24 and install the locked project tools with `pnpm install --frozen-lockfile`. See the pnpm setup below.
+- **Node.js** runs CSpell and Prettier. Use Node.js 26 and install the locked project tools with `pnpm install --frozen-lockfile`. See the pnpm setup below.
 
 Quarto bundles Pandoc, Dart Sass, Deno and Typst. Run `quarto check` to inspect the installed versions and the resolved LaTeX, Python and Jupyter paths. Confirm that rendering uses this project's Python environment.
 
@@ -54,7 +54,7 @@ The wrapper changes the linker, not the compiled code, and leaves the executable
 
 ## Install the documentation tools
 
-Install [pnpm](https://pnpm.io/installation) alongside Node.js 24. `package.json` pins the pnpm version in `packageManager`; pnpm uses that version in the project, and CI reads the same pin. `pnpm-lock.yaml` records the exact documentation-tool versions and package hashes.
+Install [pnpm](https://pnpm.io/installation) alongside Node.js 26. `package.json` pins the pnpm version in `packageManager`; pnpm uses that version in the project, and CI reads the same pin. `pnpm-lock.yaml` records the exact documentation-tool versions and package hashes.
 
 ```bash
 pnpm install --frozen-lockfile
