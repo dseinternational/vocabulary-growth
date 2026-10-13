@@ -31,7 +31,7 @@ pnpm install --frozen-lockfile
 
 `uv` supplies Python from `.python-version` and packages from `uv.lock`. Supported platforms are Linux x86_64 and aarch64, Apple Silicon macOS and native Windows AMD64. Set `PYTHONUTF8=1` on Windows. Refresh the lock only for an intentional dependency change. Scientific dependencies come from `dse-research-utils`; do not duplicate their version floors here. The commented `[tool.uv.sources]` override supports a sibling checkout. The lock covers CPU installations; GPU support is host-specific.
 
-Figures, graphs and reports use Noto Sans, Noto Sans Math and, for report code, Noto Sans Mono. Install the fonts and delete `fontlist-*.json` from `matplotlib.get_cachedir()` before rendering. Missing fonts can cause silent substitutions. Quarto renders reports; PDF needs XeLaTeX. HTML equations use MathML. Graphviz `dot` supplies model diagrams. A missing `dot` warns and skips the figure. Node.js 24 supplies documentation tools. The environment runbook gives installation details; `quarto check` reports the rendering setup.
+Figures, graphs and reports use Noto Sans, Noto Sans Math and, for report code, Noto Sans Mono. Install the fonts and delete `fontlist-*.json` from `matplotlib.get_cachedir()` before rendering. Missing fonts can cause silent substitutions. Quarto renders reports; PDF needs XeLaTeX. HTML equations use MathML. Graphviz `dot` supplies model diagrams. A missing `dot` warns and skips the figure. Node.js 26 supplies documentation tools. The environment runbook gives installation details; `quarto check` reports the rendering setup.
 
 Run checks appropriate to the change:
 
