@@ -99,9 +99,7 @@ The source assessments below were recorded in the prior review and corrected on 
 
 ### Independence of candidate sources
 
-Not every published cohort is independent of the fitted data. Where a prior is
-anchored on a study whose participants are already in `vocab_data_merged.csv`,
-it is regularisation, not independent prior evidence.
+Not every published cohort is independent of the fitted data. Where a prior is anchored on a study whose participants are already in `vocab_data_merged.csv`, it is regularisation, not independent prior evidence.
 
 | Source                                                                           | Role for priors                                                                                                                   | Independent of training data?                                                                                                                                                                                                                                              |
 | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

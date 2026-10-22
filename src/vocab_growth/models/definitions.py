@@ -2082,50 +2082,21 @@ class _DSJointReporting(TypedDict):
 
 
 _DS_JOINT_REPORTING: _DSJointReporting = {
-    # Level the mean off above the 84 mo high anchor rather than extrapolating the
-    # line to the top of the 115 mo GP domain. Without it the fitted q mean alone
-    # reaches 0.993 at 115 mo (P(mean > 0.99) = 0.90 across the posterior) against a
-    # realised 0.842, so the GP spends -3.3 logits correcting the mean's asymptote
-    # while sitting idle (+0.08) at 48 mo where the data are; understood shows the
-    # same defect about 3x milder. One-sided, and the corner is rounded over about
-    # +/-4 mo so the curve stays monotone -- see gp_utils.trend_and_gp.
+    # Smoothly level the spoken-share trend above its high anchor; leave the
+    # comprehension trend unclamped. The GP can still vary, so this does not
+    # force the full ratio or spoken counts to be flat or monotone. See
+    # notes/202608141200-clamp-q-only.md and gp_utils.trend_and_gp.
     #
-    # Comprehension reporting stops at 72 mo. Lowered from 84 on 2026-08-22 by the
-    # study owner. This does not overturn the 2026-08-13 raise on its own terms: it
-    # asked whether the 72-84 band is observed rather than extrapolated, and the
-    # answer was and remains yes -- 24 understood rows from 18 children across five
-    # studies (ie_01, uk_01, uk_06, uk_07, us_02; it was 25 rows from 20 children
-    # when the decision was taken, and the uk_01 correction of 2026-08-31 removed
-    # one row, which changes nothing about the argument). It applies a second and stricter
-    # test that the raise did not: is the number in that band fixed by the data, or
-    # by the model? It is not fixed by the data. VG19 and VG20 differ only in the
-    # child-effect structure and are indistinguishable out of sample (k-fold LOSO
-    # +0.93 SE), yet they put q at 0.75 against 0.85 at 72 mo and 0.83 against 0.94
-    # at 84 -- gaps of 0.89 and 0.93 of VG20's own 89% ETI width. Two dozen
-    # comprehension
-    # observations cannot separate the two structures, so above 72 the report would
-    # quote a modelling choice as a measurement. Below 60 the same comparison never
-    # exceeds 0.15 interval widths, so the cap lands where the data stop determining
-    # the answer rather than where they stop existing.
+    # The study owner set the comprehension and comprehension-conditioned
+    # reporting cap to 72 months on 2026-08-22. The dated model comparison found
+    # sensitivity to child-effect structure in the sparse older range; similar
+    # predictive scores did not establish equivalence. The September recheck
+    # retained the cap. See notes/202608221200-reporting-source-by-quantity.md
+    # and notes/202609091700-comprehension-cap-check-rerun.md.
     #
-    # The binding quantity is now q, not understood: the three models agree on the
-    # understood curve to within 0.15 interval widths at every age to 84, so
-    # understood alone would still support 84. It is trimmed with q because both
-    # ride this one field and q is conditioned on understood -- see
-    # reporting_ages.ReportedQuantity.RATIO_OF_UNDERSTOOD. Giving q its own field
-    # would invalidate every fit of every definition class that declares this one,
-    # which today is all twenty registered models, to express a cap that this field
-    # already expresses correctly, if conservatively, for understood.
-    #
-    # Raise it again when the 72-84 band can *distinguish* the child structures, not
-    # merely when it is populated -- so on new older-child comprehension data, and
-    # by rerunning the comparison rather than recounting rows.
-    #
-    # Spoken keeps the full grid: 1428 rows, 95th percentile 81 mo, 59 rows at or
-    # above 84, and the three models agree on its subject-marginal curve to within
-    # 0.03 interval widths at every age. Reporting only -- it cannot move the
-    # posterior. See notes/202608221200-reporting-source-by-quantity.md and
-    # notes/202608042030-q-mean-extrapolation.md.
+    # reporting_ages resolves the distinct caps for spoken counts, signed counts
+    # and shares. A reporting cap does not change the likelihood or extend data
+    # support; reassess it with compatible fits and older-child evidence.
     "report_max_age_understood": 72,
     "clamp_mean_above_hi_anchor": CLAMP_Q_ONLY,
 }
@@ -2947,7 +2918,7 @@ VG20 = _as_definition_subclass(
     ),
     # eta=2 favours correlations near zero. Dated fitted child-deviate
     # correlations motivated the design but are not independent validation.
-    # See notes/202608151120-vg16-crosslag-quantified.md.
+    # See notes/202608190900-vg20-promotion.md for the promotion and its caveats.
     subject_re_correlation_eta=2.0,
     # Sex as a covariate for the by-sex predictions (#324); see the constant.
     sex_effect_sigma=_SEX_EFFECT_SIGMA,

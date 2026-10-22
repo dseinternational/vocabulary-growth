@@ -3,9 +3,11 @@
 
 """Shared definitions for standalone model reports and the technical report.
 
-``scripts/build_glossary.py`` generates the glossary chapter from these entries.
-``render_glossary`` prints the subset needed by each model report. Definitions
-assume familiarity with probability and calculus, but not Bayesian modelling.
+``render_glossary`` prints the subset needed by each model report. The technical
+report maintains its glossary in ``docs/report/glossary.qmd``; review both when
+changing a shared term. Definitions introduce the terminology used in reports.
+
+Revised with assistance from OpenAI Codex/GPT-6.
 """
 
 from __future__ import annotations
@@ -19,31 +21,31 @@ GLOSSARY: dict[str, str] = {
         "observed data to obtain a posterior distribution."
     ),
     "Prior distribution": (
-        "What the model assumes about a parameter before seeing the data. Priors "
-        "here are mostly weak -- wide enough to let the data decide -- but a few "
-        "are deliberately informative, and those are labelled where they are used."
+        "A distribution for parameter values specified before the likelihood "
+        "updates them. Some project priors use external evidence; others were "
+        "calibrated on the fitted data. That reuse needs disclosure and "
+        "sensitivity checks."
     ),
     "Posterior distribution": (
-        "What the model believes about a parameter after seeing the data. Every "
-        "number in these reports is a summary of a posterior: a median, and an "
-        "interval around it."
+        "The distribution for parameters or derived quantities after combining "
+        "the prior and likelihood for the observed data. Reports summarise it "
+        "with estimates and intervals, conditional on the model assumptions."
     ),
     "Likelihood": (
         "The probability the model assigns to the observed data for a given set "
         "of parameter values."
     ),
     "Estimand": (
-        "The quantity a number is meant to estimate. Naming it matters here "
-        "because the same figure can show a population average or a prediction "
-        "for one child, and the two differ by a factor of ten in width."
+        "The quantity the analysis aims to estimate. A reference curve, an "
+        "average over children and a prediction for one child are different "
+        "targets, with different sources of variation."
     ),
     # -- How vocabulary is modelled --
     "Reference inventory": (
-        "The common 810-word scale every vocabulary count is expressed against. "
-        "Studies used different checklists, so counts are harmonised onto this "
-        "scale to be comparable. Some children completed the full DSE checklists; "
-        "other studies used shorter forms whose counts are treated on the same "
-        "reference scale."
+        "The common denominator of 810 items against which raw counts are "
+        "modelled. Counts from shorter forms are not multiplied by a checklist "
+        "length ratio. This approximation does not make the lists equivalent "
+        "or measure a child's entire vocabulary."
     ),
     "Logit": (
         "The transformation $\\operatorname{logit}(p) = \\log\\!\\big(p/(1-p)\\big)$, "
@@ -68,28 +70,29 @@ GLOSSARY: dict[str, str] = {
         "The Beta-Binomial parameter controlling extra variation around the "
         "mean. **Larger $\\kappa$ means *less* variability** (approaching an "
         "ordinary Binomial); smaller $\\kappa$ allows more. The direction is "
-        "counter-intuitive, so read the $\\kappa$ figures as *falling $\\kappa$ = "
-        "same-age administrations becoming more spread out*. It is marginal "
-        "count dispersion, not a between-child quantity: in models without "
-        "child or study effects it mixes between-child, between-source and "
-        "repeat-visit variation, and in models with subject random intercepts "
-        "it is an observation-level residual — in neither case a measure of "
-        "how much children differ."
+        "counter-intuitive: compare concentrations at a fixed mean and "
+        "denominator. Changes in either can change count spread too. With "
+        "child and study effects, concentration describes residual assessment "
+        "variation. Without them it can also absorb persistent differences. "
+        "Concentration alone does not measure total variation between children."
     ),
     "Overdispersion and variance inflation": (
         "How much more variable the observed counts are than an ordinary "
         "Binomial would predict. The variance inflation factor (VIF) reported "
-        "alongside $\\kappa$ states this as a multiple: VIF 50 means the observed "
-        "spread is fifty times the Binomial variance at the same mean."
+        "alongside $\\kappa$ states this as a multiple: VIF 50 means the model's "
+        "conditional count variance is fifty times the Binomial variance at the "
+        "same mean and denominator. It does not include additional variation "
+        "from child or study effects."
     ),
     "Conditional probability": (
-        "The probability of one outcome given another. In the joint models, "
-        "$q(a)=P(\\text{spoken}\\mid\\text{understood},a)$ is the fraction of "
-        "understood words expected also to be spoken at age $a$."
+        "The probability of an outcome given specified information. In the "
+        "joint count models, $q$ is the expected spoken share of understood "
+        "words at the stated age and model profile. It does not identify the "
+        "probability of producing a particular word."
     ),
     "Production ratio ($q$)": (
-        "The fraction of the words a child understands that the same child also "
-        "says, at a given age. Spoken vocabulary is modelled as understood "
+        "The expected fraction of understood words that a child also says, "
+        "at a specified age and model profile. Spoken vocabulary is modelled as understood "
         "vocabulary times this ratio, so $q$ is what separates *knowing more "
         "words* from *saying more of the words you know*."
     ),
@@ -97,26 +100,26 @@ GLOSSARY: dict[str, str] = {
         "A reference age at which a prior is placed on an expected vocabulary "
         "proportion. Two anchors define the broad linear trend on the logit "
         "scale in a more interpretable way than an intercept at age zero. The "
-        "anchors parameterise the linear component: unless the model pins its "
-        "GP at a reference age, the fitted trajectory at an anchor age is the "
-        "anchor plus the GP's deviation there."
+        "anchors parameterise the trend component. A GP adds departures on the "
+        "logit scale, even at a trend anchor unless the GP is pinned there. "
+        "A smooth mean clamp can also change the trend at the upper anchor."
     ),
     # -- The flexible part of the trend --
     "Gaussian process (GP)": (
-        "A prior over smooth functions, letting the trend bend away from a "
-        "straight line by as much as the data support, without the analyst "
-        "choosing the shape in advance."
+        "A distribution over functions. Here it allows smooth departures from "
+        "the age trend. The kernel, amplitude, length scale and constraints "
+        "specify which departures the prior permits."
     ),
     "HSGP (Hilbert-space Gaussian process)": (
-        "A finite basis-function approximation to a Gaussian process. It gives "
-        "nearly the same fit at a small fraction of the computational cost, "
-        "which is what makes these models feasible to sample."
+        "A finite basis-function approximation to a Gaussian process. It reduces "
+        "computation; its accuracy depends on the basis size, domain and "
+        "length-scale range."
     ),
     "GP length-scale ($\\ell$)": (
-        "How far apart in age two points must be before the GP lets them move "
-        "independently. Short length-scales permit wiggly trends; long ones "
-        "force near-linearity. It is given a prior over a stated window in "
-        "months, so the fitted value should be read against that window."
+        "The age scale over which GP departures remain associated. Shorter "
+        "length scales permit faster changes; longer ones favour smoother "
+        "changes. The stored unit parameter is mapped through the model's "
+        "age-domain geometry and is not itself a length in months."
     ),
     "GP amplitude ($\\eta$)": (
         "How far the GP may depart from the anchor-defined straight line, on the "
@@ -131,10 +134,10 @@ GLOSSARY: dict[str, str] = {
         "about development."
     ),
     "Mean clamp": (
-        "Holding a fitted mean level above the highest age anchor rather than "
-        "letting the trend continue to extrapolate. Applied where the data run "
-        "out but the reporting grid does not, so that a curve does not imply "
-        "evidence that no observation supports."
+        "Smoothly levelling a trend beyond its upper age anchor. Registered "
+        "Down syndrome joint defaults apply it to the spoken-share trend alone; "
+        "sensitivity variants can clamp other means. The GP can still vary. "
+        "The rule does not establish support for older-age predictions."
     ),
     # -- Hierarchy --
     "Random intercept": (
@@ -143,11 +146,10 @@ GLOSSARY: dict[str, str] = {
         "below the population curve."
     ),
     "Partial pooling": (
-        "The compromise a hierarchical model strikes between treating every "
-        "group separately and ignoring groups entirely. Small groups are pulled "
-        "towards the population mean; large ones are left closer to their own "
-        "data. This is why a study contributing few children moves the fitted "
-        "curve less than its raw average would."
+        "Group estimates share a population distribution. Groups with less "
+        "information generally borrow more from that distribution. The amount "
+        "depends on data precision and the estimated group variation, not "
+        "group size alone. Pooling does not establish measurement equivalence."
     ),
     "Between-child heterogeneity ($\\tau$)": (
         "The standard deviation, across children of the same age, of a child's "
@@ -158,22 +160,23 @@ GLOSSARY: dict[str, str] = {
         "between-child differences are absorbed by $\\tau$ and $\\kappa$ "
         "describes what remains. As an odds multiplier, a $\\tau$ of 0.8 means a "
         "child one standard deviation above the centre has about $e^{0.8} "
-        "\\approx 2.2$ times the odds of a child at the centre. That centre is "
-        "the *median* child -- the effects are symmetric around zero on the "
-        "logit scale and the inverse-logit is monotone -- not the arithmetic "
-        "average of children's counts."
+        "\\approx 2.2$ times the odds for that modelled proportion. Zero effects "
+        "give the median of a single inverse-logit proportion with symmetric "
+        "offsets; a product of proportions need not have its median there. "
+        "Models with child slopes can imply an age-dependent scale."
     ),
     "Non-centred parameterisation": (
         "Writing a random effect as $\\delta = \\tau z$ with $z \\sim "
         "\\mathcal{N}(0,1)$ rather than drawing $\\delta$ directly from "
         "$\\mathcal{N}(0,\\tau)$. The two describe the same distribution, but the "
-        "first is far easier for the sampler to explore when $\\tau$ is small."
+        "first can improve exploration when group effects are weakly informed. "
+        "Its benefit depends on the likelihood and must be checked."
     ),
     "Sum-to-zero study effects": (
-        "A constraint making the study offsets add to zero, so that the "
-        "population curve is the *average study* rather than an arbitrary "
-        "baseline. Without it the overall level and the study offsets are not "
-        "separately identified."
+        "A constraint making the study offsets add to zero over a stated set "
+        "of studies. Zero study effects define their centre on the logit scale, "
+        "not generally the average of their expected counts. This chooses a "
+        "reference; it does not give every study equal influence on the fit."
     ),
     "Population-level and subject-marginal": (
         "Two different predictions. A **population-level** curve sets all random "
@@ -217,8 +220,9 @@ GLOSSARY: dict[str, str] = {
         "missing something."
     ),
     "Prior predictive check": (
-        "The same idea run *before* the data: simulating from the priors alone "
-        "to confirm they permit plausible vocabularies and exclude absurd ones."
+        "Simulating from the combined priors before fitting to inspect whether "
+        "they imply plausible counts and shapes. Agreement with data used to "
+        "calibrate those priors is not independent validation."
     ),
     "PMF and CDF": (
         "The probability mass function gives the probability of each exact word "
@@ -228,25 +232,28 @@ GLOSSARY: dict[str, str] = {
         "age?*"
     ),
     "PIT (probability integral transform)": (
-        "Where each observation falls within its own predictive distribution. If "
-        "the model is well calibrated these values are spread uniformly between "
-        "0 and 1; clustering in the middle means the predictions are wider than "
-        "the data warrant."
+        "Where each observation falls within its predictive distribution. "
+        "For discrete counts, randomisation within the count's probability "
+        "mass permits a uniform reference under calibration. Systematic "
+        "departures can reveal bias or inappropriate predictive spread."
     ),
     "LOO and ELPD": (
-        "Leave-one-out cross-validation, summarised by the expected log "
-        "predictive density. It estimates how well the model would predict an "
-        "observation it had not seen, and is used to compare models rather than "
-        "to judge one in isolation."
+        "Leave-one-out cross-validation and expected log predictive density. "
+        "The prediction question depends on the likelihood term held out and "
+        "the information retained. A conditional outcome score is not a "
+        "forecast for a new child. Check Pareto diagnostics before interpreting "
+        "the importance-sampling approximation."
     ),
     # -- Whether to believe it --
     "MCMC (Markov chain Monte Carlo)": (
-        "The family of algorithms used to draw samples from a posterior that "
-        "cannot be written down in closed form."
+        "Algorithms that draw correlated samples to approximate a probability "
+        "distribution, here the posterior. Diagnostics assess the approximation."
     ),
     "NUTS (No-U-Turn Sampler)": (
-        "The gradient-based MCMC algorithm used here. It adapts its own step "
-        "size and trajectory length rather than requiring them to be tuned."
+        "The gradient-based MCMC algorithm used here. It adapts a step size "
+        "during tuning and selects trajectory lengths while sampling. The "
+        "analyst still chooses sampling effort and target acceptance and "
+        "checks the diagnostics."
     ),
     "Chain": (
         "One sequence of samples generated by MCMC. Several chains started from "
@@ -261,8 +268,10 @@ GLOSSARY: dict[str, str] = {
         "does not prove convergence."
     ),
     "Effective sample size (ESS)": (
-        "The number of independent samples the correlated MCMC draws are worth. "
-        "This project requires at least 400 for every parameter."
+        "The approximate number of independent draws containing the same "
+        "information as the correlated MCMC draws for a specified summary. "
+        "The usual reporting gate requires bulk and tail ESS of at least 400 "
+        "for the screened parameter elements."
     ),
     "Divergent transition": (
         "A warning that the NUTS sampler could not accurately follow part of the "

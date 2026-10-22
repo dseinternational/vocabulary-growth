@@ -219,7 +219,7 @@ The understood and spoken two-anchor blocks are shared with VG09, VG10, VG15, VG
 
 The empirical signed fraction of understood words is a **hump** — near zero in infancy, rising to a peak in the preschool years, then receding as words move into speech — not a monotone trend. The signed-ratio mean is therefore a **three-anchor "tent"**: Beta priors on $r$ at a young, a peak and an old reference age, joined by two logit-linear segments that meet at the peak anchor and are clamped flat outside it, so the prior median is itself a hill rather than the flat line an intercept-only mean gives or the spurious young extrapolation a monotone slope gives. The anchor ages and levels come from the independent Down syndrome signing literature (Miller/Clibbens, Zampini, Te Kaat-van den Os); the Gaussian process then carries only smooth departures, so its amplitude reverts toward the standard level.
 
-**In VG14 the peak age is fixed by construction, not estimated.** The tent's apex sits at the middle anchor age listed in the priors table, and the model estimates only how high the hump is, not when it occurs. VG15 samples the peak position instead, which is one of the things it adds. Any statement about _when_ signing peaks that rests on this page is a statement about where a knot was placed.
+**VG14 fixes the middle-anchor age.** The GP can move the maximum of the complete signed-ratio curve away from that knot; multiplying by comprehension can move the signed-count maximum again. VG15 also estimates the knot's position and supplies the reported signing results. Distinguish the trend knot, ratio peak and count peak when interpreting either model.
 
 ![Prior on the signed GP length-scale parameter. The model maps it into its age-domain units.](ell_unit_sign_dist.png){#fig-ell-sign .lightbox fig-align="left"}
 
@@ -497,7 +497,7 @@ The production ratio $q(a) = p_S(a) / p_U(a)$ is the fraction of understood word
 
 ![The fitted production ratio against age, with uncertainty intervals.](production_rate.png){#fig-production-rate .lightbox fig-align="left"}
 
-The curve rises across the whole reported range: the share of a child's comprehension vocabulary that they can say increases with age. Beyond the high anchor the production ratio's mean is held level rather than extrapolated (the mean clamp in the model-at-a-glance box), so the right-hand edge of this figure reflects that decision rather than an observed plateau.
+Read the curve and its intervals for the fitted age pattern. The spoken-share trend levels off smoothly above its high anchor, while the GP can still vary. A flat region near that anchor can therefore reflect the mean specification rather than an observed plateau.
 
 ```{python}
 summary_q = pd.read_csv("posterior_summary_q.csv")
@@ -508,9 +508,9 @@ summary_q
 
 The signed ratio $r(a) = p_\text{Sign}(a) / p_U(a)$ describes signing relative to comprehension along the reference trajectory. Its shape depends on the data and the three-anchor prior. A rise and fall across ages does not establish that individual children replace signs with speech. Use VG15 for reported magnitudes.
 
-::: {.callout-warning title="The peak age is asserted, and the decline is study-confounded"}
+::: {.callout-warning title="The signing shape depends on its prior and study mix"}
 
-Two separate limits apply to this curve. First, **the peak age is fixed by construction in VG14** — the tent's apex sits at the middle anchor age, so the fitted peak reproduces a modelling choice rather than estimating a developmental fact. VG15 samples the peak position and is the model to quote for it. Second, comparable signing observations are sparse at both edges of the age range (see the age-band table above), and this model has no study random effects, so its age curve cannot separate developmental change from differences between studies in whether signing was taught. Any earlier numerical description of the peak or the decline that predates the current harmonisation of the signing sources is stale and must not be treated as a current estimate.
+The fixed middle-anchor age constrains the prior shape without fixing the full curve's maximum. Signing observations are also sparse at both age extremes. VG14 has no study effects, so its curve cannot separate age differences from differences between studies in measurement or signing practice. Use the current VG15 report for signing estimates, with its data coverage and prior-sensitivity evidence.
 
 :::
 
@@ -655,11 +655,11 @@ ppc_count_distribution_gallery("posterior_predictive_count_distributions_s")
 
 ![Rate of change of expected spoken vocabulary with age, in words per month.](expected_learning_rate_s.png){#fig-rate-s .lightbox fig-align="left"}
 
-Spoken vocabulary grows fastest later than understood vocabulary does; the two peak ages are in the findings table above.
+Compare the two derivative curves and the peak-age summaries in the findings table. Their ordering and uncertainty are properties of the current fit, not constraints imposed by the model.
 
 ### Dispersion $\kappa$ -- spoken
 
-![How the spoken dispersion parameter changes with age, with uncertainty intervals. Larger $\kappa$ means *less* spread between children.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
+![Spoken-share concentration by age, with uncertainty intervals. At a fixed mean and understood denominator, larger $\kappa$ permits less residual count variation.](posterior_kappa_s.png){#fig-kappa-s .lightbox fig-align="left"}
 
 ## Posterior predictions -- words signed
 
@@ -714,7 +714,7 @@ The count of signed words does **not** peak at the same age as the signed _ratio
 
 ### Dispersion $\kappa$ -- signed
 
-![How the signed dispersion parameter changes with age, with uncertainty intervals. Larger $\kappa$ means *less* spread between children.](posterior_kappa_sign.png){#fig-kappa-sign .lightbox fig-align="left"}
+![Signed-share concentration by age, with uncertainty intervals. At a fixed mean and understood denominator, larger $\kappa$ permits less residual count variation.](posterior_kappa_sign.png){#fig-kappa-sign .lightbox fig-align="left"}
 
 ## Robustness {#sec-robustness}
 

@@ -1261,7 +1261,7 @@ def diagnostics(
     round_to: int = 3,
 ):
     """
-    Run diagnostics on the posterior samples, including convergence diagnostics and posterior predictive checks.
+    Write sampler diagnostics, diagnostic plots and leave-one-out summaries.
 
     Shared across every engine (single-outcome, bivariate, trivariate, joint).
     The engines differ only in:

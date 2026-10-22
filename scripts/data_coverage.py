@@ -3,12 +3,10 @@
 """
 Audit data coverage by study × age bin for the Down syndrome dataset.
 
-The Simpson's-paradox investigation (see
-`notes/202604121055-understood-ds-decline.md`) showed that knowing
-*which* studies contribute observations at *which* ages is essential
-for interpreting any pooled trajectory. This script produces a
-permanent coverage audit so any future compositional artefact can be
-diagnosed immediately.
+Study composition can change with age and influence a pooled trajectory.
+These tables and heatmaps show which studies supply observations in each
+age band. They describe coverage; they do not establish whether a fitted
+age pattern reflects development or differences between studies.
 
 Outputs (under `output/data/`):
 

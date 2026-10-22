@@ -68,7 +68,7 @@ The re-derived `signed` is consequently a **total** sign count, comparable with 
 
 Unlike `nz_01`, uk_07 records comprehension at every retained point. It is therefore the **second source after `uk_02`** supplying the four-cell **within-understood** cross-tab that identifies the sign–speech association $\psi$ in VG15 — neither, spoken-only, signed-only, both — since `understood_only = understood − produced` and the other three cells are recorded directly. All 82 retained rows yield a non-negative `understood_only`, and the four cells sum to the recorded comprehension total exactly.
 
-VG15 consumes those cells (`common_joint_modality._load_uk07_four_cell`), alongside the other composition sources. The uk_07 and uk_02 age ranges overlap between 34 and 56 months. On the four-cell rows uk_07's marginal `spoken` and `signed` are suppressed, because the composition term already carries them; every other model reads uk_07's marginals from `vocab_combined` as usual.
+The joint signing engine consumes those cells through `cross_tab_sources.load_uk07_four_cell`, alongside the other composition sources. The uk_07 and uk_02 age ranges overlap between 34 and 56 months. On the four-cell rows uk_07's marginal `spoken` and `signed` are suppressed, because the composition term already carries them; models using other engines read uk_07's marginals from `vocab_combined` as usual.
 
 The `include_uk07_cells` definition flag (default `True`) turns this off. Unlike `include_nz01_cells`, turning it off does **not** drop the study — uk_07's marginals stand on their own — so the flag changes which data inform the association while retaining the marginal observations. Refitting shared parameters can still change the marginal trajectories.
 
