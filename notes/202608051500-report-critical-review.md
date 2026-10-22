@@ -1,10 +1,13 @@
 # Critical review of the report draft, 2026-08-05
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+> Drafted by an LLM-based AI tool (Claude Code/Opus 5). Revised with assistance from OpenAI Codex/GPT-6 on 22 October 2026.
+
+> [!IMPORTANT]
+> The prior-tail and contraction interpretations below describe the original review. A posterior mean in a prior tail does not establish a hard prior boundary, and little contraction does not establish absence of learning. A divergence-count change in one fit does not identify its cause. Use the [statistical review corrections](202609231200-statistical-review-corrections.md) and [current prior guide](../docs/models/PRIORS.md) when interpreting these screens.
 
 > [!WARNING]
-> First run of the review programme in [`docs/runbooks/critical-review.md`](../docs/runbooks/critical-review.md), covering R1 (number provenance), R3 (prior-data conflict), R4 (cross-reference and mechanism integrity) and a partial R2 (claim and evidence). Run against the draft at commit `a4ea822`, while VG12 was refitting — so the artefacts several checks compare against are about to change. This is a **drafting worklist**, not a quality gate.
+> First run of the review programme in [`docs/runbooks/critical-review.md`](../docs/runbooks/critical-review.md), covering R1 (number provenance), R3 (prior-data conflict), R4 (cross-reference and mechanism integrity) and a partial R2 (claim and evidence). It examined commit `a4ea822` while VG12 was refitting. This is a historical review record; its original drafting worklist is superseded.
 
 ## 1. The headline finding: the report is a skeleton, not a draft
 
@@ -125,29 +128,6 @@ All three sit mid-prior — so a prior-CDF check alone would pass them — but w
 
 VG13 supplies the typically-developing side of the matched-comprehension contrast in the only written results chapter, so this belongs in that chapter's limitations alongside the BFMI caveat.
 
-## 5. Worklist
+## 5. Later work and current guidance
 
-**Blocking a draft freeze**
-
-1. Fix or mark the two `intro.qmd` numbers (§2). Prefer generating them.
-2. Resolve `@sec-findings-signing` and `@sec-lineage-ds`, or remove the references until their targets exist.
-3. Reference the five orphaned figures in prose, or drop them.
-4. Confirm or correct the "~34 children" figure for ψ (§2).
-
-**Blocking release**
-
-5. Write the six stub chapters. This is the critical path.
-6. Complete the four `intro.qmd` TODO subsections — the literature review on expressive lag, rates of word learning, gestures and signs, and the study aims.
-7. Write the model specifications half of Appendix B.
-8. Produce the plain-language summary the introduction promises and links to.
-9. Run R2 in full over the finished narrative, then R7–R9.
-
-**Raised by R3, needing decisions rather than edits**
-
-11. Migrate VG05, VG07 and VG08 to the two-anchor dispersion form, or state in the lineage comparison that their `b_kappa_mag` estimates sit at a prior boundary and are not estimates (§4a).
-12. `eta` presses in VG01, VG03, VG11 and VG12. Widening is known not to work. Needs a change that identifies the amplitude — open problem, no owner.
-13. Record VG13's three uninformed GP hyperparameters in the limitations of the matched-comprehension chapter, which uses VG13 for its typically-developing side.
-
-**Not blocking, but worth doing while the chapters are written**
-
-10. Adopt the `dq_facts()` pattern wherever a number appears in prose, so R1 becomes a formality rather than an audit.
+The original drafting worklist is superseded. The [6 August prior decisions](202608060900-three-prior-conflicts.md) and [refit record](202608061500-reporting-refit-run-record.md) report the immediate follow-up; the [October documentation review](202610071042-documentation-review.md) records later prose and template corrections. The [critical-review programme](../docs/runbooks/critical-review.md) remains the maintained release checklist. This note retains the measurements and findings from the August draft, with the statistical correction above; it does not certify the current report.

@@ -32,7 +32,7 @@ default-image-extension: png
 
 format:
   gfm:
-    # The published format: one Markdown body per site page, imported into
+    # The planned site format: one Markdown body per page, for import into
     # dsegroup/content as content-en-gb.md. Quarto would export callouts as
     # GitHub alert syntax, which the content system's Markdig pipeline does not
     # parse; the filter rewrites them as the raw-HTML alert blocks the site's

@@ -184,9 +184,9 @@ from vocab_growth.report_cells import render_priors_table
 render_priors_table()
 ```
 
-::: {.callout-note title="Why the peak's age is sampled as a position"}
+::: {.callout-note title="Why the middle anchor is sampled as a position"}
 
-The signed peak's prior is placed on its **position between the outer signed anchors** rather than directly on an age. That is what keeps the three anchors in order by construction, which a prior on the age itself could not guarantee. The consequence for reading this model is the important part: **the peak age is estimated here, not fixed**. An earlier version of this model pinned it at the middle anchor, which made "signing peaks around three years" a statement about where the knot had been placed rather than a finding — and left the model under-predicting the signed ratio at every age band above the knot.
+The signed trend's middle-anchor age is estimated through its **position between the fixed outer anchors**, which keeps the three ages in order. VG14 fixes that middle age. In either model, the knot need not coincide with the maximum of the complete signed-ratio curve or with the peak signed count. Read those derived peaks separately from the anchor-position parameter.
 
 :::
 
@@ -561,7 +561,7 @@ summary_u = pd.read_csv("posterior_summary_u.csv")
 summary_u
 ```
 
-Comprehension rises steadily across the whole reported range, with no plateau inside it.
+Read the comprehension curve and intervals for its fitted age pattern. The model permits local decreases; monotonic growth and absence of a plateau are not imposed.
 
 ### Words spoken
 

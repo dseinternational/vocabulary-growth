@@ -5,7 +5,7 @@ Drafted with assistance from OpenAI Codex/GPT-5; revised by OpenAI Codex/GPT-6.
 :::
 
 **Age anchor**
-: A reference age at which a prior is placed on an expected vocabulary proportion. Two anchors define the broad linear trend on the logit scale in a more interpretable way than an intercept at age zero.
+: A reference age at which a prior is placed on a trend proportion. Two anchors define the broad linear trend on the logit scale. The GP can depart from that trend at an anchor, unless pinned there. A smooth mean clamp can also change the trend at its upper anchor.
 
 **Bayesian inference**
 : A framework that combines prior information with the likelihood of the observed data to obtain a posterior distribution.
@@ -85,6 +85,12 @@ Drafted with assistance from OpenAI Codex/GPT-5; revised by OpenAI Codex/GPT-6.
 **Random intercept**
 : A group- or child-specific shift around the population trajectory. Study random intercepts represent between-study differences; subject random intercepts represent stable between-child differences and repeated observations.
 
+**Reference inventory**
+: The common denominator of 810 items against which raw checklist totals are modelled. Counts from shorter forms are not multiplied by a checklist-length ratio. The common denominator does not make the item lists equivalent or measure a child's entire vocabulary.
+
+**Reference curve**
+: The age curve with child and study effects set to zero and, where sex is included, at the logit midpoint. It need not equal an average over children or the median of a product of proportions. A future observed count also includes child effects and assessment variation for the specified prediction target.
+
 **Reporting query age**
 : An age at which the fitted trajectory is summarised in a table or plot. It is a presentation choice and does not determine the HSGP approximation domain.
 
@@ -99,3 +105,6 @@ Drafted with assistance from OpenAI Codex/GPT-5; revised by OpenAI Codex/GPT-6.
 
 **Standardisation**
 : Subtracting the observed mean and dividing by the observed standard deviation. Ages are standardised to improve numerical conditioning while results are reported in months.
+
+**Sum-to-zero study effects**
+: Study offsets constrained to sum to zero over a specified set of studies. This defines a centre on the logit scale. It does not make that curve the arithmetic average of expected counts or give each study equal influence on the fit.

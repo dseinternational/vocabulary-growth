@@ -3,22 +3,19 @@
 
 """Realised correlations between VG15's fitted subject intercepts.
 
-Gate 1 of issue #296 (the VG24 proposal): before a correlated subject block is
-built on VG15, measure how far the *fitted* child effects already correlate
-under the independent priors, the way ``vg16_crosslag_quantification.py`` did
-for VG16. VG15 carries three subject intercepts -- understood, the production
-ratio ``q`` and the signed ratio -- with independent priors and no correlation
-parameter, so any correlation in the realised effects is association the model
-has nowhere else to put.
+Historical screen for issue #296, which led to VG24. VG15 has independent
+child-intercept priors for comprehension, spoken share and signed share. This
+script measures correlations among its fitted effects; shrinkage and unequal
+information mean these are not estimates of population child correlations.
+VG24 estimates those correlations through a joint prior.
 
-Two figures per pair, because VG15's subject shifts enter only the *marginal*
-likelihoods (the cross-tab cells are fed population + study marginals, so the
-subject block cannot pull ``psi``): the correlation across every child in the
-frame, where children without a marginal on one of the two scales sit at their
-prior, and the correlation across the children who carry a marginal on
-**both** scales, which is the set that would identify the corresponding
-correlation parameter. The subject sets are read from the trace's own
-``constant_data`` masks, never from a rebuilt frame.
+VG15's child shifts enter its marginal likelihoods, not its cross-tabulations
+directly. Shared fitted margins can still link child effects and ``psi``.
+For each pair, the script reports both the all-child correlation and the
+correlation restricted to children with marginal observations on both scales.
+The latter have more direct information about both effects. Children lacking
+one outcome can still inform it indirectly through the nested likelihood.
+The sets come from the trace's ``constant_data`` masks, not a rebuilt frame.
 
 Reads three ``(chain, draw, subject)`` variables through ``h5netcdf`` rather
 than opening the whole trace (the ``rep`` file is about 4.6 GB).

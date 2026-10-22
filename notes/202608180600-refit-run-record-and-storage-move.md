@@ -1,9 +1,9 @@
 # Refit run, 18 August 2026: working record
 
 > [!NOTE]
-> Drafted by an LLM-based AI tool (Claude Code/Opus 5).
+> Drafted by an LLM-based AI tool (Claude Code/Opus 5). Revised with assistance from OpenAI Codex/GPT-6 on 22 October 2026.
 
-**In-progress.** Section 7 is the honest state of what is and is not done. Successor to [`202608142000`](202608142000-refit-run-record-and-disk-failure.md), whose run this one finishes.
+**Historical working record, 18 August 2026.** Section 7 records the unfinished work at that date. This continued the [13–16 August run](202608142000-refit-run-record-and-disk-failure.md); the [19 August promotion record](202608190900-vg20-promotion.md) documents the subsequent VG20 decision. Use the current runbook for a new cycle.
 
 ## 1. What this run is for
 

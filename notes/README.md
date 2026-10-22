@@ -33,7 +33,7 @@ Keep data decisions, analysis evidence and completed run records when later work
 | [202607061200](202607061200-us01-edgin-ws-comprehension-issue.md)                | us_01 Edgin WS comprehension issue                           | Dated analysis                              |
 | [202607121200](202607121200-statistical-model-review.md)                         | Statistical model review                                     | Dated analysis                              |
 | [202607121753](202607121753-reporting-config-fit-run-and-findings.md)            | Reporting config fit run and findings                        | Run record                                  |
-| [202607161902](202607161902-full-refit-rep-replite-run.md)                       | Full refit rep rep-lite run                                  | Run record                                  |
+| [202607161902](202607161902-full-refit-rep-replite-run.md)                       | Interrupted July Mac refit and degenerate-LOO fix            | Interrupted run; continued on VM            |
 | [202607170935](202607170935-full-refit-vm-run-147-163.md)                        | Full refit VM run 147 163                                    | Run record                                  |
 | [202607191614](202607191614-full-refit-rep-hightune-run.md)                      | Full refit rep-hightune run                                  | Run record                                  |
 | [202607241334](202607241334-td-repeat-measures.md)                               | TD repeat measures                                           | Dated analysis                              |
@@ -99,7 +99,6 @@ Keep data decisions, analysis evidence and completed run records when later work
 | [202608251100](202608251100-prior-predictive-compile-mode.md)                    | Prior predictive compile mode                                | Dated analysis                              |
 | [202608251500](202608251500-comprehension-below-production.md)                   | Comprehension below production                               | Dated analysis                              |
 | [202608251900](202608251900-vg16-vg21-vg23-sensitivities.md)                     | VG16 VG21 VG23 sensitivities                                 | Dated analysis                              |
-| [202608261000](202608261000-models-review.md)                                    | Models review                                                | Superseded retirement proposal              |
 | [202608261700](202608261700-issue-266-remediation.md)                            | Issue 266 remediation                                        | Dated analysis                              |
 | [202608271551](202608271551-es01-gesture-construct.md)                           | Es01 gesture construct                                       | Dated analysis; see successor notice        |
 | [202608281147](202608281147-study-term-pooling-licence.md)                       | Study term pooling licence                                   | Dated analysis                              |
@@ -122,7 +121,7 @@ Keep data decisions, analysis evidence and completed run records when later work
 | [202609031415](202609031415-vg20-vs-vg22.md)                                     | VG20 vs VG22                                                 | Dated analysis; see successor notice        |
 | [202609031530](202609031530-matched-design-decides-the-answer.md)                | Matched design decides the answer                            | Dated analysis                              |
 | [202609031825](202609031825-recovery-vg15-vg12-vg11.md)                          | Recovery VG15 VG12 VG11                                      | Dated analysis                              |
-| [202609031930](202609031930-vg20-vg22-decision.md)                               | VG20 VG22 decision                                           | Decision record                             |
+| [202609031930](202609031930-vg20-vg22-decision.md)                               | VG20/VG22 promotion criteria                                 | Decision record; resolved 9 September       |
 | [202609041206](202609041206-sex-differences-in-vocabulary.md)                    | Sex differences in vocabulary                                | Dated analysis                              |
 | [202609041530](202609041530-vg20-sex-shift-arm.md)                               | VG20 sex shift arm                                           | Dated analysis                              |
 | [202609041722](202609041722-sign-speech-modelling-proposals.md)                  | Sign speech modelling proposals                              | Superseded plan; see successor notice       |
@@ -177,3 +176,4 @@ Keep data decisions, analysis evidence and completed run records when later work
 | [202610071042](202610071042-documentation-review.md)                             | Documentation and instructions review                        | Documentation review record                 |
 | [202610071730](202610071730-research-utils-018-upgrade.md)                       | Shared library 0.18.0 upgrade and design-token colours       | Dependency change record                    |
 | [202610101215](202610101215-refit-cycle-2026-10-10.md)                           | Refit cycle 2026-10-10: workstation DS fits and VM plan      | Run record and plan                         |
+| [202610221200](202610221200-documentation-review.md)                             | Repository documentation and source-comment review           | Documentation review record                 |

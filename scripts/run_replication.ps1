@@ -52,8 +52,8 @@ param(
     [string]   $OutputDir,
     # Where to write run logs. Default: <output>/replication-logs.
     [string]   $LogDir,
-    # Repository checkout to run against. Defaults to this script's parent
-    # directory, which is correct when it is run from scripts/ in the checkout.
+    # Repository checkout to run against. Defaults to the parent of scripts/,
+    # resolved from this script's location, regardless of the working directory.
     # Override to drive a checkout from a copy of this script held elsewhere.
     [string]   $RepoRoot,
     # How many models to fit concurrently.

@@ -37,7 +37,7 @@ Publication is not part of any stage. After stage P, the study owner decides whe
 
 - **Lingering.** `sudo loginctl enable-linger $USER`, so the campaign's systemd scope survives the SSH session.
 - **Tools.** The fleet image provides `uv`, Python, Node.js, Quarto with TinyTeX, Pandoc, Graphviz and PowerShell 7 as `pwsh`. Install pnpm as described in the [environment guide](environment-locks.md#install-the-documentation-tools). Check rather than assume the report fonts: Noto Sans, Noto Sans Mono and Noto Sans Math. Install the Azure CLI if absent.
-- **Credentials.** `az login --use-device-code` as the person publishing. The VM's managed identity has no write role on the container, and `DefaultAzureCredential` prefers it; `vm.env` sets `AZURE_TOKEN_CREDENTIALS=dev` so the upload path uses the `az login` session instead.
+- **Credentials.** `az login --use-device-code` as the person publishing. On the fleet VM, the managed identity has no write role on the container. `vm.env` sets `AZURE_TOKEN_CREDENTIALS=dev` to restrict discovery to developer credentials, including the Azure CLI session. This does not guarantee which developer credential is selected; confirm the active identity has the required container permissions before uploading.
 
 ## 2. Tag the cycle
 

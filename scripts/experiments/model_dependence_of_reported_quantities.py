@@ -3,22 +3,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Which reported quantities depend on the child-effect structure, and where?
 
-VG10, VG19 and VG20 differ only in how a child departs from the population
-trajectory -- independent constant offsets, per-outcome offset **and rate**, and
-correlated constant offsets respectively. Everything else in the three graphs is
-identical. So the difference between their fitted curves at a given age is a
-direct measurement of how much a reported number depends on a modelling choice
-the data does not settle, and that is a different question from how wide any one
-model's credible interval is.
+VG10, VG19 and VG20 use independent constant child offsets, per-outcome
+intercepts and slopes, and correlated constant offsets, respectively. The
+registered VG20 also includes sex, so comparing these models does not isolate
+the child-effect structure alone. Differences between compatible fitted curves
+describe sensitivity to the combined specifications, separately from each
+model's posterior interval width.
 
 The yardstick is **VG20's own 89% ETI width** at the same age, because a
-difference only matters to a reader in proportion to the uncertainty already
-being shown. A gap of 0.1 interval widths is invisible; a gap near 1.0 means the
-two models' point estimates sit almost a full published interval apart.
+difference can be read against the uncertainty already shown. A gap near 1.0
+means the two point estimates sit almost a full reference interval apart. This
+descriptive ratio is not a test of equivalence or a decision threshold.
 
 Also prints the pool's observation counts by age band, because the two are
-read together: divergence concentrated where the data are thin is a statement
-about the reporting range, not about the models.
+read together: divergence where data are thin warrants checking both model
+assumptions and the supported reporting range.
 
 Cited by ``notes/202608221200-reporting-source-by-quantity.md``.
 """

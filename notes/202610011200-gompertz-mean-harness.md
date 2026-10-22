@@ -1,5 +1,5 @@
 > [!NOTE]
-> Drafted or revised with assistance from Claude Code/Opus 5.5.
+> Drafted or revised with assistance from Claude Code/Opus 5.5. Tool-status wording revised with assistance from OpenAI Codex/GPT-6 on 22 October 2026.
 
 # A harness for the Gompertz mean-function comparison
 
@@ -133,7 +133,7 @@ uv run python scripts/experiments/gompertz_mean_arm.py loso --config test --fold
 
 **Estimated cost.** The figures are scaled from the `rep` fits of record (6 chains × 12,000 iterations: VG20 53 min, VG12 1.5 h, VG11 3.7 h) to `test`'s 4,000 iterations per chain. They agree with the `dev` timings above. VG20 is about 15–20 minutes per arm (three arms). VG12 is about 30 minutes per arm and VG11 about 75 minutes per arm. Together that is about 4.5 hours of fits. `loso` makes 10 VG20 fold fits, without predictive or plotting stages, at about 10–15 minutes each: about 2 hours. A `--ratio-mean flexible loso` would add another 2 hours, and is worth running only if the default arm loses on speech. The total is about 6.5 hours sequentially. Trace disk at `test` should be a few GB per typically-developing arm, an estimate scaled from the `rep` traces.
 
-**Read before interpreting.** Check each arm's gate in `gompertz_mean_test_convergence.csv`. A Gompertz arm that fails on its own $k_g$, $T_i$ or $A$ has not answered the question. The remedy is a reparameterisation, not more draws: for example, sample the curve's values at two ages, as the registered trend's anchors do, and derive $k_g$ and $T_i$ from them. For the TD arms, the paired PSIS-LOO is the only score this harness provides, and §4 shows it is unusable. A typically-developing answer needs a refit-per-fold path for the univariate engine, which `kfold_loso.py` does not support ([held-out validation note](202609131214-held-out-validation-for-the-td-models.md)). Building one is an open item, not part of this harness.
+**Read before interpreting.** Check each arm's gate in `gompertz_mean_test_convergence.csv`. A Gompertz arm that fails on its own $k_g$, $T_i$ or $A$ has not answered the question. The remedy is a reparameterisation, not more draws: for example, sample the curve's values at two ages, as the registered trend's anchors do, and derive $k_g$ and $T_i$ from them. For the TD arms, the paired PSIS-LOO is the only score this harness provides, and §4 shows it is unusable. A typically developing answer needs refit-per-fold scoring of the experimental Gompertz arms. The [later held-out harness](202610011300-td-held-out-validation-harness.md) now supports the registered univariate TD models. That support alone does not score a substituted Gompertz mean; this experiment's `loso` command remains VG20-only.
 
 ## 6. The prediction to test, recorded in advance in #330
 

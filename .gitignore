@@ -2,38 +2,25 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 outputs/
-# No trailing slash: `output` can be a SYMLINK to another volume (it was one
-# from 2026-08-17), and `output/` matches only a real directory. Left as it was,
-# the link showed as untracked, which made the checkout dirty and stamped
-# `dirty: true` into the provenance block of every fit started from it --
-# the defect that made the vg11 anchor-broad manifest unclean. Matches both
-# a directory and a link.
+# No trailing slash: match both an output directory and a symlink. An unignored
+# link would mark the checkout and any fit provenance dirty.
 output
 figures/
 
-# Standalone comparison-doc render artifacts. The comparison suite writes its
-# tables to output/comparisons/; docs/comparison/index.qmd reads them by bare
-# name, so they are staged next to the doc at render time (with the rendered
-# index.html + index_files/). The plot copies (.png/.svg) are staged the same
-# way. All generated — never committed. (Leaving the plots untracked previously
-# flagged fit manifests as dirty because git_metadata counts untracked files.)
+# Comparison inputs and rendered assets are staged beside index.qmd. They are
+# generated; leaving them unignored would mark fit provenance dirty.
 docs/comparison/*.csv
 docs/comparison/*.png
 docs/comparison/*.svg
 docs/comparison/index.html
 docs/comparison/index_files/
 
-# The standalone descriptive report renders in place the same way: index.html
-# and index_files/ land beside docs/descriptive/index.qmd and are regenerated
-# on every render — never committed.
+# The standalone descriptive report also renders beside its source.
 docs/descriptive/index.html
 docs/descriptive/index_files/
 
-# Quarto/LaTeX render byproducts staged next to docs/report/index.qmd. The book
-# renders to the output root (see _quarto.yml's output-dir), so an index.html
-# here is a leftover from an older render, not a deliverable -- but it is
-# untracked and in the working tree, so a `git add -A` picks it up. That
-# happened on 2026-08-19 and it took a later render deleting the file to notice.
+# Quarto/LaTeX byproducts beside the report source. Deliverables belong in the
+# output directory configured by docs/report/_quarto.yml.
 docs/report/index.aux
 docs/report/index.html
 docs/report/index.tex

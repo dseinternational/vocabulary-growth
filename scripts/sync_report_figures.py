@@ -315,14 +315,9 @@ def main() -> None:
                     ),
                 )
                 if errors:
-                    # A model that supplies no reported number must not be able
-                    # to block publishing the ones that do. Before roles were
-                    # declared this loop was all-or-nothing, so a stale
-                    # development rung took the whole sync down with it -- and
-                    # #301, which moved two models carrying a reported number,
-                    # invalidated all twenty. The failure is still shown; what
-                    # changes is that it is not fatal and the model's figures
-                    # are left out rather than syndicated unvalidated.
+                    # Report and omit invalid development or superseded fits.
+                    # Reporting models and unclassified candidates must pass;
+                    # their failure blocks the sync before any cache replacement.
                     role = CATALOGUE[definition.model_id.lower()].role
                     if role.publication_required:
                         validation_failures.append((name, errors))

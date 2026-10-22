@@ -1,5 +1,5 @@
 <!--
-Page 10 of 10. Exported to dsegroup/content as content-en-gb.md; the page's
+Page 10 of 10. Planned export to dsegroup/content as content-en-gb.md; the page's
 folder name is this file's stem. No front matter here: this page is also
 included by all.qmd. Skeleton drafted by an LLM-based AI tool (Claude Code/Fable 5.1).
 -->

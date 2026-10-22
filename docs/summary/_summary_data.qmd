@@ -24,12 +24,9 @@ from vocab_growth.models.definitions import MODEL_REGISTRY
 from vocab_growth.reporting_ages import ReportedQuantity, max_age_for
 
 # --- Source ------------------------------------------------------------------
-# The planned prediction pack will be exported from the models of
-# record. Until scripts/export_prediction_pack.py exists, the pack is assembled
-# here from the report figure cache (docs/report/figures/<MODEL_ID>-<config>/),
-# the validated store the technical report reads, through the same resolver as
-# docs/report/_report_data.qmd. Only this section changes when the pack lands;
-# the vocabulary below is the pack's, and it is all the pages use.
+# Read the curated report cache through the technical report's resolver.
+# Prediction-pack export and site integration are planned; see README.md.
+# These helpers neither refresh that cache nor validate its provenance.
 
 FIG_ROOT = Path("../report/figures")
 _DIR_BY_ID = {m.model_id: f"{m.model_id}-{m.config_name}" for m in MODEL_REGISTRY.values()}
