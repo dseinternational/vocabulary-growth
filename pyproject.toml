@@ -50,7 +50,7 @@ environments = [
 # Pin the shared library to a reviewed release tag. For local development, replace
 # this entry with the sibling checkout source below, then refresh the lock.
 # dse-research-utils = { path = "../research/src/python", editable = true }
-dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.18.0" }
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.19.2" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"
