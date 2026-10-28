@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21 and 2026-10-26, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26 and 2026-10-28, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -63,9 +63,11 @@ To take upstream releases within the declared ranges, `uv lock --upgrade` (or `u
 
 Bumping the shared library is a change of the `tag` in `[tool.uv.sources]` followed by `uv lock --upgrade-package dse-research-utils`. Follow the release's upgrade notes in `research/docs/` as well: a raised ceiling can need its packages named explicitly, and a new release can need fonts or other system changes. To develop against a sibling checkout of `research` instead, comment that entry out and use the local-path override noted beside it.
 
-### Dependency refresh on 26 October 2026
+### Dependency refresh on 28 October 2026
 
-The shared library is pinned to `v0.19.2`, commit `1397003472170b5559df4f4652791c7db6a3957d`. Its [0.19 upgrade notes](https://github.com/dseinternational/research/blob/v0.19.2/docs/migrating-to-0.19.md) describe dependency and design-token changes since 0.18.0. The refreshed lock includes pandas 3.1.0, Polars 2.1.0, `python-dateutil` 3.0.0 and JAX/`jaxlib` 0.12.0.1. JAX 0.12 requires `AVX2` and `FMA` on x86-64 CPUs; the patch fixes Windows CPU intrinsics. DuckDB was already locked at 2.0.0, whose generated database files require DuckDB 2.x.
+The shared library is pinned to `v0.19.3`, commit `f881f5830fc68896a888651a08b78898111ba04a`. Its [0.19 upgrade notes](https://github.com/dseinternational/research/blob/v0.19.3/docs/migrating-to-0.19.md) describe dependency and design-token changes since 0.18.0. Version 0.19.3 raises the pandas and Polars minimums to versions already in this project's lock: pandas 3.1.0 and Polars 2.1.0. The lock retains `python-dateutil` 3.0.0 and JAX/`jaxlib` 0.12.0.1. JAX 0.12 requires `AVX2` and `FMA` on x86-64 CPUs; the patch fixes Windows CPU intrinsics. DuckDB remains at 2.0.0, whose generated database files require DuckDB 2.x.
+
+The refresh advances pytest to 9.2.0, Ruff to 0.17.3 and the Hatchling build minimum to 1.33.0, together with compatible indirect Python dependencies. PyTensor 3.3.4 requires Numba at most 0.68.0, and PyMC 6.3.2 requires `cachetools` below 7, so newer releases of those two packages cannot enter this environment. The documentation packages, pnpm and GitHub Actions were already current when checked.
 
 The categorical colour order is blue, orange, green, purple, teal and pink. The project's role-based indices stay the same: words understood, spoken and signed use indices 0, 1 and 2; Down syndrome, typically developing and their difference use 0, 2 and 1. In these role mappings, orange represents speech and differences, and green represents signing and typically developing references. Historical fit manifests retain their original environment and remain subject to the fit-compatibility checks.
 

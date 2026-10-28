@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.32.4"]
+requires = ["hatchling>=1.33.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -22,7 +22,7 @@ dependencies = [
 # Separate lint and typecheck groups let CI install those tools without the
 # scientific stack. Development groups do not enter wheel dependency metadata.
 lint = [
-  "ruff>=0.17.0"
+  "ruff>=0.17.3"
 ]
 typecheck = [
   "mypy>=2.4.0"
@@ -30,7 +30,7 @@ typecheck = [
 dev = [
   "ipython>=9.17.1",
   "ipywidgets>=8.1.9",
-  "pytest>=9.1.1",
+  "pytest>=9.2.0",
   # Tests with costly shared fixtures use xdist_group marks for slow runs.
   "pytest-xdist>=3.8.0",
   { include-group = "lint" },
@@ -50,7 +50,7 @@ environments = [
 # Pin the shared library to a reviewed release tag. For local development, replace
 # this entry with the sibling checkout source below, then refresh the lock.
 # dse-research-utils = { path = "../research/src/python", editable = true }
-dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.19.2" }
+dse-research-utils = { git = "https://github.com/dseinternational/research.git", subdirectory = "src/python", tag = "v0.19.3" }
 
 [tool.hatch.version]
 path = "src/vocab_growth/__init__.py"
