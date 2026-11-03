@@ -223,12 +223,12 @@ def test_lkjcorr_is_not_a_correlation_matrix():
 def test_the_correlation_prior_is_exchangeable_and_is_lkj():
     """Every correlation must carry the same prior, and it must be LKJ's.
 
-    ``rho_sign_q`` sits at (1, 2) and ``rho_uq`` at (0, 1). Under ``LKJCorr`` the
-    marginals differ by position -- measured at (0.408, 0.378, 0.378) forward and
-    (0.450, 0.409, 0.407) under NUTS on the locked PyMC, against LKJ's 0.408 --
-    so the model's headline quantity would be regularised differently from the
-    one it is compared against. Sampled from the DENSITY, because that is what
-    the fit sees.
+    ``rho_sign_q`` sits at (1, 2) and ``rho_uq`` at (0, 1). Before PyMC 6.4,
+    the investigation of ``LKJCorr`` measured marginal standard deviations of
+    (0.408, 0.378, 0.378) in forward draws and (0.450, 0.409, 0.407) under NUTS,
+    against LKJ's 0.408. PyMC 6.4 fixes the forward generator and ``LKJCorr``
+    density. This test still checks ``LKJCholeskyCov`` by sampling its density,
+    because that is what the fit uses.
     """
     with pm.Model() as model:
         _, corr, _ = pm.LKJCholeskyCov(
@@ -248,10 +248,13 @@ def test_the_correlation_prior_is_exchangeable_and_is_lkj():
         chains=4,
         model=model,
         random_seed=296,
+        # The covariance parameterisation needs smaller steps near zero scales.
+        target_accept=0.95,
         progressbar=False,
         compute_convergence_checks=False,
     )
 
+    assert int(idata.sample_stats.diverging.sum()) == 0
     for name, _, _ in SUBJECT_RE_CORRELATIONS:
         values = idata.posterior[name].values.ravel()
         assert values.mean() == pytest.approx(0.0, abs=0.03), name
