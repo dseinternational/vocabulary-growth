@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26 and 2026-10-28, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26, 2026-10-28, 2026-11-03 and 2026-11-04, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -36,7 +36,7 @@ The lock intentionally covers CPU installations. GPU drivers and CUDA are host-s
 
 ### PyTensor compilation on macOS 27
 
-The lock now includes PyTensor 3.3.4, which fixes the obsolete `-ld64` linker flag on Apple Clang 21 and later ([pytensor#2432](https://github.com/pymc-devs/pytensor/pull/2432)). PyTensor 3.3.3 needed a compiler wrapper on macOS 27 because the Xcode tools read the flag as a request for a library named `d64`. The locked version compiles with `/usr/bin/clang++` directly.
+The lock includes PyTensor 3.3.7. PyTensor 3.3.4 fixed the obsolete `-ld64` linker flag on Apple Clang 21 and later ([pytensor#2432](https://github.com/pymc-devs/pytensor/pull/2432)). PyTensor 3.3.3 needed a compiler wrapper on macOS 27 because the Xcode tools read the flag as a request for a library named `d64`. The locked version compiles with `/usr/bin/clang++` directly.
 
 If you set `PYTENSOR_FLAGS` only to select that wrapper, remove the setting from your shell configuration and unset it in the current shell. If the variable also contains other settings, remove only the wrapper's `cxx` entry. `PYTENSOR_FLAGS` is part of the numerical environment recorded in report and comparison checkpoints, so a changed value prevents reuse of outputs made under the old value.
 
@@ -70,6 +70,18 @@ The shared library is pinned to `v0.19.3`, commit `f881f5830fc68896a888651a08b78
 The refresh advances pytest to 9.2.0, Ruff to 0.17.3 and the Hatchling build minimum to 1.33.0, together with compatible indirect Python dependencies. PyTensor 3.3.4 requires Numba at most 0.68.0, and PyMC 6.3.2 requires `cachetools` below 7, so newer releases of those two packages cannot enter this environment. The documentation packages, pnpm and GitHub Actions were already current when checked.
 
 The categorical colour order is blue, orange, green, purple, teal and pink. The project's role-based indices stay the same: words understood, spoken and signed use indices 0, 1 and 2; Down syndrome, typically developing and their difference use 0, 2 and 1. In these role mappings, orange represents speech and differences, and green represents signing and typically developing references. Historical fit manifests retain their original environment and remain subject to the fit-compatibility checks.
+
+### Dependency refresh on 3 November 2026
+
+The shared library remains at `v0.19.3`. The lock advances PyMC from 6.3.2 to 6.4.0, PyTensor from 3.3.4 to 3.3.7 and PyArrow from 26.0.0 to 26.0.1. [PyMC 6.4.0](https://github.com/pymc-devs/pymc/releases/tag/v6.4.0) adds `better-optimize` for `find_MAP` and fixes LKJ forward sampling and log-density normalisation. This project does not call `find_MAP`, but it does use LKJ covariance priors. Existing fit-compatibility checks still apply; this refresh does not certify samples made with older numerical libraries. PyTensor still requires Numba at most 0.68.0, and PyMC still requires `cachetools` below 7, so those packages remain at 0.68.0 and 6.2.6.
+
+The [LKJ correction](https://github.com/pymc-devs/pymc/pull/8497) changes the saved log probabilities for VG24 and VG25. Their three-dimensional LKJ prior has concentration 2. The normalising constant makes the prior density integrate to one; its correct logarithm is $-\log(3\pi^2/16)$, whereas the old implementation used the opposite sign. The resulting change is about $-1.2309666763$ at every parameter point. Both saved points for each model agree with this change within $4\times10^{-9}$. Only those log probabilities were regenerated; the saved parameters, graph structures and coordinates remain unchanged. This constant correction does not change the posterior shape with fixed concentration, although the separate forward-sampling correction changes prior draws.
+
+The correlation-prior test evaluates the fitted density at 72 fixed combinations of correlation matrices, variable orderings and scales. It converts the density on Cholesky factors to a density on correlations and scales, then divides out the independent HalfNormal scale densities. The result must agree with the normalised LKJ(2) density $16\det(R)/(3\pi^2)$ for every case. This checks the density shape, normalisation and symmetry under all six variable orderings. The separate scale-prior sampling test remains. Model and fit sampling settings are unchanged.
+
+The direct development minimums advance to IPython 9.18.1 and mypy 2.4.1. Compatible indirect packages also advance, including `python-dateutil` 4.0.0 and Soup Sieve 4.0. The [`python-dateutil` release](https://dateutil.readthedocs.io/en/stable/changelog.html#version-4-0-0-2026-11-01) drops Python versions older than 3.11 and rejects malformed numeric fields in ISO dates. [Soup Sieve 4.0](https://facelessuser.github.io/soupsieve/about/changelog/#40) changes CSS selection inside HTML templates and iframes. The project uses Python 3.14 and has no direct calls to either package.
+
+The direct documentation packages remain unchanged. Their lock refresh updates `ansi-regex` to 6.5.0, `fast-equals` to 6.2.2 and `semver` to 7.8.6. pnpm advances from 12.15.0 to [12.16.1](https://github.com/pnpm/pnpm/releases/tag/v12.16.1), with matching package-manager entries in `pnpm-lock.yaml`. CI advances `pnpm/action-setup` to [6.1.1](https://github.com/pnpm/action-setup/releases/tag/v6.1.1) and `astral-sh/setup-uv` to [10.3.3](https://github.com/astral-sh/setup-uv/releases/tag/v10.3.3). The other GitHub Actions and the Hatchling build minimum were current when checked.
 
 ## Relationship to fit manifests
 
