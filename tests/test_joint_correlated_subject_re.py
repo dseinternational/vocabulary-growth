@@ -11,9 +11,11 @@ a subclass so VG15's serialised definition stays unchanged.
 
 import math
 from dataclasses import fields
+from itertools import permutations
 
 import numpy as np
 import pymc as pm
+import pytensor
 import pytest
 
 from vocab_growth.models.common_joint_modality import (
@@ -29,11 +31,9 @@ from vocab_growth.models.definitions import (
     validate_model_definition,
 )
 
-#: LKJ(eta) on an n x n matrix gives each correlation the marginal
-#: `(rho + 1) / 2 ~ Beta(eta + (n - 2)/2, ...)`, so SD = 1 / sqrt(2 * shape + 1).
+#: VG24 uses a three-dimensional correlation matrix with an LKJ(2) prior.
 LKJ_ETA = 2.0
 BLOCK_SIZE = 3
-LKJ_MARGINAL_SD = 1.0 / math.sqrt(2.0 * (LKJ_ETA + (BLOCK_SIZE - 2) / 2.0) + 1.0)
 
 
 # ============================================================
@@ -221,17 +221,22 @@ def test_lkjcorr_is_not_a_correlation_matrix():
 
 @pytest.mark.slow
 def test_the_correlation_prior_is_exchangeable_and_is_lkj():
-    """Every correlation must carry the same prior, and it must be LKJ's.
+    """Check the fitted density against the normalised three-dimensional LKJ(2).
 
-    ``rho_sign_q`` sits at (1, 2) and ``rho_uq`` at (0, 1). Before PyMC 6.4,
-    the investigation of ``LKJCorr`` measured marginal standard deviations of
-    (0.408, 0.378, 0.378) in forward draws and (0.450, 0.409, 0.407) under NUTS,
-    against LKJ's 0.408. PyMC 6.4 fixes the forward generator and ``LKJCorr``
-    density. This test still checks ``LKJCholeskyCov`` by sampling its density,
-    because that is what the fit uses.
+    For a correlation matrix R, p(R) = 16 * det(R) / (3 * pi**2).
+    Evaluate PyMC's density on packed covariance Cholesky factors L, then
+    convert it to the density on scales s and correlations R. The absolute
+    Jacobian determinant of (s, R) -> L is
+
+        s[1] * s[2]**2 / sqrt((1 - R[0, 1]**2) * det(R)).
+
+    Dividing out the independent HalfNormal scale densities must leave p(R).
+    All six variable orderings must agree, including with unequal scales.
+    These fixed evaluations check density shape and normalisation without
+    depending on the sampler's random trajectories near zero scales.
     """
     with pm.Model() as model:
-        _, corr, _ = pm.LKJCholeskyCov(
+        pm.LKJCholeskyCov(
             "subject_re",
             eta=LKJ_ETA,
             n=BLOCK_SIZE,
@@ -239,26 +244,44 @@ def test_the_correlation_prior_is_exchangeable_and_is_lkj():
             compute_corr=True,
             store_in_trace=False,
         )
-        for name, row, column in SUBJECT_RE_CORRELATIONS:
-            pm.Deterministic(name, corr[row, column])
 
-    idata = pm.sample(
-        draws=4000,
-        tune=1000,
-        chains=4,
-        model=model,
-        random_seed=296,
-        # The covariance parameterisation needs smaller steps near zero scales.
-        target_accept=0.95,
-        progressbar=False,
-        compute_convergence_checks=False,
+    covariance_chol = model["subject_re"]
+    packed = covariance_chol.type("packed")
+    evaluate = pytensor.function([packed], pm.logp(covariance_chol, packed))
+    correlations = (
+        np.eye(3),
+        np.array([[1.0, 0.6, 0.2], [0.6, 1.0, -0.3], [0.2, -0.3, 1.0]]),
+        np.full((3, 3), 0.9) + 0.1 * np.eye(3),
+        np.array([[1.0, 0.7, -0.7], [0.7, 1.0, -0.1], [-0.7, -0.1, 1.0]]),
     )
-
-    assert int(idata.sample_stats.diverging.sum()) == 0
-    for name, _, _ in SUBJECT_RE_CORRELATIONS:
-        values = idata.posterior[name].values.ravel()
-        assert values.mean() == pytest.approx(0.0, abs=0.03), name
-        assert values.std() == pytest.approx(LKJ_MARGINAL_SD, rel=0.05), name
+    scale_vectors = (
+        np.ones(3),
+        np.array([0.1, 1.5, 3.0]),
+        np.array([3.0, 0.5, 0.25]),
+    )
+    for original in correlations:
+        for order in permutations(range(BLOCK_SIZE)):
+            correlation = original[np.ix_(order, order)]
+            sign, logdet = np.linalg.slogdet(correlation)
+            assert sign == 1
+            expected = -math.log(3 * math.pi**2 / 16) + logdet
+            for scales in scale_vectors:
+                chol = np.linalg.cholesky(np.outer(scales, scales) * correlation)
+                logp_chol = float(evaluate(chol[np.tril_indices(BLOCK_SIZE)]))
+                logp_scales = (
+                    3 * (0.5 * math.log(2 / math.pi) - math.log(1.5))
+                    - 0.5 * np.sum((scales / 1.5) ** 2)
+                )
+                log_jacobian = (
+                    math.log(scales[1])
+                    + 2 * math.log(scales[2])
+                    - 0.5 * math.log1p(-correlation[0, 1] ** 2)
+                    - 0.5 * logdet
+                )
+                actual = logp_chol + log_jacobian - logp_scales
+                assert actual == pytest.approx(expected, rel=0, abs=1e-9), (
+                    order, scales, correlation, actual, expected
+                )
 
 
 @pytest.mark.slow

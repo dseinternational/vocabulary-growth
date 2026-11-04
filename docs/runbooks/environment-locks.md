@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26, 2026-10-28 and 2026-11-03, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26, 2026-10-28, 2026-11-03 and 2026-11-04, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -77,7 +77,7 @@ The shared library remains at `v0.19.3`. The lock advances PyMC from 6.3.2 to 6.
 
 The [LKJ correction](https://github.com/pymc-devs/pymc/pull/8497) changes the saved log probabilities for VG24 and VG25. Their three-dimensional LKJ prior has concentration 2. The normalising constant makes the prior density integrate to one; its correct logarithm is $-\log(3\pi^2/16)$, whereas the old implementation used the opposite sign. The resulting change is about $-1.2309666763$ at every parameter point. Both saved points for each model agree with this change within $4\times10^{-9}$. Only those log probabilities were regenerated; the saved parameters, graph structures and coordinates remain unchanged. This constant correction does not change the posterior shape with fixed concentration, although the separate forward-sampling correction changes prior draws.
 
-The correlation-prior sampling test now uses `target_accept=0.95` and requires zero divergences. At its fixed seed, the previous setting produced two divergences and a correlation mean outside the existing tolerance. The more cautious setting produced zero divergences and met the same mean and standard-deviation tolerances. No model or fit sampling settings changed.
+The correlation-prior test evaluates the fitted density at 72 fixed combinations of correlation matrices, variable orderings and scales. It converts the density on Cholesky factors to a density on correlations and scales, then divides out the independent HalfNormal scale densities. The result must agree with the normalised LKJ(2) density $16\det(R)/(3\pi^2)$ for every case. This checks the density shape, normalisation and symmetry under all six variable orderings. The separate scale-prior sampling test remains. Model and fit sampling settings are unchanged.
 
 The direct development minimums advance to IPython 9.18.1 and mypy 2.4.1. Compatible indirect packages also advance, including `python-dateutil` 4.0.0 and Soup Sieve 4.0. The [`python-dateutil` release](https://dateutil.readthedocs.io/en/stable/changelog.html#version-4-0-0-2026-11-01) drops Python versions older than 3.11 and rejects malformed numeric fields in ISO dates. [Soup Sieve 4.0](https://facelessuser.github.io/soupsieve/about/changelog/#40) changes CSS selection inside HTML templates and iframes. The project uses Python 3.14 and has no direct calls to either package.
 
