@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26, 2026-10-28, 2026-11-03 and 2026-11-04, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28 and 2026-10-10.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26, 2026-10-28, 2026-11-03 and 2026-11-04, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28, 2026-10-10 and 2026-11-11.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -36,7 +36,7 @@ The lock intentionally covers CPU installations. GPU drivers and CUDA are host-s
 
 ### PyTensor compilation on macOS 27
 
-The lock includes PyTensor 3.3.7. PyTensor 3.3.4 fixed the obsolete `-ld64` linker flag on Apple Clang 21 and later ([pytensor#2432](https://github.com/pymc-devs/pytensor/pull/2432)). PyTensor 3.3.3 needed a compiler wrapper on macOS 27 because the Xcode tools read the flag as a request for a library named `d64`. The locked version compiles with `/usr/bin/clang++` directly.
+The lock includes PyTensor 3.3.8. PyTensor 3.3.4 fixed the obsolete `-ld64` linker flag on Apple Clang 21 and later ([pytensor#2432](https://github.com/pymc-devs/pytensor/pull/2432)). PyTensor 3.3.3 needed a compiler wrapper on macOS 27 because the Xcode tools read the flag as a request for a library named `d64`. The locked version compiles with `/usr/bin/clang++` directly.
 
 If you set `PYTENSOR_FLAGS` only to select that wrapper, remove the setting from your shell configuration and unset it in the current shell. If the variable also contains other settings, remove only the wrapper's `cxx` entry. `PYTENSOR_FLAGS` is part of the numerical environment recorded in report and comparison checkpoints, so a changed value prevents reuse of outputs made under the old value.
 
@@ -82,6 +82,28 @@ The correlation-prior test evaluates the fitted density at 72 fixed combinations
 The direct development minimums advance to IPython 9.18.1 and mypy 2.4.1. Compatible indirect packages also advance, including `python-dateutil` 4.0.0 and Soup Sieve 4.0. The [`python-dateutil` release](https://dateutil.readthedocs.io/en/stable/changelog.html#version-4-0-0-2026-11-01) drops Python versions older than 3.11 and rejects malformed numeric fields in ISO dates. [Soup Sieve 4.0](https://facelessuser.github.io/soupsieve/about/changelog/#40) changes CSS selection inside HTML templates and iframes. The project uses Python 3.14 and has no direct calls to either package.
 
 The direct documentation packages remain unchanged. Their lock refresh updates `ansi-regex` to 6.5.0, `fast-equals` to 6.2.2 and `semver` to 7.8.6. pnpm advances from 12.15.0 to [12.16.1](https://github.com/pnpm/pnpm/releases/tag/v12.16.1), with matching package-manager entries in `pnpm-lock.yaml`. CI advances `pnpm/action-setup` to [6.1.1](https://github.com/pnpm/action-setup/releases/tag/v6.1.1) and `astral-sh/setup-uv` to [10.3.3](https://github.com/astral-sh/setup-uv/releases/tag/v10.3.3). The other GitHub Actions and the Hatchling build minimum were current when checked.
+
+### Dependency refresh on 11 November 2026
+
+The shared library is pinned to `v0.19.4`, commit `bd916566081579e19031cabb637475a26cbd62aa`. Its [0.19.4 upgrade notes](https://github.com/dseinternational/research/blob/v0.19.4/docs/migrating-to-0.19.md) raise eight minimums, including PyMC to 6.4.0, PyTensor to 3.3.7, PyArrow to 26.0.1, h5netcdf to 1.8.2 and pandas to 3.1.1. Only the pandas minimum is above the previous lock. The release changes no library code apart from its version string. Its design-token pin advances, but the research colour file and the figure colours are unchanged.
+
+The lock advances PyTensor from 3.3.7 to [3.3.8](https://github.com/pymc-devs/pytensor/releases/tag/rel-3.3.8) and pandas from 3.1.0 to [3.1.1](https://pandas.pydata.org/docs/whatsnew/v3.1.1.html). PyTensor 3.3.8 speeds up Numba compilation and corrects Numba sampling from the unweighted `choice` operation. The model graphs do not use that operation; the project draws subsets with NumPy's generator outside the graph. Pandas 3.1.1 stops missing datetime values becoming Unix-epoch timestamps when converted to Arrow timestamp types, and corrects data sharing after Arrow-backed forward and backward fill. PyTensor 3.3.8 still requires Numba at most 0.68.0, and PyMC 6.4.0 still requires `cachetools` below 7, so those packages remain at 0.68.0 and 6.2.6 although Numba 0.68.1 and `cachetools` 8.0.0 are available.
+
+PyTensor, pandas and `dse-research-utils` are among the numerical packages in the executable signature. Fits made before this refresh therefore fail the signature checks for resume, strict sync and publication under the new lock. This refresh does not certify their samples; the existing fit-compatibility rules apply.
+
+The lint minimum and lock advance Ruff from 0.17.3 to 0.17.4. Compatible indirect packages also advance, including `filelock` 4.2.10, JupyterLab 4.6.6, Notebook 7.6.5, `markdown-it-py` 4.3.0, `mdit-py-plugins` 0.7.0, `platformdirs` 4.14.5, `pyzmq` 27.3.0, Soup Sieve 4.1, `threadpoolctl` 3.8.0 and Tornado 6.6.1.
+
+CSpell advances from 10.4.0 to [10.4.1](https://github.com/streetsidesoftware/cspell/releases/tag/v10.4.1), with its bundled dictionaries, `ansi-regex` 6.6.0 and `commander` 15.1.0. pnpm advances from 12.16.1 to [12.18.0](https://github.com/pnpm/pnpm/releases/tag/v12.18.0), with matching package-manager entries in `pnpm-lock.yaml`; 12.19.0 is on pnpm's `next-12` channel. The GitHub Actions, Hatchling build minimum and other direct development minimums were current when checked.
+
+Three releases published on 11 November, a few hours before this check, are held at their previous versions: h5netcdf 1.8.3, which writes the traces; `jsonpointer` 3.12; and Prettier 3.10.0. The next refresh can take them once they have been available for a few days. `uv lock --upgrade` and `pnpm update` do not retain this hold.
+
+### pytest held below 9.2 on 11 November 2026
+
+The development requirement is now `pytest>=9.1.1,<9.2`, and the lock returns pytest from 9.2.0 to 9.1.1. No other package changes. pytest 9.2.0 derives each test's node ID from a structured `Node._id`. pytest-xdist 3.8.0, still the latest release, marks `xdist_group` tests under `--dist loadgroup` by writing the older `item._nodeid` attribute, which pytest 9.2 no longer reads ([pytest-xdist#1386](https://github.com/pytest-dev/pytest-xdist/issues/1386)). With that pair, every group mark was ignored and no test failed. Each slow module that shares a module fixture under a group mark set the fixture up again on several workers. `test_graph_equivalence.py` rebuilt every registered graph on each of those workers. `test_observation_deterministics.py` ran its two VG07 fits on four or five workers, and their concurrent compilation exposed the cache-dependent result fixed in [#406](https://github.com/dseinternational/vocabulary-growth/pull/406).
+
+A `conftest.py` hook that copied the group suffix into `Node._id` would keep pytest 9.2. It would depend on private attributes of both packages, however, and the upstream fix ([pytest-xdist#1388](https://github.com/pytest-dev/pytest-xdist/pull/1388), merged but unreleased) sends group names to the scheduler separately instead. The version cap uses only published package versions. Lift it when a pytest-xdist release includes that fix, and raise the `pytest-xdist` minimum to that release in the same change.
+
+`tests/test_xdist_grouping.py` runs a small grouped suite on two workers under `--dist loadgroup` and fails if a group runs on more than one worker. It runs in the fast set. A lift without the pytest-xdist fix, or any later dependency change with the same effect, therefore fails CI.
 
 ## Relationship to fit manifests
 
