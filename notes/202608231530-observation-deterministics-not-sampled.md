@@ -1,5 +1,8 @@
 # The observation-sized deterministics are no longer sampled
 
+> [!IMPORTANT]
+> Correction added on 11 November 2026 with assistance from Claude Code/Opus 5.5. "Identical draws" holds when both fits compile in the same Numba cache state. Under PyTensor's default fast-math flags, two compiles of one logp graph can round differently, depending on what the process compiled or loaded earlier. The last-ulp difference in the grid deterministics in §3 comes from fast-math, not loop fusion. `var_names` still leaves the logp graph unchanged. See the [successor note](202611111800-fast-math-and-separately-compiled-fits.md). The original record below is unchanged.
+
 > [!NOTE]
 > Drafted by an LLM-based AI tool (Claude Code/Fable 5).
 
