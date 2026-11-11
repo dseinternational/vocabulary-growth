@@ -24,6 +24,7 @@ import dse_research_utils.statistics.models.sampling as sampling
 import numpy as np
 import pandas as pd
 import pymc as pm
+import pytensor
 import pytest
 import xarray as xr
 
@@ -239,17 +240,30 @@ def _vg07_context(tmp_path, monkeypatch, *, seed=11):
 
 @pytest.fixture(scope="module")
 def two_fits(tmp_path_factory):
-    """The same VG07 fit twice: once storing everything, once not."""
+    """Fit the same VG07 model twice, once without and once with all outputs.
+
+    Both fits use strict IEEE arithmetic (``numba__fastmath=False``). PyTensor's
+    default fast-math flags let LLVM reassociate and contract floating-point
+    operations, and the machine code it then produces for one logp graph depends
+    on what the process compiled or loaded from the Numba cache earlier. Two
+    compiles of an identical graph can therefore differ in the last bit, and NUTS
+    turns that into draws that differ in the tenth significant figure within a
+    few dozen iterations. That
+    happened intermittently in cold-cache runs of the parallel slow set. Strict
+    arithmetic makes the compiled logp a function of the graph alone, which is
+    what the draw comparison is meant to test.
+    """
     # A module-scoped monkeypatch, since the fixture is shared by several tests.
     from _pytest.monkeypatch import MonkeyPatch
 
     mp = MonkeyPatch()
     try:
         root = tmp_path_factory.mktemp("obsdet")
-        lean = _vg07_context(root / "lean", mp)
-        sample(lean)
-        full = _vg07_context(root / "full", mp)
-        sample(full, store_observation_deterministics=True)
+        with pytensor.config.change_flags(numba__fastmath=False):
+            lean = _vg07_context(root / "lean", mp)
+            sample(lean)
+            full = _vg07_context(root / "full", mp)
+            sample(full, store_observation_deterministics=True)
         yield lean, full
     finally:
         mp.undo()
@@ -275,19 +289,20 @@ def test_not_storing_them_does_not_change_the_draws(two_fits):
     lean, full = two_fits
     lean_post = _as_dataset(lean.trace.posterior)
     full_post = _as_dataset(full.trace.posterior)
-    # The posterior itself is bit-identical: the sampler's trajectory depends
-    # only on the logp graph, which var_names does not touch.
+    # The posterior itself is bit-identical: under the fixture's strict
+    # arithmetic the sampler's trajectory depends only on the logp graph, which
+    # var_names does not touch.
     for rv in lean.model.free_RVs:
         np.testing.assert_array_equal(
             lean_post[rv.name].values, full_post[rv.name].values, err_msg=rv.name
         )
-    # The stored grid deterministics agree to floating-point rounding, not to
-    # the bit: nutpie compiles a different "expand" function when fewer outputs
-    # are requested, and PyTensor's loop fusion then rounds the last ulp
-    # differently (measured at 4.4e-16 absolute, 1.1e-14 relative on this
-    # graph). That is the precision reported tables are compared at, not the
-    # precision they are printed at, and it is why the equivalence claim is
-    # "identical draws, derived quantities to rounding".
+    # The stored grid deterministics are compared to floating-point rounding,
+    # not to the bit: nutpie compiles a different "expand" function when fewer
+    # outputs are requested. Under strict arithmetic they currently match
+    # exactly. Under the default fast-math flags they differ in the last ulp
+    # (4.4e-16 absolute on this graph), and production fits use those flags. That
+    # is why the equivalence claim is "identical draws, derived quantities to
+    # rounding".
     for name in ("f_u_plot", "p_u_query", "h_plot", "kappa_u_query"):
         np.testing.assert_allclose(
             lean_post[name].values, full_post[name].values, rtol=1e-12, atol=1e-12,

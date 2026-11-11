@@ -86,7 +86,7 @@ Keep data decisions, analysis evidence and completed run records when later work
 | [202608231410](202608231410-td-geometry-remaining-levers.md)                     | TD geometry remaining levers                                 | Dated analysis                              |
 | [202608231420](202608231420-vg22-factor-anchor-bimodality.md)                    | VG22 factor anchor bimodality                                | Dated analysis                              |
 | [202608231526](202608231526-vg05-vg10-statistical-model-review.md)               | VG05 VG10 statistical model review                           | Dated analysis                              |
-| [202608231530](202608231530-observation-deterministics-not-sampled.md)           | Observation deterministics not sampled                       | Dated analysis                              |
+| [202608231530](202608231530-observation-deterministics-not-sampled.md)           | Observation deterministics not sampled                       | Dated analysis; see successor notice        |
 | [202608231536](202608231536-vg14-vg15-statistical-review.md)                     | VG14 VG15 statistical review                                 | Dated analysis                              |
 | [202608231537](202608231537-vg11-vg12-vg13-statistical-review.md)                | VG11 VG12 VG13 statistical review                            | Dated analysis                              |
 | [202608231714](202608231714-vg16-statistical-model-review.md)                    | VG16 statistical model review                                | Dated analysis                              |
@@ -177,3 +177,4 @@ Keep data decisions, analysis evidence and completed run records when later work
 | [202610071730](202610071730-research-utils-018-upgrade.md)                       | Shared library 0.18.0 upgrade and design-token colours       | Dependency change record                    |
 | [202610101215](202610101215-refit-cycle-2026-10-10.md)                           | Refit cycle 2026-10-10: workstation DS fits and VM plan      | Run record and plan                         |
 | [202610221200](202610221200-documentation-review.md)                             | Repository documentation and source-comment review           | Documentation review record                 |
+| [202611111800](202611111800-fast-math-and-separately-compiled-fits.md)           | Fast-math and separately compiled fits                       | Dated analysis                              |
