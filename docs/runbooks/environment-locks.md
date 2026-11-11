@@ -97,6 +97,14 @@ CSpell advances from 10.4.0 to [10.4.1](https://github.com/streetsidesoftware/cs
 
 Three releases published on 11 November, a few hours before this check, are held at their previous versions: h5netcdf 1.8.3, which writes the traces; `jsonpointer` 3.12; and Prettier 3.10.0. The next refresh can take them once they have been available for a few days. `uv lock --upgrade` and `pnpm update` do not retain this hold.
 
+### pytest held below 9.2 on 11 November 2026
+
+The development requirement is now `pytest>=9.1.1,<9.2`, and the lock returns pytest from 9.2.0 to 9.1.1. No other package changes. pytest 9.2.0 derives each test's node ID from a structured `Node._id`. pytest-xdist 3.8.0, still the latest release, marks `xdist_group` tests under `--dist loadgroup` by writing the older `item._nodeid` attribute, which pytest 9.2 no longer reads ([pytest-xdist#1386](https://github.com/pytest-dev/pytest-xdist/issues/1386)). With that pair, every group mark was ignored and no test failed. Each slow module that shares a module fixture under a group mark set the fixture up again on several workers. `test_graph_equivalence.py` rebuilt every registered graph on each of those workers. `test_observation_deterministics.py` ran its two VG07 fits on four or five workers, and their concurrent compilation exposed the cache-dependent result fixed in [#406](https://github.com/dseinternational/vocabulary-growth/pull/406).
+
+A `conftest.py` hook that copied the group suffix into `Node._id` would keep pytest 9.2. It would depend on private attributes of both packages, however, and the upstream fix ([pytest-xdist#1388](https://github.com/pytest-dev/pytest-xdist/pull/1388), merged but unreleased) sends group names to the scheduler separately instead. The version cap uses only published package versions. Lift it when a pytest-xdist release includes that fix, and raise the `pytest-xdist` minimum to that release in the same change.
+
+`tests/test_xdist_grouping.py` runs a small grouped suite on two workers under `--dist loadgroup` and fails if a group runs on more than one worker. It runs in the fast set. A lift without the pytest-xdist fix, or any later dependency change with the same effect, therefore fails CI.
+
 ## Relationship to fit manifests
 
 The lock reconstructs a known software environment prospectively. Every completed model fit also writes the versions it actually used into `fit_manifest.json`. The two records answer different questions: the lock says what a clean environment should contain, while the manifest says what a particular fit did contain. A reporting run should agree with both.

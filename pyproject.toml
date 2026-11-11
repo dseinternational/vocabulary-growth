@@ -30,7 +30,13 @@ typecheck = [
 dev = [
   "ipython>=9.18.1",
   "ipywidgets>=8.1.9",
-  "pytest>=9.2.0",
+  # pytest-xdist 3.8.0 marks groups by writing `item._nodeid`, which pytest 9.2
+  # no longer reads, so `--dist loadgroup` ignores every xdist_group mark
+  # (pytest-dev/pytest-xdist#1386). Lift this cap together with raising the
+  # pytest-xdist minimum to the first release with the fix
+  # (pytest-dev/pytest-xdist#1388).
+  # tests/test_xdist_grouping.py fails while the installed pair splits a group.
+  "pytest>=9.1.1,<9.2",
   # Tests with costly shared fixtures use xdist_group marks for slow runs.
   "pytest-xdist>=3.8.0",
   { include-group = "lint" },
