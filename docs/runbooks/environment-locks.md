@@ -113,6 +113,21 @@ PyMC requires `cachetools<7` and PyTensor requires `numba<=0.68.0`. pytest remai
 
 The documentation tools advance to CSpell 10.5.1, Prettier 3.10.1 and pnpm 12.21.0. CSpell 10.5.2 and `fast-equals` 6.3.0 were younger than pnpm's default one-day release age at resolution time. [CSpell release notes](https://github.com/streetsidesoftware/cspell/releases/tag/v10.5.1), [Prettier release notes](https://github.com/prettier/prettier/releases/tag/3.10.1), [pnpm release notes](https://github.com/pnpm/pnpm/releases/tag/v12.21.0).
 
+### JAX CPU sampling pin on 18 November 2026
+
+The project pins JAX and `jaxlib` to 0.12.0.1 in uv's `constraint-dependencies`. On an Apple Silicon Mac, updating that pair alone increased VG01's posterior sampling time from 60.8 to 159.4 seconds, or 2.62 times as long. Updating NumPy alone took 61.4 seconds. The pin retains NumPy 2.5.5 and the other updates from the refresh above.
+
+Each row is one sequential fit using the same model code and input data. All four used the JAX backend, the `test` configuration and seed 47. Each fit used four chains, with 2,000 warm-up iterations and 2,000 retained draws per chain.
+
+| Environment              | JAX and `jaxlib` | NumPy | Posterior sampling | Max R-hat | Min effective sample size |
+| ------------------------ | ---------------- | ----- | -----------------: | --------: | ------------------------: |
+| Previous lock            | 0.12.0.1         | 2.5.4 |             60.8 s |    1.0031 |                     995.5 |
+| NumPy only               | 0.12.0.1         | 2.5.5 |             61.4 s |    1.0031 |                     995.5 |
+| JAX and `jaxlib` only    | 0.12.1           | 2.5.4 |            159.4 s |    1.0041 |                     989.3 |
+| Full 18 November refresh | 0.12.1           | 2.5.5 |            159.7 s |    1.0041 |                     989.3 |
+
+All four fits passed the convergence checks and recorded zero divergences. The NumPy-only fit reproduced the previous lock's sampled parameter draws bit for bit, and the JAX-only fit reproduced the fully updated lock's draws. The comparison measures the effect of updating JAX and `jaxlib` together on this CPU and model.
+
 ## Relationship to fit manifests
 
 The lock reconstructs a known software environment prospectively. Every completed model fit also writes the versions it actually used into `fit_manifest.json`. The two records answer different questions: the lock says what a clean environment should contain, while the manifest says what a particular fit did contain. A reporting run should agree with both.
