@@ -1,7 +1,7 @@
 # Reproducing the software environment
 
 > [!NOTE]
-> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26, 2026-10-28, 2026-11-03 and 2026-11-04, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28, 2026-10-10 and 2026-11-11.
+> Revised with assistance from OpenAI Codex/GPT-6 on 2026-09-17, 2026-10-09, 2026-10-13, 2026-10-21, 2026-10-26, 2026-10-28, 2026-11-03, 2026-11-04 and 2026-11-18, and from Claude Code/Opus 5.5 on 2026-09-27, 2026-09-28, 2026-10-10 and 2026-11-11.
 
 `pyproject.toml` is the readable environment specification: it states the extras this repository needs and explains why. The minimum versions for `numpy`, `scipy`, `pandas`, `pymc`, `pytensor`, `nutpie`, `arviz`, `preliz` and `xarray` come from `dse-research-utils`. This avoids maintaining duplicate dependency lists. `.python-version` fixes the interpreter series, and the generated `uv.lock` resolves every package to an exact version and hash for `linux-x86_64`, `linux-aarch64`, `macOS-arm64` and `win-amd64`, including the immutable Git commit of `dse-research-utils`. The project itself is installed editable from the checked-out Git revision.
 
@@ -104,6 +104,14 @@ The development requirement is now `pytest>=9.1.1,<9.2`, and the lock returns py
 A `conftest.py` hook that copied the group suffix into `Node._id` would keep pytest 9.2. It would depend on private attributes of both packages, however, and the upstream fix ([pytest-xdist#1388](https://github.com/pytest-dev/pytest-xdist/pull/1388), merged but unreleased) sends group names to the scheduler separately instead. The version cap uses only published package versions. Lift it when a pytest-xdist release includes that fix, and raise the `pytest-xdist` minimum to that release in the same change.
 
 `tests/test_xdist_grouping.py` runs a small grouped suite on two workers under `--dist loadgroup` and fails if a group runs on more than one worker. It runs in the fast set. A lift without the pytest-xdist fix, or any later dependency change with the same effect, therefore fails CI.
+
+### Dependency refresh on 18 November 2026
+
+The Python lock advances 16 packages. NumPy 2.5.5 fixes bugs in array operations. The new NumPy version changes the executable signature used to check fit compatibility for resume, strict sync and publication. JAX and its compiled library advance to 0.12.1. They change how the CPU computes logarithms, which can change rounding in fits that use the JAX backend. The lock also takes h5netcdf 1.8.3, which fixes reading scalar HDF5 reference attributes, and raises the Ruff minimum to 0.17.5. [NumPy release notes](https://github.com/numpy/numpy/releases/tag/v2.5.5), [JAX release notes](https://github.com/jax-ml/jax/releases/tag/jax-v0.12.1), [h5netcdf release notes](https://github.com/h5netcdf/h5netcdf/releases/tag/v1.8.3).
+
+PyMC requires `cachetools<7` and PyTensor requires `numba<=0.68.0`. pytest remains at 9.1.1 because the grouping fix has yet to ship in a pytest-xdist release. The shared library tag, Hatchling minimum and GitHub Actions were current when checked.
+
+The documentation tools advance to CSpell 10.5.1, Prettier 3.10.1 and pnpm 12.21.0. CSpell 10.5.2 and `fast-equals` 6.3.0 were younger than pnpm's default one-day release age at resolution time. [CSpell release notes](https://github.com/streetsidesoftware/cspell/releases/tag/v10.5.1), [Prettier release notes](https://github.com/prettier/prettier/releases/tag/3.10.1), [pnpm release notes](https://github.com/pnpm/pnpm/releases/tag/v12.21.0).
 
 ## Relationship to fit manifests
 
