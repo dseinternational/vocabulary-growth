@@ -8,7 +8,7 @@ These tables and heatmaps show which studies supply observations in each
 age band. They describe coverage; they do not establish whether a fitted
 age pattern reflects development or differences between studies.
 
-Outputs (under `output/data/`):
+Outputs (under `<output-root>/data/`):
 
 - `coverage_understood.csv`, `coverage_spoken.csv`
   Count of non-null observations per (study, age_bin).
@@ -16,6 +16,9 @@ Outputs (under `output/data/`):
   Heatmaps of the same.
 - `coverage_summary.csv`
   Totals and the percentage of observations with each outcome.
+- `ceiling_by_form.csv`
+  Counts at and near the native form ceiling before model exclusions, by study,
+  ceiling and outcome.
 """
 
 from __future__ import annotations

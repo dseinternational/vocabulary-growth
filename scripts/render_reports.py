@@ -26,12 +26,17 @@ from vocab_growth.workflow_cache import (
 
 
 def report_inputs() -> dict:
+    docs = Path(env.DOCS_DIR)
+    # Quarto writes chapter support files beside the report sources. Hashing
+    # these as inputs would let a render invalidate its own checkpoint.
+    chapter_outputs = set((docs / "report").glob("*_files"))
     sources = [
         p
-        for p in Path(env.DOCS_DIR).rglob("*")
+        for p in docs.rglob("*")
         if p.is_file()
         and p.suffix in REPORT_SUFFIXES | {".csv", ".png", ".svg", ".json"}
         and not {"_freeze", ".quarto", "site_libs", "index_files"}.intersection(p.parts)
+        and chapter_outputs.isdisjoint(p.parents)
     ]
     scripts = [
         Path(env.ROOT_DIR) / "scripts" / name

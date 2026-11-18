@@ -26,6 +26,8 @@ Source notes describe the original checklists, data preparation and known limits
 
 The models score raw counts against a common 810-item reference. This does not make the original lists identical, and preparation retains each form's own ceiling. A count near a short form's ceiling can omit words outside that form.
 
+Run `uv run python scripts/data_coverage.py` after preparing the database to see which Down syndrome studies contribute understood and spoken counts in each six-month age band. Its `ceiling_by_form.csv` table counts observations at or above 90% of each form's own ceiling before model exclusions. The script writes its tables and heatmaps to `<output-root>/data/`.
+
 Speech and signing can overlap. Use the recorded union or a valid cross-tabulation for distinct expressive vocabulary, rather than adding their marginal totals. Some sources record sign-only words; others record total signs or symbolic gestures. Their source notes explain which field can enter a signing model.
 
 Read the [model inventory](../docs/models/README.md) for age, language and outcome restrictions. Read the relevant constant's docstring in [data_utils.py](../src/vocab_growth/data_utils.py) before changing an exclusion.

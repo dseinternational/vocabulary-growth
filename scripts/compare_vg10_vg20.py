@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Compare VG20 with VG10 using the screening criteria from issue #224.
 
-VG20 adds correlation between the child's comprehension and production-ratio
-effects. At fixed values of the other parameters, this leaves the reference
-curves and each effect's marginal Normal distribution unchanged. It can change
-the distribution of spoken vocabulary, which is the product of comprehension
-and the production ratio.
+At the time of the screen, VG20 added correlation between the child's
+comprehension and production-ratio effects. At fixed values of the other
+parameters, this leaves the reference curves and each effect's marginal
+Normal distribution unchanged. It can change the distribution of the expected
+spoken count across children because both effects enter that count.
+The current VG20 also includes sex, so applying the screen to current fits
+compares both changes together.
 
 The script checks three empirical criteria:
 
