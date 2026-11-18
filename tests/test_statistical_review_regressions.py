@@ -4,6 +4,7 @@
 """Numerical counterexamples from the September statistical review."""
 
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
@@ -83,6 +84,25 @@ def test_oracle_slope_accounts_for_zero_sum_covariance_once():
     hierarchy = script("experiments/psi_hierarchy_simulation.py")
     assert hierarchy.oracle_slope(1, [1])[0] == pytest.approx(0.5)
     np.testing.assert_allclose(hierarchy.oracle_slope(1, np.ones(4)), 4 / 7)
+
+
+def test_hierarchy_csvs_use_the_same_joint_oracle(tmp_path):
+    hierarchy = script("experiments/psi_hierarchy_simulation.py")
+    subprocess.run(
+        [
+            sys.executable, "-X", "utf8", hierarchy.__file__,
+            "--replicates", "3", "--tau-truth", "0.95", "--tau-prior", "1",
+            "--se-scale", "1", "--output-dir", str(tmp_path),
+        ],
+        check=True,
+    )
+    output = tmp_path / "comparisons/psi-hierarchy"
+    studies = pd.read_csv(output / "psi_hierarchy_by_study.csv")
+    matrix = pd.read_csv(output / "psi_hierarchy_matrix.csv")
+    assert len(studies) > 1
+    expected = hierarchy.oracle_slope(0.95, studies["se"].to_numpy())
+    np.testing.assert_allclose(studies["oracle_slope"], expected)
+    assert matrix["oracle_slope"].item() == pytest.approx(expected.mean())
 
 
 def test_age_bands_reject_overlap_and_allow_gaps():
