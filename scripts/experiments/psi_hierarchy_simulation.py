@@ -94,20 +94,6 @@ def four_cell_pi(r, q, psi, epsilon=1e-12):
     return stack / stack.sum(axis=-1, keepdims=True)
 
 
-def produced_pi(r, q, psi, epsilon=1e-12):
-    """nz_01's three-cell within-produced composition (no comprehension total)."""
-    both = plackett_pi_both(r, q, psi)
-    stack = np.stack(
-        [
-            np.maximum(r - both, epsilon),
-            np.maximum(q - both, epsilon),
-            np.maximum(both, epsilon),
-        ],
-        axis=-1,
-    )
-    return stack / stack.sum(axis=-1, keepdims=True)
-
-
 def dirichlet_multinomial_logpmf(counts, alpha):
     """Row-wise Dirichlet-Multinomial log-density, dropping the count constant.
 
@@ -600,6 +586,7 @@ def main() -> int:
                     replicates=args.replicates, rng=rng,
                     tau_grid=tau_grid, log_psi_grid=log_psi_grid,
                 )
+                oracle_by_study = oracle_slope(tau_truth, s_cell)
                 cells.append(
                     {
                         "se_scale": se_scale,
@@ -611,9 +598,7 @@ def main() -> int:
                         "log_psi_bias": frame["log_psi_mean"].mean() - log_psi_truth,
                         "log_psi_coverage89": frame["log_psi_covered"].mean(),
                         "group_slope": _slope(frame, range(n_groups)),
-                        "oracle_slope": float(
-                            np.mean(oracle_slope(tau_truth, s_cell))
-                        ),
+                        "oracle_slope": float(np.mean(oracle_by_study)),
                         "group_coverage89": np.mean(
                             [frame[f"group{j}_covered"].mean() for j in range(n_groups)]
                         ),
@@ -629,9 +614,7 @@ def main() -> int:
                             "children": int(information["children"].iloc[j]),
                             "se": float(s_cell[j]),
                             "slope": _slope(frame, [j]),
-                            "oracle_slope": float(
-                                oracle_slope(tau_truth, s_cell[j])
-                            ),
+                            "oracle_slope": float(oracle_by_study[j]),
                             "coverage89": float(frame[f"group{j}_covered"].mean()),
                         }
                     )

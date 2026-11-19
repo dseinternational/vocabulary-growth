@@ -73,4 +73,4 @@ def test_the_exemptions_name_scripts_that_exist_and_read_a_trace():
 
 def test_the_trace_reader_count_is_reviewed():
     """Make additions to the top-level trace-reader set explicit."""
-    assert len(_trace_reading_scripts()) == 17
+    assert len(_trace_reading_scripts()) == 16

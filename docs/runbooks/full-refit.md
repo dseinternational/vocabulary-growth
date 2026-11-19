@@ -156,6 +156,8 @@ The policy is in `reporting_ages.py` and the [inventory](../models/README.md#rep
 
 For the bivariate random-effect and joint engines, `regenerate_plots.py` also reruns the posterior predictive from the sampling seed. That reproduces the stored draws only on the fit's own numerical stack. The script therefore compares the rerun draws with the stored ones and refuses the model if any differ, naming what has changed since the fit. Every write, including the prior-density figures and the model graph, is staged and copied into the fit directory only when the whole redraw succeeds.
 
+VG09 already includes a new child's comprehension and spoken-share effects in its predictive figures and summary tables. To redraw its figures from a compatible full reporting fit, run `uv run python scripts/regenerate_plots.py vg09 --config rep`. To rebuild its summary tables from a retained trace, use the [resume procedure above](#default-sequential-resumable).
+
 ### Do not edit tracked files while a fit is launching
 
 The manifest records source state after data preparation, before the expensive fitting stages. A modified tracked file, including documentation, or an untracked file can mark the fit dirty. Resume and publication also check source compatibility. Keep the checkout unchanged for the whole run rather than relying on the timing of one snapshot.

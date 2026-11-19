@@ -4,14 +4,15 @@
 Compute per-model LOO (leave-one-out cross-validation) and pairwise
 comparisons via `az.compare()`.
 
-For every saved trace under `output/models/<MODEL>/trace.nc`:
+For each registered univariate or bivariate model with a usable log likelihood
+in `<output-root>/models/<fit-directory>/trace.nc`:
 
-- `output/comparisons/loo_<MODEL>.csv` — single-model LOO summary
+- `<output-root>/comparisons/loo_<MODEL-ID>.csv` — single-model LOO summary
   (elpd_loo, p_loo, looic, plus high-Pareto-k counts).
 
 For comparable model pairs (same observed outcomes on the same data):
 
-- `output/comparisons/loo_compare_<TAG>.csv` — `az.compare()` ranking.
+- `<output-root>/comparisons/loo_compare_<TAG>.csv` — `az.compare()` ranking.
 
 Pairs compared (joint models contribute their joint likelihood):
 
@@ -49,7 +50,6 @@ from __future__ import annotations
 
 import argparse
 import os
-from dataclasses import dataclass
 
 import arviz as az
 import dse_research_utils.statistics.loo as shared_loo
@@ -95,16 +95,6 @@ BIVARIATE = {
 }
 
 MODEL_LABELS = {**UNIVARIATE, **BIVARIATE}
-
-
-@dataclass
-class LooEntry:
-    name: str
-    elpd_loo: float
-    se: float
-    p_loo: float
-    looic: float
-    n_high_pareto: int
 
 
 #: Share of unusable observations beyond which the PSIS estimate is

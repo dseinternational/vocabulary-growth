@@ -15,9 +15,6 @@ from scipy import optimize, stats
 RNG = np.random.default_rng(20260805)
 N = 200_000
 
-# Observed proportion at VG12's young kappa anchor (12 months), from the data.
-P0 = None  # filled in by the caller below
-
 
 def induced(total_mu, total_sigma, a, b, p0, n=N):
     c = 1.0 / (p0 * (1 - p0))
@@ -36,7 +33,7 @@ def summarise(name, x, ref_q):
 
 
 def main(p0):
-    # Target quantiles from the current priors.
+    # Target quantiles from VG12's legacy scale priors.
     tau_ref = stats.halfnorm.ppf([0.05, 0.5, 0.95], scale=1.5)
     exc_ref = stats.lognorm.ppf([0.05, 0.5, 0.95], s=0.9, scale=np.exp(np.log(40.0)))
     print(f"reference proportion p0 = {p0:.4f}  ->  c = {1/(p0*(1-p0)):.3f}")

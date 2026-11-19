@@ -134,6 +134,29 @@ def test_comparison_that_does_not_refresh_provenance_cannot_create_a_checkpoint(
     assert not (output_root / "workflow-checkpoints/compare_models.py.json").exists()
 
 
+def test_report_checkpoint_tracks_source_diagrams_and_ignores_chapter_outputs(
+    tmp_path, monkeypatch
+):
+    module = _script("render_reports")
+    docs = tmp_path / "docs"
+    monkeypatch.setattr(env, "DOCS_DIR", str(docs))
+    monkeypatch.setattr(module, "runtime_identity", lambda: {})
+    monkeypatch.setattr(module, "source_data_hash", lambda _: "data")
+    monkeypatch.setattr(module.subprocess, "check_output", lambda *a, **kw: "quarto")
+    diagram = docs / "report/diagrams/figure.png"
+    diagram.parent.mkdir(parents=True)
+    diagram.write_bytes(b"source")
+    original = module.report_inputs()
+
+    generated = docs / "report/methods-models_files/figure-latex/figure.png"
+    generated.parent.mkdir(parents=True)
+    generated.write_bytes(b"rendered")
+    assert module.report_inputs()["files"] == original["files"]
+
+    diagram.write_bytes(b"revised source")
+    assert module.report_inputs()["files"] != original["files"]
+
+
 def test_changed_execution_inputs_clear_quarto_freeze_but_plain_source_changes_do_not(
     tmp_path,
 ):
